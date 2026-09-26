@@ -34,7 +34,7 @@ export default function ParticipantLoginPage() {
 			<Title level={2}>Participant sign in</Title>
 			<Paragraph type="secondary">Enter your experiment and participant codes</Paragraph>
 			{import.meta.env.DEV && <Paragraph type="secondary">Demo codes: {demoCredentials.participant.experimentCode} / {demoCredentials.participant.participantCode}</Paragraph>}
-			<Form<ParticipantFormValues> layout="vertical" onFinish={(values) => void submit(values)}>
+			<Form<ParticipantFormValues> layout="vertical" initialValues={import.meta.env.DEV ? demoCredentials.participant : undefined} onFinish={(values) => void submit(values)}>
 				<Form.Item label="Experiment Code" name="experimentCode" normalize={(value: string) => value.trim()} rules={[
 					{ required: true, message: "Enter your Experiment Code." },
 					{ pattern: /^[A-Za-z0-9-]{4,64}$/, message: "Use 4–64 letters, numbers, or hyphens." },

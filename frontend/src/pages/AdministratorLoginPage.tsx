@@ -31,7 +31,7 @@ export default function AdministratorLoginPage() {
 		<CenteredCard>
 			<Title level={2}>Administrator sign in</Title>
 			{import.meta.env.DEV && <Typography.Paragraph type="secondary">Demo password: {demoCredentials.administrator.password}</Typography.Paragraph>}
-			<Form<AdminFormValues> layout="vertical" onFinish={(values) => void submit(values)}>
+			<Form<AdminFormValues> layout="vertical" initialValues={import.meta.env.DEV ? demoCredentials.administrator : undefined} onFinish={(values) => void submit(values)}>
 				<Form.Item label="Administrator Password" name="password" rules={[{ required: true, message: "Enter the administrator password." }, { min: 8, message: "Password must be at least 8 characters." }]}>
 					<Input.Password autoComplete="current-password" size="large" />
 				</Form.Item>

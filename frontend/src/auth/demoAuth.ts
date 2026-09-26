@@ -1,6 +1,9 @@
 import type { CurrentUser, ParticipantLoginResult } from "../types";
 
-// 固定凭据仅供本地前端演示；生产环境必须由后端验证身份。
+// 公开演示开关：关闭后，所有页面不再预填凭据，也不接受演示登录。
+// 开启时凭据随前端代码公开，仅供演示；真实权限必须由后端验证。
+export const demoModeEnabled = true;
+
 export const demoCredentials = {
 	researcher: { email: "researcher@example.com", password: "Researcher123!" },
 	participant: { experimentCode: "DEMO-EXP", participantCode: "DEMO-PART" },
@@ -21,23 +24,23 @@ function saveDemoSession(user: CurrentUser): CurrentUser {
 }
 
 export function demoResearcherLogin(email: string, password: string): CurrentUser | null {
-	if (!import.meta.env.DEV || email !== demoCredentials.researcher.email || password !== demoCredentials.researcher.password) return null;
+	if (!demoModeEnabled || email !== demoCredentials.researcher.email || password !== demoCredentials.researcher.password) return null;
 	return saveDemoSession(demoUsers.researcher);
 }
 
 export function demoParticipantLogin(experimentCode: string, participantCode: string): ParticipantLoginResult | null {
-	if (!import.meta.env.DEV || experimentCode !== demoCredentials.participant.experimentCode || participantCode !== demoCredentials.participant.participantCode) return null;
+	if (!demoModeEnabled || experimentCode !== demoCredentials.participant.experimentCode || participantCode !== demoCredentials.participant.participantCode) return null;
 	const user = saveDemoSession(demoUsers.participant);
 	return { user, experimentId: "demo-experiment", currentStageId: null, progress: 0 };
 }
 
 export function demoAdministratorLogin(password: string): CurrentUser | null {
-	if (!import.meta.env.DEV || password !== demoCredentials.administrator.password) return null;
+	if (!demoModeEnabled || password !== demoCredentials.administrator.password) return null;
 	return saveDemoSession(demoUsers.administrator);
 }
 
 export function restoreDemoSession(): CurrentUser | null {
-	if (!import.meta.env.DEV) return null;
+	if (!demoModeEnabled) return null;
 	const role = window.sessionStorage.getItem(demoSessionKey);
 	return role === "researcher" || role === "participant" || role === "administrator" ? demoUsers[role] : null;
 }

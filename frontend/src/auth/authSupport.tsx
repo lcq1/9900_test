@@ -27,7 +27,7 @@ export function useSuccessfulLogin() {
 	const navigate = useNavigate();
 	const setUser = useSession((state) => state.setUser);
 	return (user: CurrentUser, expectedRole: UserRole, destination: string) => {
-		// 角色必须来自后端响应，不能由当前登录页面自行授予。
+		// 正式角色须来自后端响应；前端演示角色只用于页面预览。
 		if (user.role !== expectedRole) throw new Error("The account role does not match this sign-in page.");
 		setUser(user);
 		navigate(destination, { replace: true });

@@ -21,7 +21,7 @@ export default function ParticipantLoginPage() {
 			const participantCode = values.participantCode.trim();
 			// 演示账号只模拟身份，不记录真实实验或答题数据。
 			const result = demoParticipantLogin(experimentCode, participantCode) ?? await authApi.participantLogin({ experiment_code: experimentCode, participant_code: participantCode });
-			successfulLogin(result.user, "participant", "/participant/experiment/consent");
+			successfulLogin(result.user, "participant", "/participant/session");
 		} catch {
 			showLoginError();
 		} finally {

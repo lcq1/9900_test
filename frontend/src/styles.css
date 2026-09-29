@@ -51,10 +51,24 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
 .editor-card { margin-bottom: 20px; }
 .stage-card { margin-bottom: 16px; background: #fbfdff; }
 .stage-card .ant-input-number { width: 180px; }
+.stage-features { display: flex; margin: 18px 0; padding: 14px; border-radius: 10px; background: #f2f7fc; }
+.stage-actions { margin-top: 16px; }
+.component-editor { margin: 18px 0; }
+.component-card { margin: 10px 0; border-color: #d8e8f7; }
+.component-options { margin-top: 10px; }
+.component-actions { margin-top: 12px; }
 .field-label { display: block; margin: 16px 0 8px; font-weight: 500; }
 .field-label:first-child { margin-top: 0; }
 .consent-text { white-space: pre-wrap; }
 .stage-submit { margin: 20px 0; }
+.participant-session { max-width: 1080px; margin: 0 auto; }
+.fullscreen-session { max-width: none; }
+.participant-stage { margin-top: 16px; }
+.stage-flags { margin-bottom: 18px; }
+.stage-components { display: grid; gap: 18px; }
+.stage-copy { white-space: pre-wrap; }
+.ai-chat { display: grid; gap: 12px; padding: 16px; border: 1px solid #f2c46d; border-radius: 10px; background: #fffaf0; }
+.finish-card { max-width: 760px; margin: 12vh auto 0; text-align: center; }
 .back-link { padding-left: 0; }
 
 @media (max-width: 600px) {

@@ -30,7 +30,10 @@ export default function ResearcherDashboardPage() {
 			await experimentApi.update(experiment.id, {
 				name: current.name,
 				fullscreenMode: checked,
-				stages: (current.stages ?? []).map(({ type, title, position, timeLimit, content }) => ({ type, title, position, timeLimit, content })),
+				dataStorageDescription: current.dataStorageDescription,
+				storageLocation: current.storageLocation,
+				participantSafetyInformation: current.participantSafetyInformation,
+				stages: (current.stages ?? []).map(({ id: _id, ...stage }) => stage),
 			});
 			saveFullscreenPreference(researcherId, checked);
 			await queryClient.invalidateQueries({ queryKey: ["experiments"] });

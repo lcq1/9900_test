@@ -30,7 +30,7 @@ export default function ParticipantStagePage() {
 			const result = await participantApi.submitStageResponse(stageId, { text: answer.trim() });
 			if (result.nextStageId) {
 				setAnswer("");
-				navigate(`/participant/experiment/stages/${result.nextStageId}`, { replace: true });
+				navigate("/participant/session", { replace: true });
 			} else {
 				setCompleted(true);
 			}
@@ -48,7 +48,7 @@ export default function ParticipantStagePage() {
 		<Card>
 			<Title level={2}>{stage.title}</Title>
 			{stage.timeLimit && <Paragraph>Time limit: {stage.timeLimit} seconds</Paragraph>}
-			<Paragraph>{String(stage.content.text ?? "")}</Paragraph>
+			<Paragraph>{stage.components.map((component) => component.text).filter(Boolean).join("\n")}</Paragraph>
 			{completed ? <Alert type="success" showIcon message="You have completed the experiment." /> : (
 				<>
 					<label className="field-label" htmlFor="participant-response">Your response</label>

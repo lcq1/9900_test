@@ -5,9 +5,12 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.config import get_settings
-from app.database import Base
-from app import models  # noqa: F401 - importing registers every model table.
+from app.core.config import get_settings
+from app.core.database import Base
+from app.core import security  # noqa: F401
+from app.researcher import models as researcher_models  # noqa: F401
+from app.administrator import models as administrator_models  # noqa: F401
+from app.participant import models as participant_models  # noqa: F401
 
 
 config = context.config

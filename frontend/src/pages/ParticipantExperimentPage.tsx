@@ -26,7 +26,7 @@ export default function ParticipantExperimentPage() {
 			{error && <Alert type="info" showIcon message={participantError(error)} className="page-alert" />}
 			{experiment && <Progress percent={Math.max(0, Math.min(100, experiment.progress))} status="active" />}
 			<Paragraph type="secondary">Continue with the stage assigned to you.</Paragraph>
-			<Button type="primary" disabled={!experiment?.currentStageId} onClick={() => experiment?.currentStageId && navigate(`/participant/experiment/stages/${experiment.currentStageId}`)}>
+			<Button type="primary" disabled={!experiment?.currentStageId} onClick={() => navigate("/participant/session", { replace: true })}>
 				Start / Continue
 			</Button>
 		</Card>

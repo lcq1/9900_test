@@ -16,5 +16,6 @@ COPY alembic.ini ./
 
 EXPOSE 8000
 
-# Production should tune workers and place the service behind an HTTPS proxy.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Apply reviewed migrations before serving requests. Production should use a
+# dedicated migration job when multiple backend replicas are deployed.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

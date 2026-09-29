@@ -9,10 +9,9 @@ sqlalchemy>=2.0,<3.0
 psycopg[binary]>=3.2,<4.0
 alembic>=1.13,<2.0
 
-# Password hashing and optional external integrations.
+# Password hashing and HTTP test/client support.
 argon2-cffi>=23.1,<24.0
 httpx>=0.27,<1.0
-boto3>=1.35,<2.0
 
 # Test dependencies; move to a dev requirements file when dependency groups grow.
 pytest>=8.3,<9.0

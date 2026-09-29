@@ -1,4 +1,4 @@
-"""Typed environment configuration; secrets are loaded at runtime only."""
+"""Typed runtime configuration loaded from environment variables."""
 
 from functools import lru_cache
 
@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Backend settings shared by database, auth, storage and AI adapters."""
+    """Backend settings; secrets must be supplied at runtime."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -17,16 +17,10 @@ class Settings(BaseSettings):
     session_cookie_secure: bool = False
     session_ttl_seconds: int = 86_400
     admin_password_hash: str = ""
-    s3_endpoint_url: str = ""
-    s3_bucket: str = ""
-    s3_access_key_id: str = ""
-    s3_secret_access_key: str = ""
-    ai_api_base_url: str = ""
-    ai_api_key: str = ""
 
 
 @lru_cache
 def get_settings() -> Settings:
-    """Build settings once per process; tests can clear the cache if needed."""
+    """Create one immutable-by-convention settings object per process."""
 
     return Settings()

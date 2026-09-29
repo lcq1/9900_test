@@ -2,7 +2,7 @@ import type { CurrentUser, ParticipantLoginResult } from "../types";
 
 // 公开演示开关：关闭后，所有页面不再预填凭据，也不接受演示登录。
 // 开启时凭据随前端代码公开，仅供演示；真实权限必须由后端验证。
-export const demoModeEnabled = true;
+export const demoModeEnabled = import.meta.env.VITE_DEMO_MODE === "true";
 
 export const demoCredentials = {
 	researcher: { email: "researcher@example.com", password: "Researcher123!" },

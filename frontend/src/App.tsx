@@ -5,24 +5,19 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "./components";
 import { useSession } from "./session";
 import type { UserRole } from "./types";
-import HomePage from "./pages/HomePage";
-import AdministratorLoginPage from "./pages/AdministratorLoginPage";
-import ParticipantLoginPage from "./pages/ParticipantLoginPage";
-import ResearcherLoginPage from "./pages/ResearcherLoginPage";
+import LoginPage from "./pages/LoginPage";
 import ResearcherRegisterPage from "./pages/ResearcherRegisterPage";
 import ResearcherDashboardPage from "./pages/ResearcherDashboardPage";
 import AdministratorDashboardPage from "./pages/AdministratorDashboardPage";
 import ExperimentDetailPage from "./pages/ExperimentDetailPage";
 import ExperimentCreatePage from "./pages/ExperimentCreatePage";
 import ExperimentEditPage from "./pages/ExperimentEditPage";
-import ConsentPage from "./pages/ConsentPage";
-import ParticipantExperimentPage from "./pages/ParticipantExperimentPage";
-import ParticipantStagePage from "./pages/ParticipantStagePage";
+import ParticipantSessionPage from "./pages/ParticipantSessionPage";
 
 const loginPath: Record<UserRole, string> = {
-	participant: "/login/participant",
-	researcher: "/login/researcher",
-	administrator: "/login/administrator",
+	participant: "/login",
+	researcher: "/login",
+	administrator: "/login",
 };
 
 function ProtectedRoute({ role, children }: { role: UserRole; children: ReactNode }) {
@@ -43,19 +38,18 @@ export default function App() {
 	return (
 		<AppShell>
 			<Routes>
-				<Route path="/" element={<HomePage />} />
-				<Route path="/login/participant" element={<ParticipantLoginPage />} />
-				<Route path="/login/researcher" element={<ResearcherLoginPage />} />
-				<Route path="/login/administrator" element={<AdministratorLoginPage />} />
+				<Route path="/" element={<Navigate to="/login" replace />} />
+				<Route path="/login" element={<LoginPage />} />
+				<Route path="/login/participant" element={<Navigate to="/login" replace />} />
+				<Route path="/login/researcher" element={<Navigate to="/login" replace />} />
+				<Route path="/login/administrator" element={<Navigate to="/login" replace />} />
 				<Route path="/register/researcher" element={<ResearcherRegisterPage />} />
 				<Route path="/researcher" element={<ProtectedRoute role="researcher"><ResearcherDashboardPage /></ProtectedRoute>} />
 				<Route path="/researcher/experiments/new" element={<ProtectedRoute role="researcher"><ExperimentCreatePage /></ProtectedRoute>} />
 				<Route path="/researcher/experiments/:experimentId" element={<ProtectedRoute role="researcher"><ExperimentDetailPage /></ProtectedRoute>} />
 				<Route path="/researcher/experiments/:experimentId/edit" element={<ProtectedRoute role="researcher"><ExperimentEditPage /></ProtectedRoute>} />
 				<Route path="/administrator" element={<ProtectedRoute role="administrator"><AdministratorDashboardPage /></ProtectedRoute>} />
-				<Route path="/participant/experiment/consent" element={<ProtectedRoute role="participant"><ConsentPage /></ProtectedRoute>} />
-				<Route path="/participant/experiment" element={<ProtectedRoute role="participant"><ParticipantExperimentPage /></ProtectedRoute>} />
-				<Route path="/participant/experiment/stages/:stageId" element={<ProtectedRoute role="participant"><ParticipantStagePage /></ProtectedRoute>} />
+				<Route path="/participant/session" element={<ProtectedRoute role="participant"><ParticipantSessionPage /></ProtectedRoute>} />
 				<Route path="*" element={<Navigate to="/" replace />} />
 			</Routes>
 		</AppShell>

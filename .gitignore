@@ -19,6 +19,7 @@ htmlcov/
 .env.*
 !.env.example
 !frontend/.env.development
+!frontend/.env.production
 
 # IDE and operating-system generated files.
 .idea/

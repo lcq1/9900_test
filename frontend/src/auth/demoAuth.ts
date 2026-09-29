@@ -49,6 +49,12 @@ export function restoreDemoSession(): CurrentUser | null {
 	return role === "researcher" || role === "participant" || role === "administrator" ? demoUsers[role] : null;
 }
 
+export function getDemoSessionRole(): CurrentUser["role"] | null {
+	if (!demoModeEnabled) return null;
+	const role = window.sessionStorage.getItem(demoSessionKey);
+	return role === "researcher" || role === "participant" || role === "administrator" ? role : null;
+}
+
 export function clearDemoSession(): void {
 	window.sessionStorage.removeItem(demoSessionKey);
 }

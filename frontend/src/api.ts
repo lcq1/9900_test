@@ -1,4 +1,6 @@
 import axios, { AxiosError } from "axios";
+import { demoAdministratorApi, demoExperimentApi, demoParticipantApi } from "./auth/demoApi";
+import { getDemoSessionRole } from "./auth/demoAuth";
 import type {
 	CurrentUser,
 	Experiment,
@@ -79,36 +81,36 @@ export const authApi = {
 		getData(client.post("/auth/administrator/login", body)),
 	researcherRegister: (body: LoginPayloads["researcher"]): Promise<RegisterResult> =>
 		getData(client.post("/auth/researcher/register", body)),
-	logout: (): Promise<void> => sendWithoutData(client.post("/auth/logout")),
+	logout: (): Promise<void> => getDemoSessionRole() ? Promise.resolve() : sendWithoutData(client.post("/auth/logout")),
 };
 
 export const experimentApi = {
-	list: (): Promise<Experiment[]> => getData(client.get("/experiments")),
-	get: (experimentId: string): Promise<Experiment> => getData(client.get(`/experiments/${experimentId}`)),
-	create: (input: ExperimentInput): Promise<Experiment> => getData(client.post("/experiments", input)),
+	list: (): Promise<Experiment[]> => getDemoSessionRole() === "researcher" ? demoExperimentApi.list() : getData(client.get("/experiments")),
+	get: (experimentId: string): Promise<Experiment> => getDemoSessionRole() === "researcher" ? demoExperimentApi.get(experimentId) : getData(client.get(`/experiments/${experimentId}`)),
+	create: (input: ExperimentInput): Promise<Experiment> => getDemoSessionRole() === "researcher" ? demoExperimentApi.create(input) : getData(client.post("/experiments", input)),
 	update: (experimentId: string, input: ExperimentInput): Promise<Experiment> =>
-		getData(client.put(`/experiments/${experimentId}`, input)),
-	remove: (experimentId: string): Promise<void> => sendWithoutData(client.delete(`/experiments/${experimentId}`)),
+		getDemoSessionRole() === "researcher" ? demoExperimentApi.update(experimentId, input) : getData(client.put(`/experiments/${experimentId}`, input)),
+	remove: (experimentId: string): Promise<void> => getDemoSessionRole() === "researcher" ? demoExperimentApi.remove(experimentId) : sendWithoutData(client.delete(`/experiments/${experimentId}`)),
 	provisionParticipant: (experimentId: string): Promise<ParticipantProvisioned> =>
-		getData(client.post(`/experiments/${experimentId}/participants`, {})),
+		getDemoSessionRole() === "researcher" ? demoExperimentApi.provisionParticipant() : getData(client.post(`/experiments/${experimentId}/participants`, {})),
 };
 
 export const participantApi = {
-	getSession: (): Promise<ParticipantSessionView> => getData(client.get("/participant/session")),
+	getSession: (): Promise<ParticipantSessionView> => getDemoSessionRole() === "participant" ? demoParticipantApi.getSession() : getData(client.get("/participant/session")),
 	submitCurrentStage: (answerData: Record<string, unknown>): Promise<StageSubmissionResult> =>
-		getData(client.post("/participant/session/current-stage/responses", { answerData })),
+		getDemoSessionRole() === "participant" ? demoParticipantApi.submitCurrentStage() : getData(client.post("/participant/session/current-stage/responses", { answerData })),
 	logEvents: (events: ParticipantEventInput[]): Promise<{ accepted: number; serverTimestamp: string }> =>
-		getData(client.post("/participant/session/events/batch", { events })),
-	getExperiment: (): Promise<ParticipantExperimentOverview> => getData(client.get("/participant/experiment")),
+		getDemoSessionRole() === "participant" ? demoParticipantApi.logEvents(events) : getData(client.post("/participant/session/events/batch", { events })),
+	getExperiment: (): Promise<ParticipantExperimentOverview> => getDemoSessionRole() === "participant" ? demoParticipantApi.getExperiment() : getData(client.get("/participant/experiment")),
 	submitConsent: (accepted: boolean): Promise<void> =>
-		sendWithoutData(client.post("/participant/consent", { accepted })),
+		getDemoSessionRole() === "participant" ? demoParticipantApi.submitConsent() : sendWithoutData(client.post("/participant/consent", { accepted })),
 	getStage: (stageId: string): Promise<ParticipantStageView> =>
-		getData(client.get(`/participant/stages/${stageId}`)),
+		getDemoSessionRole() === "participant" ? demoParticipantApi.getStage(stageId) : getData(client.get(`/participant/stages/${stageId}`)),
 	submitStageResponse: (stageId: string, answerData: Record<string, unknown>): Promise<StageSubmissionResult> =>
-		getData(client.post(`/participant/stages/${stageId}/responses`, { answerData })),
+		getDemoSessionRole() === "participant" ? demoParticipantApi.submitCurrentStage() : getData(client.post(`/participant/stages/${stageId}/responses`, { answerData })),
 };
 
 export const administratorApi = {
-	listResearchers: (): Promise<ResearcherAccount[]> => getData(client.get("/administrator/researchers")),
-	listExperiments: (): Promise<Experiment[]> => getData(client.get("/administrator/experiments")),
+	listResearchers: (): Promise<ResearcherAccount[]> => getDemoSessionRole() === "administrator" ? demoAdministratorApi.listResearchers() : getData(client.get("/administrator/researchers")),
+	listExperiments: (): Promise<Experiment[]> => getDemoSessionRole() === "administrator" ? demoAdministratorApi.listExperiments() : getData(client.get("/administrator/experiments")),
 };

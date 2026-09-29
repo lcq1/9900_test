@@ -1,8 +1,12 @@
 import type { CurrentUser, ParticipantLoginResult } from "../types";
 
-// 公开演示开关：关闭后，所有页面不再预填凭据，也不接受演示登录。
-// 开启时凭据随前端代码公开，仅供演示；真实权限必须由后端验证。
-export const demoModeEnabled = import.meta.env.VITE_DEMO_MODE === "true";
+// 本机运行（包括 production preview）默认允许公开演示账号；远程部署必须显式开启。
+// 显式设置 VITE_DEMO_MODE=false 可在本机关闭演示登录。
+const demoModeSetting = import.meta.env.VITE_DEMO_MODE;
+const localDemoHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+const isLocalDemoHost = typeof window !== "undefined" && localDemoHosts.has(window.location.hostname);
+
+export const demoModeEnabled = demoModeSetting === "true" || (demoModeSetting === undefined && isLocalDemoHost);
 
 export const demoCredentials = {
 	researcher: { email: "researcher@example.com", password: "Researcher123!" },

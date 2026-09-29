@@ -39,7 +39,7 @@ python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('repla
 - Participant Code 生成、Participant 登录、知情同意、进度恢复、倒计时和幂等答案提交。
 - Administrator 登录，以及 Researcher 和实验列表。
 - PostgreSQL 数据结构和 Alembic 迁移。
-- 前端 Axios API 接入；演示登录默认关闭，仅在设置 `VITE_DEMO_MODE=true` 时启用。
+- 前端 Axios API 接入；本地开发和 Docker Compose 默认启用演示登录，生产构建仅在显式设置 `VITE_DEMO_MODE=true` 时启用。
 
 云存储和外部 AI API 目前仅保留边界接口，尚未连接供应商。
 

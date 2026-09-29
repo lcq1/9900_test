@@ -25,6 +25,7 @@ services:
     working_dir: /app
     environment:
       API_PROXY_TARGET: http://backend:8000
+      VITE_DEMO_MODE: "true"
     volumes:
       - ./frontend:/app
       # Linux container dependencies stay separate from Windows host dependencies.

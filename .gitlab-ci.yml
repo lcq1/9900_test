@@ -1,0 +1,5 @@
+# 文件职责 / File contract
+# 功能 / Function: 运行前端、后端和端到端检查。 / Run frontend, backend, and end-to-end checks.
+# 输入 / Input: 仓库源码、依赖清单和 CI 变量。 / Repository source, dependency manifests, and CI variables.
+# 输出 / Output: 各流水线任务的检查结果。 / Results from each pipeline job.
+# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.

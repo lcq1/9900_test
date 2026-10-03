@@ -1,0 +1,5 @@
+# 文件职责 / File contract
+# 功能 / Function: 列出后端公共 Python 依赖。 / List shared backend Python dependencies.
+# 输入 / Input: FastAPI、数据库、认证、存储和测试所需包。 / Packages required for FastAPI, database, auth, storage, and tests.
+# 输出 / Output: 供 pip 安装的依赖列表。 / A dependency list for pip installation.
+# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.

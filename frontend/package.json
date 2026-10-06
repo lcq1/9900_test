@@ -1,11 +1,30 @@
 {
-  "name": "project",
-  "version": "0.0.0",
+  "name": "comp9900",
   "private": true,
-  "_file_comment": {
-    "功能 / Function": "声明前端依赖、项目元信息及运行脚本。 / Declare frontend dependencies, project metadata, and scripts.",
-    "输入 / Input": "所需 npm 包及开发、构建、测试命令。 / Required npm packages and development, build, and test commands.",
-    "输出 / Output": "npm 可读取的项目清单和脚本定义。 / An npm-readable project manifest and script definitions.",
-    "状态 / Status": "职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet."
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:api": "cd ../backend && python -m uvicorn app.main:app --reload --port 8000",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@tencent-ai/workbuddy-cloud-sdk": "^0.1.3-dev.c090db7.202610050023",
+    "lucide-react": "^1.48.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
   }
 }

@@ -8,6 +8,10 @@
 
 # 项目文件树 / Project File Tree
 
+以下文件树移植自 `Plan.md` 第 8.2 节，表示目标结构和文件职责。每行依次给出负责人、中文说明和英文说明；`【】` 表示 Administrator 后端的负责人暂未分配。
+
+The tree below follows Section 8.2 of `Plan.md`. It describes the target structure and each file's purpose. Each file line shows its owner, a Chinese description, and an English description. `【】` means the Administrator backend owner is currently unassigned.
+
 ```text
 project/
 ├── README.md                                  # 【测试 / QA】环境准备、运行、测试与导出说明 / Setup, run, test, and export instructions

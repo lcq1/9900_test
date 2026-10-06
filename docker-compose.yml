@@ -1,5 +1,1 @@
-# 文件职责 / File contract
-# 功能 / Function: 编排前端、后端、PostgreSQL 和日志卷。 / Orchestrate frontend, backend, PostgreSQL, and log volumes.
-# 输入 / Input: Dockerfile、环境变量及服务配置。 / Dockerfiles, environment variables, and service settings.
-# 输出 / Output: 可启动的本地容器服务定义。 / Runnable local container service definitions.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+# Placeholder — implement per Plan.md §8.2 (not yet implemented)

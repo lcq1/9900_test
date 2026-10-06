@@ -1,3 +1,4 @@
+# Batch 0: CI pipeline configuration for Infra and Docs (Chara)
 # 文件职责 / File contract
 # 功能 / Function: 运行前端、后端和端到端检查。 / Run frontend, backend, and end-to-end checks.
 # 输入 / Input: 仓库源码、依赖清单和 CI 变量。 / Repository source, dependency manifests, and CI variables.

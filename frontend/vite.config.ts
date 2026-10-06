@@ -1,7 +1,20 @@
-/**
- * 文件职责 / File contract
- * 功能 / Function: 配置 Vite 开发服务器、代理与构建。 / Configure the Vite dev server, proxy, and build.
- * 输入 / Input: 前端源码、环境变量及后端 API 地址。 / Frontend source, environment variables, and backend API address.
- * 输出 / Output: 开发和构建阶段使用的 Vite 配置。 / Vite configuration for development and builds.
- * 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
- */
+// Batch 0: Vite build configuration and frontend tooling
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      // Forward API calls to the FastAPI backend during development.
+      '/api': {
+        // 127.0.0.1 (not `localhost`): `localhost` can resolve to ::1 first,
+        // and the backend only listens on IPv4 — that made every dev API call
+        // fail with 502.
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+    },
+  },
+})

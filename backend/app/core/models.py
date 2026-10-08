@@ -1,5 +1,22 @@
-# 文件职责 / File contract
-# 功能 / Function: 定义 Browser Session 与 active tab ORM 模型。 / Define Browser Session and active-tab ORM models.
-# 输入 / Input: 会话身份、Token 摘要及标签页字段。 / Session identity, token digest, and tab fields.
-# 输出 / Output: 供数据库访问和迁移使用的模型。 / Models used by database access and migrations.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+"""Shared ORM helpers: ``Base`` re-export, mixins and id generator."""
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.database import Base
+
+
+def gen_uuid() -> str:
+    """Generate a new UUID4 string for use as a primary key."""
+    return str(uuid.uuid4())
+
+
+class TimestampMixin:
+    """Adds a ``created_at`` UTC timestamp column to a model."""
+
+    created_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(timezone.utc)
+    )

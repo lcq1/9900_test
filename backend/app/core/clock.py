@@ -1,5 +1,19 @@
-# 文件职责 / File contract
-# 功能 / Function: 提供统一权威的服务端 UTC 时间。 / Provide authoritative server-side UTC time.
-# 输入 / Input: 系统时钟或注入的测试时钟。 / System clock or injected test clock.
-# 输出 / Output: 带时区的 UTC 时间戳。 / Timezone-aware UTC timestamps.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+"""Authoritative server clock helpers (UTC)."""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+
+def now() -> datetime:
+    """Return the current UTC time as a timezone-aware datetime."""
+    return datetime.now(timezone.utc)
+
+
+def now_iso() -> str:
+    """Return the current UTC time as an ISO-8601 string."""
+    return now().isoformat()
+
+
+def epoch_ms() -> int:
+    """Return the current UTC time as integer milliseconds since the epoch."""
+    return int(now().timestamp() * 1000)

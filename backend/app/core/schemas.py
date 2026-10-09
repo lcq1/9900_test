@@ -1,5 +1,25 @@
-# 文件职责 / File contract
-# 功能 / Function: 定义公共请求、响应与错误结构。 / Define shared request, response, and error schemas.
-# 输入 / Input: API 字段、状态码和时间格式约定。 / API fields, status codes, and time-format rules.
-# 输出 / Output: 可复用的校验与序列化模型。 / Reusable validation and serialization models.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+"""Reusable Pydantic base models that serialise to camelCase JSON.
+
+The frontend contract requires camelCase field names in JSON payloads. We keep
+Python attribute names in snake_case (idiomatic) and rely on Pydantic's
+``alias_generator`` to emit camelCase on serialisation while still accepting
+camelCase (or snake_case) on input via ``populate_by_name``.
+"""
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
+
+
+class CamelModel(BaseModel):
+    """Base model that accepts and emits camelCase field names."""
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class CamelORMModel(CamelModel):
+    """CamelCase model that can be populated directly from ORM objects."""
+
+    model_config = ConfigDict(
+        from_attributes=True, populate_by_name=True, alias_generator=to_camel
+    )

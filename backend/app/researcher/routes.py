@@ -1,5 +1,125 @@
-# 文件职责 / File contract
-# 功能 / Function: 暴露 Researcher 账户与实验 API。 / Expose Researcher account and experiment APIs.
-# 输入 / Input: 认证身份、实验请求及上传文件。 / Authenticated identity, experiment requests, and uploads.
-# 输出 / Output: 实验 JSON、操作结果或授权下载。 / Experiment JSON, action results, or authorized downloads.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+"""Auth, researcher and experiment HTTP routes."""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.security import create_access_token, get_current_researcher
+from app.researcher import service as svc
+from app.researcher.models import Researcher
+from app.researcher.schemas import (
+    Experiment,
+    ExperimentCreate,
+    ExperimentUpdate,
+    LoginRequest,
+    LoginResponse,
+    Researcher as ResearcherSchema,
+    ResearcherCreate,
+)
+
+router = APIRouter(tags=["auth", "researcher", "experiments"])
+
+
+@router.post("/auth/register", response_model=ResearcherSchema, status_code=201)
+def register(payload: ResearcherCreate, db: Session = Depends(get_db)) -> Researcher:
+    return svc.register_researcher(
+        db, name=payload.name, email=payload.email, password=payload.password
+    )
+
+
+@router.post("/auth/login", response_model=LoginResponse)
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict:
+    researcher = svc.authenticate(db, payload.email, payload.password)
+    if researcher is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+    token = create_access_token(researcher.id)
+    return {
+        "token": token,
+        "researcher": researcher,
+        "issuedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/auth/logout", status_code=200)
+def logout() -> dict:
+    return {"status": "ok"}
+
+
+@router.get("/researchers", response_model=list[ResearcherSchema])
+def list_researchers(
+    db: Session = Depends(get_db),
+    _: Researcher = Depends(get_current_researcher),
+) -> list[Researcher]:
+    return svc.list_researchers(db)
+
+
+@router.patch("/researchers/{researcher_id}/promote", response_model=ResearcherSchema)
+def promote(
+    researcher_id: str,
+    db: Session = Depends(get_db),
+    _: Researcher = Depends(get_current_researcher),
+) -> Researcher:
+    return svc.promote(db, researcher_id)
+
+
+@router.get("/experiments", response_model=list[Experiment])
+def list_experiments(
+    db: Session = Depends(get_db),
+    _: Researcher = Depends(get_current_researcher),
+) -> list[Experiment]:
+    return svc.list_experiments(db)
+
+
+@router.get("/experiments/{experiment_id}", response_model=Experiment)
+def get_experiment(
+    experiment_id: str,
+    db: Session = Depends(get_db),
+    _: Researcher = Depends(get_current_researcher),
+) -> Experiment:
+    return svc.get_experiment_or_404(db, experiment_id)
+
+
+@router.post("/experiments", response_model=Experiment, status_code=201)
+def create_experiment(
+    payload: ExperimentCreate,
+    db: Session = Depends(get_db),
+    _: Researcher = Depends(get_current_researcher),
+) -> Experiment:
+    stages = [stage.model_dump(by_alias=True) for stage in payload.stages]
+    return svc.create_experiment(
+        db,
+        name=payload.name,
+        code=payload.code,
+        status=payload.status,
+        full_screen=payload.full_screen,
+        stages=stages,
+        id=payload.id,
+    )
+
+
+@router.patch("/experiments/{experiment_id}", response_model=Experiment)
+def update_experiment(
+    experiment_id: str,
+    payload: ExperimentUpdate,
+    db: Session = Depends(get_db),
+    _: Researcher = Depends(get_current_researcher),
+) -> Experiment:
+    fields = payload.model_dump(exclude_unset=True)
+    if "stages" in fields:
+        fields["stages"] = [stage.model_dump(by_alias=True) for stage in fields["stages"]]
+    return svc.update_experiment(db, experiment_id, **fields)
+
+
+@router.delete("/experiments/{experiment_id}", status_code=204)
+def delete_experiment(
+    experiment_id: str,
+    db: Session = Depends(get_db),
+    _: Researcher = Depends(get_current_researcher),
+) -> None:
+    svc.delete_experiment(db, experiment_id)

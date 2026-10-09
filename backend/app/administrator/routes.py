@@ -1,5 +1,46 @@
-# 文件职责 / File contract
-# 功能 / Function: 暴露 Administrator 登录、查询和管理 API。 / Expose Administrator login, query, and management APIs.
-# 输入 / Input: 管理员凭据、筛选和修改请求。 / Admin credentials, filters, and update requests.
-# 输出 / Output: 账户与实验数据、修改结果或 CSV。 / Account and experiment data, update results, or CSV.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+"""Administrator platform-settings routes."""
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.administrator import service as svc
+from app.core.database import get_db
+from app.core.security import get_current_researcher
+from app.core.schemas import CamelORMModel
+from app.researcher.models import Researcher
+
+
+class PlatformSettings(CamelORMModel):
+    allow_self_registration: bool
+    require_consent_signature: bool
+    data_retention_days: int
+    max_session_minutes: int
+
+
+class PlatformSettingsUpdate(CamelORMModel):
+    allow_self_registration: bool | None = None
+    require_consent_signature: bool | None = None
+    data_retention_days: int | None = None
+    max_session_minutes: int | None = None
+
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/settings", response_model=PlatformSettings)
+def get_settings(
+    db: Session = Depends(get_db),
+    _: Researcher = Depends(get_current_researcher),
+) -> PlatformSettings:
+    return svc.get_settings(db)
+
+
+@router.patch("/settings", response_model=PlatformSettings)
+def update_settings(
+    payload: PlatformSettingsUpdate,
+    db: Session = Depends(get_db),
+    _: Researcher = Depends(get_current_researcher),
+) -> PlatformSettings:
+    fields = payload.model_dump(exclude_unset=True)
+    return svc.update_settings(db, **fields)

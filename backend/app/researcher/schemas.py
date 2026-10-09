@@ -1,5 +1,77 @@
-# 文件职责 / File contract
-# 功能 / Function: 校验实验、Stage 和发布请求。 / Validate experiment, stage, and publish requests.
-# 输入 / Input: 实验设置、Stage 内容与功能配置。 / Experiment settings, stage content, and feature configuration.
-# 输出 / Output: 已校验的请求与响应模型。 / Validated request and response models.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+"""Pydantic schemas for researcher / experiment DTOs (camelCase JSON)."""
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Literal, Optional
+
+from app.core.schemas import CamelModel, CamelORMModel
+
+
+class Researcher(CamelORMModel):
+    id: str
+    name: str
+    email: str
+    role: Literal["researcher", "administrator"] = "researcher"
+    created_at: datetime
+
+
+class ResearcherCreate(CamelModel):
+    name: str
+    email: str
+    password: Optional[str] = None
+
+
+class LoginRequest(CamelModel):
+    email: str
+    password: str
+
+
+class LoginResponse(CamelModel):
+    token: str
+    researcher: Researcher
+    issued_at: str
+
+
+class StageComponent(CamelModel):
+    id: str
+    type: str
+    label: str
+    required: bool = False
+    options: Optional[list[str]] = None
+
+
+class Stage(CamelModel):
+    id: str
+    name: str
+    type: str
+    duration: int = 0
+    components: list[StageComponent] = []
+    features: dict[str, bool] = {}
+    countdown_minutes: int = 0
+
+
+class ExperimentCreate(CamelModel):
+    id: Optional[str] = None
+    name: str
+    code: str
+    status: str = "Draft"
+    full_screen: bool = False
+    stages: list[Stage] = []
+
+
+class ExperimentUpdate(CamelModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    status: Optional[str] = None
+    full_screen: Optional[bool] = None
+    stages: Optional[list[Stage]] = None
+
+
+class Experiment(CamelORMModel):
+    id: str
+    name: str
+    code: str
+    status: str
+    created: str
+    full_screen: bool
+    stages: list[Stage] = []

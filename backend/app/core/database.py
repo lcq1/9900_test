@@ -1,5 +1,28 @@
-# 文件职责 / File contract
-# 功能 / Function: 管理 PostgreSQL 连接和 SQLAlchemy 会话。 / Manage PostgreSQL connections and SQLAlchemy sessions.
-# 输入 / Input: 数据库 URL 与连接池设置。 / Database URL and connection-pool settings.
-# 输出 / Output: 数据库 Engine、会话工厂和依赖。 / Database engine, session factory, and dependencies.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+"""Database engine, session factory, declarative ``Base`` and DI helper."""
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
+
+from app.core.config import settings
+
+# SQLite requires check_same_thread=False when used across FastAPI threads.
+_connect_args: dict[str, Any] = {}
+if settings.database_url.startswith("sqlite"):
+    _connect_args = {"check_same_thread": False}
+
+engine = create_engine(settings.database_url, connect_args=_connect_args, future=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+Base = declarative_base()
+
+
+def get_db() -> Iterator[Session]:
+    """FastAPI dependency that yields a database session and closes it after."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

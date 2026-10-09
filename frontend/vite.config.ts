@@ -6,13 +6,14 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
+    watch: {
+      usePolling: process.env.VITE_USE_POLLING === 'true',
+    },
     proxy: {
       // Forward API calls to the FastAPI backend during development.
       '/api': {
-        // 127.0.0.1 (not `localhost`): `localhost` can resolve to ::1 first,
-        // and the backend only listens on IPv4 — that made every dev API call
-        // fail with 502.
-        target: 'http://127.0.0.1:8000',
+        // Compose uses the backend service; local development uses IPv4 loopback.
+        target: process.env.API_PROXY_TARGET || 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },

@@ -1,5 +1,29 @@
-# 文件职责 / File contract
-# 功能 / Function: 去重、排序并批量接收客户端事件。 / Deduplicate, order, and batch-ingest client events.
-# 输入 / Input: Run、client_sequence、时间及事件负载。 / Run, client sequence, timestamps, and event payloads.
-# 输出 / Output: 持久化时间线与确认序号。 / Persisted timeline and acknowledged sequences.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+from __future__ import annotations
+from typing import Optional
+from app.participant.models import ParticipantEvent
+from app.participant.schemas import ParticipantEvent as ParticipantEventSchema
+
+
+def make_event_orm(
+    session_id: str,
+    event: ParticipantEventSchema,
+) -> ParticipantEvent:
+    """Build a :class:`ParticipantEvent` ORM row from a schema event."""
+    return ParticipantEvent(
+        session_id=session_id,
+        seq=event.seq,
+        type=event.type,
+        timestamp=event.timestamp,
+        epoch_ms=event.epoch_ms,
+        perf_ms=event.perf_ms,
+        stage_id=event.stage_id,
+        detail=event.detail,
+    )
+
+
+def make_event_orms(
+    session_id: str,
+    events: list[ParticipantEventSchema],
+) -> list[ParticipantEvent]:
+    """Build ORM rows for a batch of schema events."""
+    return [make_event_orm(session_id, event) for event in events]

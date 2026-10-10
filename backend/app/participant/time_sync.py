@@ -1,5 +1,20 @@
-# 文件职责 / File contract
-# 功能 / Function: 保存四时间点校时样本并估计偏移。 / Store four-timestamp clock samples and estimate offsets.
-# 输入 / Input: 客户端和服务端的发送、接收时间。 / Client and server send and receive timestamps.
-# 输出 / Output: 偏移、往返时延和样本可信度。 / Offset, round-trip delay, and sample quality.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+from __future__ import annotations
+from datetime import datetime, timezone
+
+
+def server_now_iso() -> str:
+    """Return the current server time as an ISO-8601 UTC string."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def server_epoch_ms() -> int:
+    """Return the current server time as integer milliseconds since epoch."""
+    return int(datetime.now(timezone.utc).timestamp() * 1000)
+
+
+def anchor() -> dict[str, object]:
+    """Return a clock anchor payload (now + epoch) for client synchronisation."""
+    return {
+        "iso": server_now_iso(),
+        "epochMs": server_epoch_ms(),
+    }

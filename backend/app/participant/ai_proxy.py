@@ -1,5 +1,40 @@
-# 文件职责 / File contract
-# 功能 / Function: 代理 AI 请求并保存双方消息。 / Proxy AI requests and persist both sides of the conversation.
-# 输入 / Input: Stage 配置、Participant 文本及消息历史。 / Stage configuration, participant text, and message history.
-# 输出 / Output: AI 文本回复、模型信息和时间戳记录。 / AI text replies, model details, and timestamped records.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+from __future__ import annotations
+import httpx
+from app.core.config import settings
+
+
+def _mock_reply(message: str) -> str:
+    return (
+        f"Thanks for your message: {message!r}. Here is one way to approach that: "
+        "clarify the constraints first, then compare two alternatives. "
+        "(mock reply; set AI_API_KEY to enable a real model.)"
+    )
+
+
+async def chat(message: str, context: str | None = None) -> str:
+    """Return an AI reply for ``message`` (with optional ``context``)."""
+    if settings.ai_api_key:
+        return await _chat_real(message, context)
+    return _mock_reply(message)
+
+
+async def _chat_real(message: str, context: str | None) -> str:
+    messages: list[dict[str, str]] = []
+    if context:
+        messages.append({"role": "system", "content": context})
+    messages.append({"role": "user", "content": message})
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": messages,
+        "temperature": 0.7,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.ai_api_key}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(settings.ai_api_base, json=payload, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+    return data["choices"][0]["message"]["content"]

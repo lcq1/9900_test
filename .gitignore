@@ -2,3 +2,5 @@
 # 输入 / Input: 项目文件路径及待配置的忽略规则。 / Project paths and ignore rules to be configured.
 # 输出 / Output: Git 不跟踪的文件匹配规则。 / File matching rules that Git leaves untracked.
 # 状态 / Status: 文件说明占位，忽略规则待实现。 / File contract placeholder; ignore rules are pending.
+__pycache__/
+*.py[cod]

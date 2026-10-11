@@ -50,3 +50,27 @@ def client() -> Iterator[TestClient]:
     db_mod.engine = original_engine
     db_mod.SessionLocal = original_session
     Base.metadata.drop_all(bind=test_engine)
+
+
+@pytest.fixture()
+def auth_headers(client: TestClient) -> dict[str, str]:
+    """Register + login a researcher and return Bearer Authorization headers."""
+    token = register_and_login(client)
+    return {"Authorization": f"Bearer {token}"}
+
+
+def register_and_login(
+    client: TestClient,
+    name: str = "Test Researcher",
+    email: str = "researcher@example.com",
+    password: str = "password123",
+) -> str:
+    """Create a researcher and return a valid JWT token."""
+    r = client.post(
+        "/api/auth/register",
+        json={"name": name, "email": email, "password": password},
+    )
+    assert r.status_code in (200, 201), r.text
+    r = client.post("/api/auth/login", json={"email": email, "password": password})
+    assert r.status_code == 200, r.text
+    return r.json()["token"]

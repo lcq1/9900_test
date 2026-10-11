@@ -1,5 +1,112 @@
-# 文件职责 / File contract
-# 功能 / Function: 验证同意、答题、计时、刷新和幂等性。 / Verify consent, answers, timers, recovery, and idempotency.
-# 输入 / Input: Participant API、Run 样例与可控时钟。 / Participant APIs, run fixtures, and controlled clock.
-# 输出 / Output: 答题状态转换的 pytest 断言。 / Pytest assertions for participant state transitions.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+"""Participant lookup, submission and retrieval tests."""
+from __future__ import annotations
+
+
+def _make_experiment(client, headers, code="ZZZ1"):
+    return client.post(
+        "/api/experiments", json={"name": "E", "code": code, "stages": []}, headers=headers
+    )
+
+
+def _submit_payload(experiment_code="ZZZ1"):
+    return {
+        "experimentCode": experiment_code,
+        "participantCode": "abc",
+        "finishedAt": None,
+        "answers": [
+            {"componentId": "c1", "value": "hello"},
+            {"componentId": "c2", "value": ["a", "b"]},
+        ],
+        "events": [
+            {
+                "seq": 0,
+                "type": "stage_view",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "epochMs": 1000,
+                "perfMs": 5,
+                "stageId": "s1",
+                "detail": {"x": 1},
+            },
+            {
+                "seq": 1,
+                "type": "answer",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "epochMs": 2000,
+                "perfMs": 3,
+                "stageId": None,
+                "detail": None,
+            },
+        ],
+    }
+
+
+def test_lookup_and_submit_roundtrip(client, auth_headers):
+    assert _make_experiment(client, auth_headers, code="ZZZ1").status_code == 201
+
+    # lookup requires auth
+    assert client.get("/api/participant/lookup?code=zzz1&participant=abc").status_code == 401
+
+    r = client.get(
+        "/api/participant/lookup?code=zzz1&participant=abc", headers=auth_headers
+    )
+    assert r.status_code == 200
+    assert r.json()["code"] == "ZZZ1"
+
+    # case-insensitive code match
+    r = client.get(
+        "/api/participant/lookup?code=ZzZ1&participant=abcde", headers=auth_headers
+    )
+    assert r.status_code == 200
+
+    # missing experiment
+    r = client.get(
+        "/api/participant/lookup?code=NOPE&participant=abc", headers=auth_headers
+    )
+    assert r.status_code == 404
+
+    # participant code too short
+    r = client.get(
+        "/api/participant/lookup?code=zzz1&participant=ab", headers=auth_headers
+    )
+    assert r.status_code == 400
+
+    # submit session
+    r = client.post(
+        "/api/participant/sessions", json=_submit_payload(), headers=auth_headers
+    )
+    assert r.status_code == 201
+    data = r.json()
+    assert data["id"]
+    assert data["startedAt"]
+    assert data["experimentCode"] == "ZZZ1"
+    assert data["participantCode"] == "abc"
+    assert len(data["answers"]) == 2
+    assert data["answers"][0]["value"] == "hello"
+    assert data["answers"][1]["value"] == ["a", "b"]
+    assert len(data["events"]) == 2
+    assert data["events"][0]["seq"] == 0
+    assert data["events"][0]["type"] == "stage_view"
+    assert data["events"][0]["stageId"] == "s1"
+    assert data["events"][0]["detail"] == {"x": 1}
+    assert data["events"][1]["stageId"] is None
+    assert data["events"][1]["detail"] is None
+    session_id = data["id"]
+
+    # retrieve
+    r = client.get(f"/api/participant/sessions/{session_id}", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["events"][0]["seq"] == 0
+
+    # list
+    r = client.get("/api/participant/sessions", headers=auth_headers)
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+
+    # missing session
+    r = client.get("/api/participant/sessions/nope", headers=auth_headers)
+    assert r.status_code == 404
+
+
+def test_participant_requires_auth(client):
+    assert client.get("/api/participant/sessions").status_code == 401
+

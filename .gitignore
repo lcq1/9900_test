@@ -1,4 +1,6 @@
-# 功能 / Function: 排除日志、密钥、缓存和构建产物。 / Exclude logs, secrets, caches, and build artifacts.
-# 输入 / Input: 项目文件路径及待配置的忽略规则。 / Project paths and ignore rules to be configured.
-# 输出 / Output: Git 不跟踪的文件匹配规则。 / File matching rules that Git leaves untracked.
-# 状态 / Status: 文件说明占位，忽略规则待实现。 / File contract placeholder; ignore rules are pending.
+# Function: Exclude logs, secrets, caches, and build artifacts.
+# Input: Project paths and ignore rules to be configured.
+# Output: File matching rules that Git leaves untracked.
+# Status: File contract placeholder; ignore rules are pending.
+__pycache__/
+*.py[cod]

@@ -1,5 +1,76 @@
-# 文件职责 / File contract
-# 功能 / Function: 提供数据库、Session 和 API 测试夹具。 / Provide database, session, and API test fixtures.
-# 输入 / Input: 测试配置、临时数据库与应用对象。 / Test settings, temporary database, and app object.
-# 输出 / Output: 可复用的 pytest fixtures。 / Reusable pytest fixtures.
-# 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+"""Pytest fixtures: isolated SQLite DB, TestClient and auth helpers."""
+from __future__ import annotations
+
+import os
+import sys
+import tempfile
+from collections.abc import Iterator
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+# Ensure the backend directory is importable as the project root.
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
+from app.core.database import Base, SessionLocal  # noqa: E402
+from app.main import app  # noqa: E402
+
+
+@pytest.fixture()
+def client() -> Iterator[TestClient]:
+    """Provide a TestClient backed by a fresh, isolated SQLite database.
+
+    The module-level engine/session are swapped for an isolated in-tmp SQLite
+    database so each test runs against a clean schema without touching dev.db.
+    """
+    tmp = tempfile.mkdtemp(prefix="beyond_test_")
+    test_url = f"sqlite:///{os.path.join(tmp, 'test.db')}"
+    test_engine = create_engine(
+        test_url, connect_args={"check_same_thread": False}, future=True
+    )
+    TestSessionLocal = sessionmaker(
+        bind=test_engine, autoflush=False, autocommit=False, future=True
+    )
+    Base.metadata.create_all(bind=test_engine)
+
+    import app.core.database as db_mod
+
+    original_engine = db_mod.engine
+    original_session = db_mod.SessionLocal
+    db_mod.engine = test_engine
+    db_mod.SessionLocal = TestSessionLocal
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    db_mod.engine = original_engine
+    db_mod.SessionLocal = original_session
+    Base.metadata.drop_all(bind=test_engine)
+
+
+@pytest.fixture()
+def auth_headers(client: TestClient) -> dict[str, str]:
+    """Register + login a researcher and return Bearer Authorization headers."""
+    token = register_and_login(client)
+    return {"Authorization": f"Bearer {token}"}
+
+
+def register_and_login(
+    client: TestClient,
+    name: str = "Test Researcher",
+    email: str = "researcher@example.com",
+    password: str = "password123",
+) -> str:
+    """Create a researcher and return a valid JWT token."""
+    r = client.post(
+        "/api/auth/register",
+        json={"name": name, "email": email, "password": password},
+    )
+    assert r.status_code in (200, 201), r.text
+    r = client.post("/api/auth/login", json={"email": email, "password": password})
+    assert r.status_code == 200, r.text
+    return r.json()["token"]

@@ -1,7 +1,234 @@
-/**
- * 文件职责 / File contract
- * 功能 / Function: 呈现三角色选择和各自登录表单。 / Render role selection and role-specific login forms.
- * 输入 / Input: 用户输入、表单校验与认证结果。 / User input, validation, and authentication results.
- * 输出 / Output: 登录提交、错误提示或角色页面跳转。 / Login submission, error feedback, or role-page navigation.
- * 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
- */
+// Code-based participant entry and backend researcher/admin login.
+import { useState } from 'react'
+import type { FormEvent } from 'react'
+import { ArrowRight, LogIn, Play, ShieldCheck, UserPlus, UserRound } from 'lucide-react'
+import * as auth from '../api/auth'
+import { setSession } from '../auth/sessionStore'
+
+// Participant, researcher, and admin login roles.
+type Role = 'participant' | 'researcher' | 'administrator'
+
+// Show code entry for participants and account login for other roles.
+export function AuthScreen({
+	onSignIn,
+	onParticipant,
+}: {
+	onSignIn: () => void
+	onParticipant: (experimentCode?: string, participantCode?: string) => void
+}) {
+	// Track login role, registration mode, form fields, and request state.
+	const [role, setRole] = useState<Role>('participant')
+	const [mode, setMode] = useState<'signin' | 'register'>('signin')
+	const [name, setName] = useState('')
+	const [email, setEmail] = useState('researcher@unsw.edu.au')
+	const [password, setPassword] = useState('')
+	const [experimentCode, setExperimentCode] = useState('')
+	const [participantCode, setParticipantCode] = useState('')
+	const [error, setError] = useState('')
+	const [busy, setBusy] = useState(false)
+
+	// Validate and submit the form, then update session and request state.
+	const submit = async (event: FormEvent) => {
+		event.preventDefault()
+		setError('')
+		if (role === 'participant') {
+			// Validate participant codes and pass entry to the parent.
+			if (!experimentCode.trim() || !participantCode.trim()) {
+				// Require both access codes before submitting.
+				setError('Experiment code and participant code are both required.')
+				return
+			}
+			onParticipant(experimentCode.trim(), participantCode.trim())
+			return
+		}
+		if (!email.trim() || !password.trim()) {
+			// Require email and password before submitting.
+			setError('Email and password are required.')
+			return
+		}
+		if (mode === 'register' && !name.trim()) {
+			// Require a researcher name for registration.
+			setError('Please enter your name.')
+			return
+		}
+		setBusy(true)
+		try {
+			// Authenticate, save the session, and notify the parent.
+			const session =
+				mode === 'register'
+					? await auth.registerResearcher({ name, email, password })
+					: await auth.signIn(email, password)
+			setSession(session)
+			onSignIn()
+		} catch (err) {
+			// Show the request error and retain loaded data.
+			setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+		} finally {
+			// Reset loading state after the request.
+			setBusy(false)
+		}
+	}
+
+	// Render the current view.
+	return (
+		<div className="auth-screen">
+			<div className="auth-panel">
+				<div className="brand auth-brand">
+					<span className="brand-mark" aria-hidden="true">
+						<svg
+							viewBox="0 0 24 24"
+							width="16"
+							height="16"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2.4"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M5 19 19 5" />
+							<path d="M9 5h10v10" />
+						</svg>
+					</span>
+					<span className="brand-word">Beyond</span>
+				</div>
+
+				{/* Login instructions and role hints. */}
+				<div className="auth-head">
+					<div className="auth-icon">
+						<UserRound size={22} />
+					</div>
+					<h1>Sign in</h1>
+					<p className="auth-copy">Select your role, then enter your details.</p>
+				</div>
+
+				{/* Login role selection. */}
+				<div className="auth-tabs">
+					<button
+						type="button"
+						className={role === 'participant' ? 'auth-tab active' : 'auth-tab'}
+						onClick={() => setRole('participant')}
+					>
+						<Play size={14} /> Participant
+					</button>
+					<button
+						type="button"
+						className={role === 'researcher' ? 'auth-tab active' : 'auth-tab'}
+						onClick={() => setRole('researcher')}
+					>
+						<LogIn size={14} /> Researcher
+					</button>
+					<button
+						type="button"
+						className={role === 'administrator' ? 'auth-tab active' : 'auth-tab'}
+						onClick={() => setRole('administrator')}
+					>
+						<ShieldCheck size={14} /> Administrator
+					</button>
+				</div>
+
+				{/* Form fields and validated submission. */}
+				<form onSubmit={submit}>
+					{role === 'participant' && (
+						<>
+							<label>
+								Experiment code
+								<input
+									value={experimentCode}
+									onChange={(event) => setExperimentCode(event.target.value)}
+									placeholder="EXP-2026-013"
+								/>
+							</label>
+							<label>
+								Participant code
+								<input
+									value={participantCode}
+									onChange={(event) => setParticipantCode(event.target.value)}
+									placeholder="P07"
+								/>
+							</label>
+						</>
+					)}
+
+					{role !== 'participant' && mode === 'register' && (
+						<label>
+							Full name
+							<input
+								value={name}
+								onChange={(event) => setName(event.target.value)}
+								placeholder="Jane Researcher"
+							/>
+						</label>
+					)}
+
+					{role !== 'participant' && (
+						<>
+							<label>
+								Email address
+								<input
+									type="email"
+									value={email}
+									onChange={(event) => setEmail(event.target.value)}
+									placeholder="you@university.edu"
+								/>
+							</label>
+							<label>
+								Password
+								<input
+									type="password"
+									value={password}
+									onChange={(event) => setPassword(event.target.value)}
+									placeholder="••••••••"
+								/>
+							</label>
+						</>
+					)}
+
+					{error && <p className="entry-error">{error}</p>}
+
+					<button className="primary-button wide" type="submit" disabled={busy}>
+						{busy
+							? 'Please wait…'
+							: role === 'participant'
+								? 'Start / Continue'
+								: role === 'administrator'
+									? 'Administrator sign in'
+									: mode === 'register'
+										? 'Create account'
+										: 'Researcher log in'}{' '}
+						<ArrowRight size={16} />
+					</button>
+				</form>
+
+				{role === 'participant' && (
+					<p className="auth-code-note">
+						Entering the same code again resumes your session where you left off.
+					</p>
+				)}
+				{role === 'researcher' && (
+					<p className="auth-foot">
+						{mode === 'register' ? (
+							<>
+								Already have an account?{' '}
+								<button type="button" className="consent-clear" onClick={() => setMode('signin')}>
+									Sign in
+								</button>
+							</>
+						) : (
+							<>
+								New researcher?{' '}
+								<button type="button" className="consent-clear" onClick={() => setMode('register')}>
+									<UserPlus size={12} /> Create an account
+								</button>
+							</>
+						)}
+					</p>
+				)}
+				{role === 'administrator' && (
+					<p className="auth-foot">
+						Administrator accounts are promoted by an existing administrator.
+					</p>
+				)}
+			</div>
+		</div>
+	)
+}

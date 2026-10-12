@@ -1,7 +1,142 @@
 /**
- * 文件职责 / File contract
- * 功能 / Function: 按序批量发送并重试同意后的客户端事件。 / Batch, order, and retry post-consent client events.
- * 输入 / Input: 交互事件、client_sequence 与网络状态。 / Interaction events, client sequence, and network state.
- * 输出 / Output: 已确认入库的事件批次及待重试队列。 / Acknowledged event batches and retry queue.
- * 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
+ * EventQueue.ts — precise participant event timeline (Plan.md core requirement).
+ *
+ * Records participant events with SUB-SECOND precision by combining:
+ *   - `Date.now()` / ISO wall clock        → aligns with external sensors
+ *   - `performance.now()` offset           → sub-second ordering within a session
+ *
+ * The queue is persisted to localStorage so a session can be resumed / exported,
+ * and exported as a single JSON timeline.
  */
+
+export type ParticipantEventType =
+  | 'stage_view'
+  | 'answer'
+  | 'ai_prompt'
+  | 'ai_reply'
+  | 'copy'
+  | 'paste'
+  | 'recording_start'
+  | 'recording_stop'
+  | 'timer_tick'
+  | 'timer_milestone'
+  | 'navigation'
+  | 'abort'
+
+export interface ParticipantEvent {
+  /** Monotonic sequence number within the session. */
+  seq: number
+  type: ParticipantEventType
+  /** Wall-clock ISO timestamp (aligned to external sensors). */
+  timestamp: string
+  /** Unix epoch milliseconds (Date.now()). */
+  epochMs: number
+  /** Monotonic high-resolution offset in ms (performance.now()). */
+  perfMs: number
+  stageId?: string
+  detail?: Record<string, unknown>
+}
+
+export interface EventQueueSnapshot {
+  sessionId: string
+  exportedAt: string
+  events: ParticipantEvent[]
+}
+
+/** Capture a sub-second-precise timestamp (wall clock + performance clock). */
+export function preciseNow(): {
+  timestamp: string
+  epochMs: number
+  perfMs: number
+} {
+  const epochMs = Date.now()
+  const perfMs = typeof performance !== 'undefined' ? performance.now() : epochMs
+  return { timestamp: new Date(epochMs).toISOString(), epochMs, perfMs }
+}
+
+/** In-memory, localStorage-persisted queue of participant events. */
+export class EventQueue {
+  private readonly sessionId: string
+  private events: ParticipantEvent[] = []
+  private seq = 0
+
+  constructor(sessionId: string) {
+    this.sessionId = sessionId
+    this.load()
+  }
+
+  private storageKey(): string {
+    return `p13-events:${this.sessionId}`
+  }
+
+  private load(): void {
+    const raw = localStorage.getItem(this.storageKey())
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw) as {
+        events?: ParticipantEvent[]
+        seq?: number
+      }
+      this.events = Array.isArray(parsed.events) ? parsed.events : []
+      this.seq = parsed.seq ?? this.events.length
+    } catch {
+      this.events = []
+      this.seq = 0
+    }
+  }
+
+  private save(): void {
+    localStorage.setItem(
+      this.storageKey(),
+      JSON.stringify({ events: this.events, seq: this.seq }),
+    )
+  }
+
+  /** Record a single event and persist it. */
+  record(
+    type: ParticipantEventType,
+    detail?: Record<string, unknown>,
+    stageId?: string,
+  ): ParticipantEvent {
+    const { timestamp, epochMs, perfMs } = preciseNow()
+    const event: ParticipantEvent = {
+      seq: this.seq++,
+      type,
+      timestamp,
+      epochMs,
+      perfMs,
+    }
+    if (stageId !== undefined) event.stageId = stageId
+    if (detail !== undefined) event.detail = detail
+    this.events.push(event)
+    this.save()
+    return event
+  }
+
+  /** All recorded events (defensive copy). */
+  all(): ParticipantEvent[] {
+    return [...this.events]
+  }
+
+  /** Number of recorded events. */
+  count(): number {
+    return this.events.length
+  }
+
+  /** Empty the queue. */
+  clear(): void {
+    this.events = []
+    this.seq = 0
+    this.save()
+  }
+
+  /** Export a precise event timeline (Plan.md requirement) as pretty JSON. */
+  exportJson(): string {
+    const snapshot: EventQueueSnapshot = {
+      sessionId: this.sessionId,
+      exportedAt: new Date().toISOString(),
+      events: this.all(),
+    }
+    return JSON.stringify(snapshot, null, 2)
+  }
+}

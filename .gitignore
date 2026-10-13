@@ -4,3 +4,7 @@
 # Status: File contract placeholder; ignore rules are pending.
 __pycache__/
 *.py[cod]
+
+# Local SQLite databases (never commit)
+backend/dev.db
+*.sqlite*

@@ -1,7 +1,118 @@
-/*
- * 文件职责 / File contract
- * 功能 / Function: 定义蓝白主题及全局页面样式。 / Define the blue-and-white theme and global page styles.
- * 输入 / Input: 主题变量、布局与组件选择器。 / Theme variables, layout rules, and component selectors.
- * 输出 / Output: 浏览器应用的 CSS 样式。 / CSS styles applied by the browser.
- * 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
- */
+/* Theme colors and typography. */
+:root {
+	--text: #1f2933;
+	--text-h: #1f2933;
+	--bg: #f6f8fb;
+	--border: #e2e8f0;
+	--code-bg: #eef2f7;
+	--accent: #1f5f9e;
+	--accent-bg: rgba(31, 95, 158, 0.1);
+	--accent-border: rgba(31, 95, 158, 0.4);
+	--social-bg: rgba(244, 243, 236, 0.5);
+	--shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+	--sans: 'DM Sans', 'Avenir Next', sans-serif;
+	--heading: 'Space Grotesk', 'Avenir Next', sans-serif;
+	--mono: ui-monospace, Consolas, monospace;
+
+	font: 18px/145% var(--sans);
+	letter-spacing: 0.18px;
+	color-scheme: light;
+	color: var(--text);
+	background: var(--bg);
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+
+	/* Responsive styles at (max-width: 1024px). */
+	@media (max-width: 1024px) {
+		font-size: 16px;
+	}
+}
+
+/* Styles for #root. */
+#root {
+	width: 100%;
+	max-width: 100%;
+	margin: 0 auto;
+	text-align: left;
+	min-height: 100svh;
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+}
+
+/* Styles for body. */
+body {
+	margin: 0;
+	min-width: 320px;
+}
+
+/* Styles for button, input, textarea. */
+button,
+input,
+textarea {
+	font: inherit;
+}
+
+/* Styles for button. */
+button {
+	cursor: pointer;
+}
+
+/* Styles for h1, h2. */
+h1,
+h2 {
+	font-family: var(--heading);
+	font-weight: 500;
+	color: var(--text-h);
+}
+
+/* Styles for h1. */
+h1 {
+	font-size: 56px;
+	letter-spacing: -1.68px;
+	margin: 32px 0;
+
+	/* Responsive styles at (max-width: 1024px). */
+	@media (max-width: 1024px) {
+		font-size: 36px;
+		margin: 20px 0;
+	}
+}
+
+/* Styles for h2. */
+h2 {
+	font-size: 24px;
+	line-height: 118%;
+	letter-spacing: -0.24px;
+	margin: 0 0 8px;
+
+	/* Responsive styles at (max-width: 1024px). */
+	@media (max-width: 1024px) {
+		font-size: 20px;
+	}
+}
+
+/* Styles for p. */
+p {
+	margin: 0;
+}
+
+/* Styles for code, .counter. */
+code,
+.counter {
+	font-family: var(--mono);
+	display: inline-flex;
+	border-radius: 4px;
+	color: var(--text-h);
+}
+
+/* Styles for code. */
+code {
+	font-size: 15px;
+	line-height: 135%;
+	padding: 4px 8px;
+	background: var(--code-bg);
+}

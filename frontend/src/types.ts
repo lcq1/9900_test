@@ -1,7 +1,44 @@
-/**
- * 文件职责 / File contract
- * 功能 / Function: 集中定义前端 API 与页面共享类型。 / Define types shared by frontend API calls and pages.
- * 输入 / Input: 后端请求、响应和实验数据结构。 / Backend request, response, and experiment data shapes.
- * 输出 / Output: 可复用的 TypeScript 类型定义。 / Reusable TypeScript type definitions.
- * 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
- */
+// Shared experiment, stage, component, and feature types.
+export type ComponentType =
+	'text' | 'textbox' | 'choice' | 'checkbox' | 'rating' | 'signature' | 'attachment' | 'button'
+// Feature keys shared by configuration and rendering.
+export type FeatureKey =
+	| 'ai'
+	| 'timer'
+	| 'clock'
+	| 'screenRecording'
+	| 'selfie'
+	| 'copyPaste'
+	| 'navigation'
+	| 'confirm'
+	| 'pauseAbort'
+	| 'signatureBox'
+	| 'attachment'
+// Content component identity, label, and optional settings.
+export type StageComponent = {
+	id: string
+	type: ComponentType
+	label: string
+	required?: boolean
+	options?: string[]
+}
+// Stage metadata, components, features, and countdown settings.
+export type Stage = {
+	id: string
+	name: string
+	type: string
+	duration: number
+	components: StageComponent[]
+	features: Record<FeatureKey, boolean>
+	countdownMinutes: number
+}
+// Experiment metadata, status, fullscreen mode, and ordered stages.
+export type Experiment = {
+	id: string
+	name: string
+	code: string
+	status: 'Draft' | 'Live'
+	created: string
+	fullScreen: boolean
+	stages: Stage[]
+}

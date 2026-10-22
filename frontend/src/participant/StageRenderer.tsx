@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Experiment } from '../types'
 import {
   ArrowLeft,
@@ -18,6 +18,7 @@ import {
 import { AIChat } from './AIChat'
 import { ConsentView } from './ConsentView'
 import { EventQueue } from './EventQueue'
+import { submitSession, type ParticipantAnswer } from '../api/participant'
 import {
   RecordingController,
   statusLabel,
@@ -49,9 +50,11 @@ import {
  */
 export function ParticipantPreview({
   experiment,
+  participantCode,
   onBack,
 }: {
   experiment: Experiment
+  participantCode: string
   onBack: () => void
 }) {
   const [stageIndex, setStageIndex] = useState(0)
@@ -62,6 +65,54 @@ export function ParticipantPreview({
   const [queue] = useState(() => new EventQueue(`${experiment.code}-${Date.now()}`))
 
   const stage = experiment.stages[stageIndex]
+
+  /**
+   * Persist the captured session to the backend, then leave the runtime.
+   *
+   * This is the single convergence point for every exit (last-stage Finish,
+   * the "Time is up" modal, the Abort button, and the Exit-preview link). It
+   * derives the `answers` array from the `answer` events already in the queue,
+   * stamps `finishedAt`, and POSTs the whole timeline. Submission is
+   * best-effort: the local timeline is already persisted to localStorage, so a
+   * transient server failure never loses participant data.
+   */
+  const finishSession = useCallback(
+    async (reason: 'finish' | 'abort') => {
+      if (reason === 'abort') {
+        queue.record('abort', { stageName: stage.name }, stage.id)
+      }
+      const events = queue.all()
+      const answers: ParticipantAnswer[] = events
+        .filter((event) => event.type === 'answer' && event.detail?.componentId)
+        .map((event) => {
+          const detail = event.detail as {
+            componentId?: string
+            value?: string | string[]
+            consent?: boolean
+          }
+          const value: string | string[] =
+            detail.value !== undefined
+              ? detail.value
+              : detail.consent
+                ? 'consented'
+                : ''
+          return { componentId: String(detail.componentId), value }
+        })
+      try {
+        await submitSession({
+          experimentCode: experiment.code,
+          participantCode,
+          finishedAt: new Date().toISOString(),
+          answers,
+          events,
+        })
+      } catch {
+        // Best-effort: local timeline is already persisted in localStorage.
+      }
+      onBack()
+    },
+    [queue, stage.id, stage.name, experiment.code, participantCode, onBack],
+  )
 
   // Live countdown (minutes-based) for the Countdown Timer feature.
   const totalSeconds = Math.max(1, stage.countdownMinutes) * 60
@@ -157,7 +208,7 @@ export function ParticipantPreview({
     }
     queue.record('navigation', { from: stage.name, triggeredBy: 'participant' }, stage.id)
     if (stageIndex >= experiment.stages.length - 1) {
-      onBack()
+      void finishSession('finish')
       return
     }
     const nextIndex = stageIndex + 1
@@ -453,7 +504,7 @@ export function ParticipantPreview({
             <button className="secondary-button" onClick={() => setPaused(true)}>
               <Pause size={14} /> Pause
             </button>
-            <button className="abort-button" onClick={onBack}>
+            <button className="abort-button" onClick={() => void finishSession('abort')}>
               <CircleStop size={14} /> Abort
             </button>
           </>
@@ -463,7 +514,7 @@ export function ParticipantPreview({
             Next stage <ArrowRight size={15} />
           </button>
         ) : (
-          <button className="primary-button" onClick={onBack}>
+          <button className="primary-button" onClick={() => void finishSession('finish')}>
             Finish <CheckSquare size={15} />
           </button>
         )}
@@ -474,7 +525,7 @@ export function ParticipantPreview({
   return (
     <section className="participant-view">
       <div className="participant-top">
-        <button className="back-link" onClick={onBack}>
+        <button className="back-link" onClick={() => void finishSession('abort')}>
           <ArrowLeft size={16} /> Exit preview
         </button>
         <span className="preview-label">

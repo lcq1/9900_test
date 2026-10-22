@@ -9,11 +9,15 @@ class ParticipantAnswer(CamelModel):
 
 
 class ParticipantEvent(CamelModel):
+    # `perf_ms` is a high-resolution monotonic offset (performance.now()) and is
+    # intentionally `float` to preserve sub-second precision — the precise single
+    # clock is the core requirement of the capture pipeline. `epoch_ms` is also
+    # `float` so a fractional wall-clock value is never rejected.
     seq: int
     type: str
     timestamp: str
-    epoch_ms: int
-    perf_ms: int
+    epoch_ms: float
+    perf_ms: float
     stage_id: Optional[str] = None
     detail: Optional[dict] = None
 

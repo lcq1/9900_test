@@ -60,6 +60,9 @@ export function ParticipantPreview({
   const [stageIndex, setStageIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   const [selections, setSelections] = useState<Record<string, string | string[]>>({})
+  // Tracks the chosen file name per attachment component so the UI can show it
+  // after a pick (the actual bytes are recorded into the event timeline).
+  const [attachments, setAttachments] = useState<Record<string, string>>({})
 
   // Stable per-session EventQueue (created once, never per render).
   const [queue] = useState(() => new EventQueue(`${experiment.code}-${Date.now()}`))
@@ -281,7 +284,11 @@ export function ParticipantPreview({
   // A consent stage is rendered through ConsentView (its own copy + signature
   // pad + confirm button), so the plain text blocks and the generic consent
   // button are not duplicated below it.
-  const isConsent = stage.type === 'consent'
+  // Case-insensitive: stage types come from the researcher editor, the seeded
+  // demo experiments ('Consent') and API round-trips, and casing has varied
+  // between them. A strict lowercase compare silently skipped the signature
+  // pad, so consent was recorded without the signature image (P1).
+  const isConsent = stage.type.toLowerCase() === 'consent'
   const consentLines = stage.components
     .filter((component) => component.type === 'text')
     .map((component) => component.label)
@@ -292,14 +299,14 @@ export function ParticipantPreview({
     : stage.components
 
   const handleConsent = (signatureDataUrl: string) => {
-    // Only the signature length is stored: keeping full signature images in
-    // localStorage would bloat the timeline.
+    // Store the complete signature image (data URL), not just its length, so it
+    // lands on the backend with the rest of the session timeline (P1).
     queue.record(
       'answer',
       {
         componentId: 'consent',
         consent: true,
-        signatureDataUrlChars: signatureDataUrl.length,
+        signatureDataUrl,
       },
       stage.id,
     )
@@ -424,9 +431,40 @@ export function ParticipantPreview({
               )}
 
               {component.type === 'attachment' && (
-                <div className="attachment-box">
-                  <Paperclip size={16} />
-                  <span>Choose a file to upload</span>
+                <div className={`attachment-input${attachments[component.id] ? ' has-file' : ''}`}>
+                  <label className="attachment-drop">
+                    <Paperclip size={16} />
+                    <span>
+                      {attachments[component.id] ? attachments[component.id] : 'Choose a file to upload'}
+                    </span>
+                    <input
+                      type="file"
+                      className="attachment-file"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (!file) return
+                        const reader = new FileReader()
+                        reader.onload = () => {
+                          const dataUrl = typeof reader.result === 'string' ? reader.result : ''
+                          setAttachments((current) => ({ ...current, [component.id]: file.name }))
+                          // Record the full file as a base64 data URL so the
+                          // attachment lands on the backend with the session (P1).
+                          queue.record(
+                            'answer',
+                            {
+                              componentId: component.id,
+                              value: dataUrl,
+                              fileName: file.name,
+                              mimeType: file.type,
+                              size: file.size,
+                            },
+                            stage.id,
+                          )
+                        }
+                        reader.readAsDataURL(file)
+                      }}
+                    />
+                  </label>
                 </div>
               )}
 

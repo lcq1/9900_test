@@ -11,6 +11,7 @@
  */
 import { CloudOpenAIError, type PublicLLMModel } from '@tencent-ai/workbuddy-cloud-sdk'
 import { cloud } from '../cloud/client'
+import { http } from '../api/http'
 
 /**
  * Application-owned system prompt. It is always `messages[0]`; the API rejects a
@@ -46,6 +47,13 @@ const MAX_HISTORY_CHARS = 2000
  * fallback is logged so the change does not go unnoticed.
  */
 const PINNED_MODEL_ID = 'deepseek-v4.1-flash'
+
+/**
+ * Synthetic model id used when the WorkBuddy Cloud LLM module is unreachable
+ * (no publishable key / 401 locally). The participant AI panel then routes
+ * through the backend `POST /api/ai/chat` proxy instead of being dead. P0 #4.
+ */
+const BACKEND_MODEL_ID = 'backend-ai'
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
@@ -92,13 +100,45 @@ export class LlmCallError extends Error {
 }
 
 let modelCache: PublicLLMModel[] | null = null
+/** True when the cloud LLM module failed and we are on the backend proxy. */
+let usingBackendFallback = false
 
 /** Fetch (and memoise) the public model directory for this application. */
 export async function listChatModels(signal?: AbortSignal): Promise<PublicLLMModel[]> {
   if (modelCache) return modelCache
-  const models = await cloud.llm.models.list(signal)
-  modelCache = models
-  return models
+  try {
+    const models = await cloud.llm.models.list(signal)
+    modelCache = models
+    usingBackendFallback = false
+    return models
+  } catch (error) {
+    // The WorkBuddy Cloud LLM module is not configured in this environment
+    // (no publishable key / 401 from cloud auth). Rather than leave the AI
+    // panel dead, fall back to the backend proxy at POST /api/ai/chat, which
+    // answers with a real model when AI_API_KEY is set and otherwise a clearly
+    // labelled mock. This is the P0 #4 local-availability fix.
+    console.warn('[ai] WorkBuddy Cloud LLM unavailable; using backend /api/ai/chat fallback:', error)
+    usingBackendFallback = true
+    modelCache = [backendFallbackModel()]
+    return modelCache
+  }
+}
+
+/**
+ * Synthetic model entry for the backend /api/ai/chat proxy, surfaced only when
+ * the WorkBuddy Cloud LLM module is unreachable so the participant panel still
+ * has a model to address locally.
+ */
+function backendFallbackModel(): PublicLLMModel {
+  return {
+    id: BACKEND_MODEL_ID,
+    name: 'Backend AI (proxy)',
+    enabled: true,
+    isDefault: true,
+    disabled: false,
+    sortOrder: 0,
+    temperature: 0.7,
+  }
 }
 
 /**
@@ -130,7 +170,12 @@ export function pickChatModel(models: PublicLLMModel[]): PublicLLMModel | undefi
 
 /** Strip control characters and cap length before the text reaches the model. */
 function sanitisePrompt(input: string): string {
-  return input.replace(/[\x00-\x1F\x7F]/g, ' ').slice(0, MAX_PROMPT_CHARS)
+  let cleaned = ''
+  for (const char of input) {
+    const code = char.codePointAt(0) ?? 0
+    cleaned += code < 32 || code === 127 ? ' ' : char
+  }
+  return cleaned.slice(0, MAX_PROMPT_CHARS)
 }
 
 function isAbortError(error: unknown): boolean {
@@ -139,41 +184,69 @@ function isAbortError(error: unknown): boolean {
 
 /** Map an error to something a participant (and a researcher) can act on. */
 function toCallError(error: unknown, partialText: string): LlmCallError {
-  const make = (message: string, retryable: boolean, requestId?: string) =>
-    new LlmCallError(message, retryable, requestId, partialText)
-
   if (error instanceof CloudOpenAIError) {
     const code = error.error.code ?? ''
     const upstream = error.error.message ? ` Upstream: ${error.error.message}` : ''
     const requestId = error.requestId
 
     if (code.startsWith('request_')) {
-      return make(`The model service rejected this request (${code}).${upstream}`, false, requestId)
+      return new LlmCallError(
+        `The model service rejected this request (${code}).${upstream}`,
+        false,
+        requestId,
+        partialText,
+      )
     }
     if (code.startsWith('auth_')) {
-      return make(
+      return new LlmCallError(
         'This app is not authorised to call the model service from the current site address. Open the published app URL and retry.',
         false,
         requestId,
+        partialText,
       )
     }
     if (code.startsWith('quota_')) {
       if (code === 'quota_rate_limited' && error.retryAfterMs) {
         const seconds = Math.max(1, Math.ceil(error.retryAfterMs / 1000))
-        return make(`Rate limited. Retry in about ${seconds} second${seconds === 1 ? '' : 's'}.`, true, requestId)
+        return new LlmCallError(
+          `Rate limited. Retry in about ${seconds} second${seconds === 1 ? '' : 's'}.`,
+          true,
+          requestId,
+          partialText,
+        )
       }
-      return make('The model quota for this app is exhausted. Ask the researcher to top it up.', false, requestId)
+      return new LlmCallError(
+        'The model quota for this app is exhausted. Ask the researcher to top it up.',
+        false,
+        requestId,
+        partialText,
+      )
     }
     if (code.startsWith('gateway_') || code.startsWith('model_')) {
-      return make('The model service is temporarily unavailable. Retry in a moment.', true, requestId)
+      return new LlmCallError(
+        'The model service is temporarily unavailable. Retry in a moment.',
+        true,
+        requestId,
+        partialText,
+      )
     }
     if (code.startsWith('internal_')) {
-      return make(`Unexpected model-service error${requestId ? ` (request ${requestId})` : ''}.`, true, requestId)
+      return new LlmCallError(
+        `Unexpected model-service error${requestId ? ` (request ${requestId})` : ''}.`,
+        true,
+        requestId,
+        partialText,
+      )
     }
-    return make(`The model call failed (${code || 'unknown'}).${upstream}`, true, requestId)
+    return new LlmCallError(`The model call failed (${code || 'unknown'}).${upstream}`, true, requestId, partialText)
   }
 
-  return make('The model service could not be reached. Check the network connection and retry.', true)
+  return new LlmCallError(
+    'The model service could not be reached. Check the network connection and retry.',
+    true,
+    undefined,
+    partialText,
+  )
 }
 
 /** Generate an application-owned conversation id for a new chat. */
@@ -182,6 +255,39 @@ export function createConversationId(): string {
     return crypto.randomUUID()
   }
   return `conv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+/**
+ * Backend-proxy path used when the WorkBuddy Cloud LLM module is unavailable
+ * (P0 #4). The backend `POST /api/ai/chat` takes `{ message, context }` and
+ * returns `{ reply }`; we hand the reply back through `onDelta` so the UI
+ * renders it exactly as it would a streamed reply.
+ */
+async function streamChatBackend(
+  options: StreamChatOptions,
+  modelId: string,
+): Promise<StreamChatResult> {
+  const history = options.history
+    .slice(-MAX_HISTORY_TURNS)
+    .map((turn) => `${turn.role}: ${turn.content.slice(0, MAX_HISTORY_CHARS)}`)
+  const context = [SYSTEM_PROMPT, ...history].join('\n')
+  try {
+    const res = await http.post<{ reply: string }>('/ai/chat', {
+      message: sanitisePrompt(options.prompt),
+      context,
+    })
+    const text = res?.reply ?? ''
+    options.onDelta(text)
+    return { text, model: modelId, finishReason: 'stop', aborted: false }
+  } catch (error) {
+    if (isAbortError(error)) {
+      return { text: '', model: modelId, finishReason: null, aborted: true }
+    }
+    throw new LlmCallError(
+      'The backend AI proxy could not be reached. Start the backend and retry.',
+      true,
+    )
+  }
 }
 
 /**
@@ -194,13 +300,17 @@ export function createConversationId(): string {
  */
 export async function streamChat(options: StreamChatOptions): Promise<StreamChatResult> {
   const models = await listChatModels(options.signal)
-  const explicit = options.modelId
-    ? models.find((model) => model.id === options.modelId && model.disabled !== true)
-    : undefined
-  const model = explicit ?? pickChatModel(models)
+  const requested = options.modelId ? models.find((model) => model.id === options.modelId) : undefined
+  const model = (requested && requested.disabled !== true ? requested : undefined) ?? pickChatModel(models)
 
   if (!model) {
     throw new LlmCallError('No AI model is available for this app right now.', false)
+  }
+
+  // P0 #4: when the cloud LLM module is unreachable, route through the backend
+  // proxy instead of failing the whole panel.
+  if (usingBackendFallback || model.id === BACKEND_MODEL_ID) {
+    return streamChatBackend(options, model.id)
   }
 
   const history = options.history.slice(-MAX_HISTORY_TURNS).map((turn) => ({
@@ -238,6 +348,14 @@ export async function streamChat(options: StreamChatOptions): Promise<StreamChat
   } catch (error) {
     if (isAbortError(error)) {
       return { text, model: model.id, finishReason, aborted: true }
+    }
+    // P0 #4: the cloud chat call itself is unavailable (gateway / model /
+    // auth / quota). Fall back to the backend proxy so the panel still answers
+    // locally — but only when nothing has streamed yet, otherwise we would
+    // splice a second reply onto the partial text.
+    if (text.length === 0) {
+      console.warn('[ai] cloud chat unavailable, falling back to backend proxy:', error)
+      return streamChatBackend(options, BACKEND_MODEL_ID)
     }
     throw toCallError(error, text)
   }

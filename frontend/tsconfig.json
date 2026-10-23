@@ -1,5 +1,7 @@
-// 功能 / Function: 配置前端 TypeScript 类型检查。 / Configure frontend TypeScript type checking.
-// 输入 / Input: TypeScript 源文件和编译选项。 / TypeScript source files and compiler options.
-// 输出 / Output: TypeScript 编译与检查规则。 / TypeScript compilation and checking rules.
-// 状态 / Status: 职责说明占位，功能尚未实现。 / Contract placeholder; behavior is not implemented yet.
-{}
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

@@ -91,14 +91,15 @@ def create_experiment(
     db: Session = Depends(get_db),
     _: Researcher = Depends(get_current_researcher),
 ) -> Experiment:
-    stages = [stage.model_dump(by_alias=True) for stage in payload.stages]
+    # Stages are stored verbatim (raw JSON) to preserve every researcher-authored
+    # field; see the note on ExperimentCreate.stages (P0 #3).
     return svc.create_experiment(
         db,
         name=payload.name,
         code=payload.code,
         status=payload.status,
         full_screen=payload.full_screen,
-        stages=stages,
+        stages=payload.stages,
         id=payload.id,
     )
 
@@ -111,8 +112,7 @@ def update_experiment(
     _: Researcher = Depends(get_current_researcher),
 ) -> Experiment:
     fields = payload.model_dump(exclude_unset=True)
-    if "stages" in fields:
-        fields["stages"] = [stage.model_dump(by_alias=True) for stage in fields["stages"]]
+    # `stages` is already a raw list of dicts (verbatim) — pass it through.
     return svc.update_experiment(db, experiment_id, **fields)
 
 

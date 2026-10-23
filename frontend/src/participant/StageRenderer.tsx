@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Experiment } from '../types'
 import {
   ArrowLeft,
@@ -18,6 +18,7 @@ import {
 import { AIChat } from './AIChat'
 import { ConsentView } from './ConsentView'
 import { EventQueue } from './EventQueue'
+import { submitSession, type ParticipantAnswer } from '../api/participant'
 import {
   RecordingController,
   statusLabel,
@@ -49,19 +50,72 @@ import {
  */
 export function ParticipantPreview({
   experiment,
+  participantCode,
   onBack,
 }: {
   experiment: Experiment
+  participantCode: string
   onBack: () => void
 }) {
   const [stageIndex, setStageIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   const [selections, setSelections] = useState<Record<string, string | string[]>>({})
+  // Tracks the chosen file name per attachment component so the UI can show it
+  // after a pick (the actual bytes are recorded into the event timeline).
+  const [attachments, setAttachments] = useState<Record<string, string>>({})
 
   // Stable per-session EventQueue (created once, never per render).
   const [queue] = useState(() => new EventQueue(`${experiment.code}-${Date.now()}`))
 
   const stage = experiment.stages[stageIndex]
+
+  /**
+   * Persist the captured session to the backend, then leave the runtime.
+   *
+   * This is the single convergence point for every exit (last-stage Finish,
+   * the "Time is up" modal, the Abort button, and the Exit-preview link). It
+   * derives the `answers` array from the `answer` events already in the queue,
+   * stamps `finishedAt`, and POSTs the whole timeline. Submission is
+   * best-effort: the local timeline is already persisted to localStorage, so a
+   * transient server failure never loses participant data.
+   */
+  const finishSession = useCallback(
+    async (reason: 'finish' | 'abort') => {
+      if (reason === 'abort') {
+        queue.record('abort', { stageName: stage.name }, stage.id)
+      }
+      const events = queue.all()
+      const answers: ParticipantAnswer[] = events
+        .filter((event) => event.type === 'answer' && event.detail?.componentId)
+        .map((event) => {
+          const detail = event.detail as {
+            componentId?: string
+            value?: string | string[]
+            consent?: boolean
+          }
+          const value: string | string[] =
+            detail.value !== undefined
+              ? detail.value
+              : detail.consent
+                ? 'consented'
+                : ''
+          return { componentId: String(detail.componentId), value }
+        })
+      try {
+        await submitSession({
+          experimentCode: experiment.code,
+          participantCode,
+          finishedAt: new Date().toISOString(),
+          answers,
+          events,
+        })
+      } catch {
+        // Best-effort: local timeline is already persisted in localStorage.
+      }
+      onBack()
+    },
+    [queue, stage.id, stage.name, experiment.code, participantCode, onBack],
+  )
 
   // Live countdown (minutes-based) for the Countdown Timer feature.
   const totalSeconds = Math.max(1, stage.countdownMinutes) * 60
@@ -157,7 +211,7 @@ export function ParticipantPreview({
     }
     queue.record('navigation', { from: stage.name, triggeredBy: 'participant' }, stage.id)
     if (stageIndex >= experiment.stages.length - 1) {
-      onBack()
+      void finishSession('finish')
       return
     }
     const nextIndex = stageIndex + 1
@@ -230,7 +284,11 @@ export function ParticipantPreview({
   // A consent stage is rendered through ConsentView (its own copy + signature
   // pad + confirm button), so the plain text blocks and the generic consent
   // button are not duplicated below it.
-  const isConsent = stage.type === 'consent'
+  // Case-insensitive: stage types come from the researcher editor, the seeded
+  // demo experiments ('Consent') and API round-trips, and casing has varied
+  // between them. A strict lowercase compare silently skipped the signature
+  // pad, so consent was recorded without the signature image (P1).
+  const isConsent = stage.type.toLowerCase() === 'consent'
   const consentLines = stage.components
     .filter((component) => component.type === 'text')
     .map((component) => component.label)
@@ -241,14 +299,14 @@ export function ParticipantPreview({
     : stage.components
 
   const handleConsent = (signatureDataUrl: string) => {
-    // Only the signature length is stored: keeping full signature images in
-    // localStorage would bloat the timeline.
+    // Store the complete signature image (data URL), not just its length, so it
+    // lands on the backend with the rest of the session timeline (P1).
     queue.record(
       'answer',
       {
         componentId: 'consent',
         consent: true,
-        signatureDataUrlChars: signatureDataUrl.length,
+        signatureDataUrl,
       },
       stage.id,
     )
@@ -373,9 +431,40 @@ export function ParticipantPreview({
               )}
 
               {component.type === 'attachment' && (
-                <div className="attachment-box">
-                  <Paperclip size={16} />
-                  <span>Choose a file to upload</span>
+                <div className={`attachment-input${attachments[component.id] ? ' has-file' : ''}`}>
+                  <label className="attachment-drop">
+                    <Paperclip size={16} />
+                    <span>
+                      {attachments[component.id] ? attachments[component.id] : 'Choose a file to upload'}
+                    </span>
+                    <input
+                      type="file"
+                      className="attachment-file"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (!file) return
+                        const reader = new FileReader()
+                        reader.onload = () => {
+                          const dataUrl = typeof reader.result === 'string' ? reader.result : ''
+                          setAttachments((current) => ({ ...current, [component.id]: file.name }))
+                          // Record the full file as a base64 data URL so the
+                          // attachment lands on the backend with the session (P1).
+                          queue.record(
+                            'answer',
+                            {
+                              componentId: component.id,
+                              value: dataUrl,
+                              fileName: file.name,
+                              mimeType: file.type,
+                              size: file.size,
+                            },
+                            stage.id,
+                          )
+                        }
+                        reader.readAsDataURL(file)
+                      }}
+                    />
+                  </label>
                 </div>
               )}
 
@@ -453,7 +542,7 @@ export function ParticipantPreview({
             <button className="secondary-button" onClick={() => setPaused(true)}>
               <Pause size={14} /> Pause
             </button>
-            <button className="abort-button" onClick={onBack}>
+            <button className="abort-button" onClick={() => void finishSession('abort')}>
               <CircleStop size={14} /> Abort
             </button>
           </>
@@ -463,7 +552,7 @@ export function ParticipantPreview({
             Next stage <ArrowRight size={15} />
           </button>
         ) : (
-          <button className="primary-button" onClick={onBack}>
+          <button className="primary-button" onClick={() => void finishSession('finish')}>
             Finish <CheckSquare size={15} />
           </button>
         )}
@@ -474,7 +563,7 @@ export function ParticipantPreview({
   return (
     <section className="participant-view">
       <div className="participant-top">
-        <button className="back-link" onClick={onBack}>
+        <button className="back-link" onClick={() => void finishSession('abort')}>
           <ArrowLeft size={16} /> Exit preview
         </button>
         <span className="preview-label">

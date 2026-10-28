@@ -1,10 +1,21 @@
-# Function: Exclude logs, secrets, caches, and build artifacts.
-# Input: Project paths and ignore rules to be configured.
-# Output: File matching rules that Git leaves untracked.
-# Status: File contract placeholder; ignore rules are pending.
+node_modules/
+.venv/
+.deps/
 __pycache__/
 *.py[cod]
-
-# Local SQLite databases (never commit)
-backend/dev.db
 *.sqlite*
+*.db
+.env
+.env.*
+!.env.example
+dist/
+backend/static/
+*.tsbuildinfo
+.pytest_cache/
+.coverage*
+htmlcov/
+logs/
+*.log
+playwright-report/
+test-results/
+Dev_Task_List_Client_Requirements.md

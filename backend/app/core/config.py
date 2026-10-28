@@ -1,26 +1,50 @@
 """Application configuration via environment variables / .env.
 
-Uses pydantic-settings. All values have sane local-development defaults so the
-backend runs with no external secrets (SQLite + local storage + deterministic
-mock AI). Production switches to PostgreSQL via ``DATABASE_URL`` and enables
-OneDrive / LLM integration by setting the relevant variables.
+Uses pydantic-settings. PostgreSQL is required in every environment.
+AI requires explicit provider credentials and never returns mock replies.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 
 class Settings(BaseSettings):
     """Runtime settings for the Beyond backend."""
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        # Read the project file even when uvicorn is launched inside backend/.
+        # A working-directory .env and process environment can override it.
+        env_file=(Path(__file__).resolve().parents[3] / ".env", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
-    # Database: SQLite by default; use postgresql://... for production.
-    database_url: str = "sqlite:///./dev.db"
+    database_url: str = (
+        "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/experiment_platform"
+    )
+
+    @field_validator("database_url")
+    @classmethod
+    def require_postgresql(cls, value: str) -> str:
+        try:
+            url = make_url(value)
+        except ArgumentError as exc:
+            raise ValueError(
+                "DATABASE_URL must be a valid PostgreSQL connection URL"
+            ) from exc
+        if url.drivername not in ("postgres", "postgresql", "postgresql+psycopg"):
+            raise ValueError("Only PostgreSQL with psycopg is supported")
+        return url.set(drivername="postgresql+psycopg").render_as_string(
+            hide_password=False
+        )
 
     # JWT / auth
     jwt_secret: str = "dev-secret-change-me-in-production"
@@ -35,9 +59,19 @@ class Settings(BaseSettings):
     onedrive_client_secret: str | None = None
     onedrive_tenant_id: str | None = None
 
-    # AI proxy (optional; deterministic mock reply when absent).
+    # Both transports share the same credential, completion URL and model settings.
+    # WorkBuddy uses its public application key, not a model-provider secret.
+    ai_provider: Literal["openai_compatible", "workbuddy"] = "openai_compatible"
     ai_api_key: str | None = None
+    ai_model: str = "gpt-4o-mini"
     ai_api_base: str = "https://api.openai.com/v1/chat/completions"
+    ai_stream: bool = True
+    ai_timeout_seconds: float = Field(default=60, gt=0, le=600)
+    ai_temperature: float | None = Field(default=None, ge=0, le=2)
+    ai_system_prompt: str | None = None
+    ai_max_prompt_chars: int = Field(default=4000, ge=1, le=20000)
+    ai_history_messages: int = Field(default=8, ge=0, le=100)
+    ai_history_message_chars: int = Field(default=2000, ge=1, le=20000)
 
     @property
     def cors_origin_list(self) -> list[str]:

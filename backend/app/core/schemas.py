@@ -5,6 +5,7 @@ Python attribute names in snake_case (idiomatic) and rely on Pydantic's
 ``alias_generator`` to emit camelCase on serialisation while still accepting
 camelCase (or snake_case) on input via ``populate_by_name``.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict

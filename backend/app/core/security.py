@@ -1,7 +1,10 @@
 """Security helpers: password hashing, JWT issue/decode and auth dependency."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from app.core import clock
+
+from datetime import timedelta
 from typing import Any
 
 import jwt
@@ -41,7 +44,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(subject: str) -> str:
     """Create a signed JWT for ``subject`` (the researcher id)."""
-    now = datetime.now(timezone.utc)
+    now = clock.now()
     expire = now + timedelta(minutes=settings.jwt_expire_minutes)
     payload: dict[str, Any] = {
         "sub": subject,
@@ -73,4 +76,12 @@ def get_current_researcher(
     researcher = db.get(Researcher, subject)
     if researcher is None:
         raise CREDENTIALS_EXC
+    return researcher
+
+
+def get_current_administrator(
+    researcher: Researcher = Depends(get_current_researcher),
+) -> Researcher:
+    if researcher.role != "administrator":
+        raise HTTPException(status_code=403, detail="Administrator access required")
     return researcher

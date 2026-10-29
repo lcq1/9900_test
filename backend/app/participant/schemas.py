@@ -1,5 +1,9 @@
 from __future__ import annotations
 from typing import Optional, Union
+
+from pydantic import ConfigDict, Field
+from uuid import UUID
+
 from app.core.schemas import CamelModel
 
 
@@ -9,15 +13,11 @@ class ParticipantAnswer(CamelModel):
 
 
 class ParticipantEvent(CamelModel):
-    # `perf_ms` is a high-resolution monotonic offset (performance.now()) and is
-    # intentionally `float` to preserve sub-second precision — the precise single
-    # clock is the core requirement of the capture pipeline. `epoch_ms` is also
-    # `float` so a fractional wall-clock value is never rejected.
     seq: int
     type: str
     timestamp: str
-    epoch_ms: float
-    perf_ms: float
+    epoch_ms: int
+    perf_ms: int
     stage_id: Optional[str] = None
     detail: Optional[dict] = None
 
@@ -44,10 +44,8 @@ class ParticipantSessionSubmit(CamelModel):
     events: list[ParticipantEvent] = []
 
 
-class AIChatRequest(CamelModel):
-    message: str
-    context: Optional[str] = None
-
-
-class AIChatResponse(CamelModel):
-    reply: str
+class StageChatRequest(CamelModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str = Field(min_length=1, max_length=20000)
+    conversation_id: UUID
+    request_id: UUID

@@ -4,6 +4,7 @@ When OneDrive credentials are configured, attachments are uploaded there;
 otherwise they land in the local ``./storage`` directory. Uploads degrade
 gracefully to local storage on any remote failure.
 """
+
 from __future__ import annotations
 
 from app.core import storage

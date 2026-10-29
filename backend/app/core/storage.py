@@ -5,6 +5,7 @@ Microsoft Graph API. When they are absent (default for local dev/tests) files
 are written to a local ``./storage`` directory so the backend runs fully without
 secrets. Any failure in the remote path degrades gracefully to local storage.
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,7 +18,9 @@ from app.core.config import settings
 logger = logging.getLogger("beyond.storage")
 
 # Project root is three levels up from this file (app/core/storage.py).
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 STORAGE_DIR = os.path.join(_PROJECT_ROOT, "storage")
 
 

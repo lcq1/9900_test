@@ -1,8 +1,6 @@
-"""Researcher and Experiment schema (app.researcher.models).
+"""Create researchers and experiments, including experiment ownership.
 
-Tables are also created at app startup via Base.metadata.create_all
-(see app.main lifespan); this migration provides production-grade, idempotent
-schema creation so the DB can be provisioned without create_all.
+Alembic manages schema creation; application startup only checks connectivity.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -43,13 +41,19 @@ def upgrade() -> None:
         ),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("code", sa.String(64), nullable=False, unique=True),
+        sa.Column("owner_id", sa.String(36), nullable=True),
         sa.Column("status", sa.String(16), nullable=False, server_default="Draft"),
         sa.Column("created", sa.String(32), nullable=True),
         sa.Column("full_screen", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("stages", sa.JSON(), nullable=False, server_default=sa.text("'[]'")),
+        sa.ForeignKeyConstraint(
+            ["owner_id"], ["researchers.id"], name="fk_experiment_owner"
+        ),
     )
+    op.create_index("ix_experiments_owner_id", "experiments", ["owner_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_experiments_owner_id", table_name="experiments")
     op.drop_table("experiments")
     op.drop_table("researchers")

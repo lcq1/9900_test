@@ -1,12 +1,13 @@
-"""Shared ORM helpers: ``Base`` re-export, mixins and id generator."""
+"""Shared ORM timestamp mixin and ID generator."""
+
 from __future__ import annotations
 
+from app.core import clock
+
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy.orm import Mapped, mapped_column
-
-from app.core.database import Base
 
 
 def gen_uuid() -> str:
@@ -17,6 +18,4 @@ def gen_uuid() -> str:
 class TimestampMixin:
     """Adds a ``created_at`` UTC timestamp column to a model."""
 
-    created_at: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(default=clock.now)

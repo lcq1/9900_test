@@ -15,3 +15,8 @@ htmlcov
 !.env.example
 logs
 *.log
+
+.deps
+*.db
+*.sqlite*
+static

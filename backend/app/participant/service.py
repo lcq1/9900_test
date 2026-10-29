@@ -1,10 +1,14 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+
+from app.core import clock
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.models import gen_uuid
 from app.participant import events as event_helpers
 from app.participant import repository as repo
+from app.participant import ai_proxy
+from contextlib import aclosing
 from app.participant.models import Answer, ParticipantEvent
 from app.participant.schemas import (
     ParticipantAnswer,
@@ -15,9 +19,39 @@ from app.participant.schemas import (
 from app.researcher.models import Experiment
 
 
-def lookup_experiment(
-    db: Session, code: str, participant: str
-) -> Experiment:
+async def generate_ai_turn(db: Session, prepared: repo.PreparedAITurn):
+    """Keep context server-side; replay retries and commit only completed turns."""
+    try:
+        if prepared.cached is not None:
+            reply, model = prepared.cached.reply, prepared.cached.model
+            db.rollback()  # Release the read/idempotency lock before replay.
+            yield {"type": "delta", "text": reply, "model": model}
+            yield {"type": "done", "model": model}
+            return
+        chunks, completion = [], None
+        async with aclosing(
+            ai_proxy.stream_chat(prepared.content, prepared.history)
+        ) as source:
+            async for event in source:
+                if event["type"] == "done":
+                    completion = event
+                else:
+                    if event["type"] == "delta":
+                        chunks.append(event["text"])
+                    yield event
+        if completion is None:
+            raise HTTPException(
+                status_code=502, detail="The AI reply was interrupted. Please retry."
+            )
+        repo.save_ai_turn(db, prepared, "".join(chunks), completion["model"])
+        yield completion
+    finally:
+        # Cancellation/provider failures roll back incomplete pairs and release
+        # the lock. A successfully committed turn remains available on retry.
+        db.rollback()
+
+
+def lookup_experiment(db: Session, code: str, participant: str) -> Experiment:
     if not code or not participant or len(participant.strip()) < 3:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -33,7 +67,7 @@ def submit_session(
     db: Session, payload: ParticipantSessionSubmit
 ) -> ParticipantSessionResult:
     session_id = gen_uuid()
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = clock.now_iso()
 
     repo.create_session(
         db,
@@ -44,9 +78,7 @@ def submit_session(
         finished_at=payload.finished_at,
     )
 
-    orm_events = [
-        event_helpers.make_event_orm(session_id, ev) for ev in payload.events
-    ]
+    orm_events = [event_helpers.make_event_orm(session_id, ev) for ev in payload.events]
     repo.add_events(db, orm_events)
 
     orm_answers = [

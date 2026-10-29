@@ -1,7 +1,15 @@
 from __future__ import annotations
 from typing import Any, Optional
 
-from sqlalchemy import JSON, String
+from sqlalchemy import (
+    JSON,
+    String,
+    BigInteger,
+    Integer,
+    Text,
+    ForeignKey,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -26,7 +34,7 @@ class ParticipantEvent(Base):
     seq: Mapped[int] = mapped_column(default=0)
     type: Mapped[str] = mapped_column(String(64))
     timestamp: Mapped[str] = mapped_column(String(64), default="")
-    epoch_ms: Mapped[int] = mapped_column(default=0)
+    epoch_ms: Mapped[int] = mapped_column(BigInteger, default=0)
     perf_ms: Mapped[int] = mapped_column(default=0)
     stage_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     detail: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
@@ -59,3 +67,37 @@ class Recording(Base):
     filename: Mapped[str] = mapped_column(String(256), default="")
     path: Mapped[str] = mapped_column(String(512), default="")
     created_at: Mapped[str] = mapped_column(String(64))
+
+
+class AIConversation(Base):
+    __tablename__ = "ai_conversations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    researcher_id: Mapped[str] = mapped_column(
+        ForeignKey("researchers.id", ondelete="CASCADE"), nullable=False
+    )
+    experiment_id: Mapped[str] = mapped_column(
+        ForeignKey("experiments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stage_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class AIChatTurn(Base):
+    """Only completed prompt/reply pairs become authoritative model context."""
+
+    __tablename__ = "ai_chat_turns"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "request_id", name="uq_ai_turn_request"),
+        UniqueConstraint("conversation_id", "sequence", name="uq_ai_turn_sequence"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("ai_conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    request_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    reply: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)

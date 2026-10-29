@@ -1,8 +1,10 @@
 """Pydantic schemas for researcher / experiment DTOs (camelCase JSON)."""
+
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
+from pydantic import ConfigDict
 
 from app.core.schemas import CamelModel, CamelORMModel
 
@@ -33,6 +35,7 @@ class LoginResponse(CamelModel):
 
 
 class StageComponent(CamelModel):
+    model_config = ConfigDict(extra="allow")
     id: str
     type: str
     label: str
@@ -41,6 +44,7 @@ class StageComponent(CamelModel):
 
 
 class Stage(CamelModel):
+    model_config = ConfigDict(extra="allow")
     id: str
     name: str
     type: str
@@ -50,19 +54,13 @@ class Stage(CamelModel):
     countdown_minutes: int = 0
 
 
-# Stages are a free-form, researcher-authored nested structure (components +
-# per-stage feature flags + arbitrary UI metadata). The frontend is the editor
-# of record, so we accept them as raw JSON and store them verbatim rather than
-# coercing them through a strict schema — a strict `Stage` model would
-# silently drop fields (placeholder, sequence, validation, ...) on every save,
-# corrupting the experiment the researcher built. See P0 #3.
 class ExperimentCreate(CamelModel):
     id: Optional[str] = None
     name: str
-    code: str
+    code: Optional[str] = None
     status: str = "Draft"
     full_screen: bool = False
-    stages: list[Any] = []
+    stages: list[Stage] = []
 
 
 class ExperimentUpdate(CamelModel):
@@ -70,7 +68,7 @@ class ExperimentUpdate(CamelModel):
     code: Optional[str] = None
     status: Optional[str] = None
     full_screen: Optional[bool] = None
-    stages: Optional[list[Any]] = None
+    stages: Optional[list[Stage]] = None
 
 
 class Experiment(CamelORMModel):
@@ -80,4 +78,4 @@ class Experiment(CamelORMModel):
     status: str
     created: str
     full_screen: bool
-    stages: list[Any] = []
+    stages: list[Stage] = []

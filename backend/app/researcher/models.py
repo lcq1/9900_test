@@ -1,10 +1,11 @@
 """Researcher and Experiment ORM models."""
+
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, String
+from sqlalchemy import JSON, Boolean, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -21,17 +22,24 @@ class Researcher(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
+    )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), default="researcher")
 
 
 class Experiment(Base):
     __tablename__ = "experiments"
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("researchers.id"), nullable=True, index=True
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    code: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
     status: Mapped[str] = mapped_column(String(16), default="Draft")
     # Free-form creation date string (e.g. "26 Sep 2026").
     created: Mapped[str] = mapped_column(String(32), default=_today)

@@ -1,4 +1,5 @@
 """SQLAlchemy CRUD for researchers and experiments."""
+
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -30,10 +31,6 @@ def get_researcher_by_email(db: Session, email: str) -> Optional[Researcher]:
     return db.query(Researcher).filter(Researcher.email == email).first()
 
 
-def get_researcher(db: Session, researcher_id: str) -> Optional[Researcher]:
-    return db.get(Researcher, researcher_id)
-
-
 def list_researchers(db: Session) -> list[Researcher]:
     return db.query(Researcher).order_by(Researcher.created_at).all()
 
@@ -52,6 +49,7 @@ def create_experiment(
     db: Session,
     *,
     name: str,
+    owner_id: Optional[str] = None,
     code: str,
     status: str = "Draft",
     full_screen: bool = False,
@@ -59,6 +57,7 @@ def create_experiment(
     id: Optional[str] = None,
 ) -> Experiment:
     experiment = Experiment(
+        owner_id=owner_id,
         id=id or gen_uuid(),
         name=name,
         code=code,

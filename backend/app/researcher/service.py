@@ -1,4 +1,5 @@
 """Business logic for researcher / experiment operations."""
+
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -20,7 +21,9 @@ def register_researcher(
             detail="Email already registered",
         )
     password_hash = hash_password(password) if password else ""
-    return repo.create_researcher(db, name=name, email=email, password_hash=password_hash)
+    return repo.create_researcher(
+        db, name=name, email=email, password_hash=password_hash
+    )
 
 
 def authenticate(db: Session, email: str, password: str) -> Optional[Researcher]:
@@ -47,12 +50,16 @@ def create_experiment(
     db: Session,
     *,
     name: str,
-    code: str,
+    owner_id: Optional[str] = None,
+    code: Optional[str] = None,
     status: str = "Draft",
     full_screen: bool = False,
     stages: Optional[list[Any]] = None,
     id: Optional[str] = None,
 ) -> Experiment:
+    from secrets import token_hex
+
+    code = "EXP-" + token_hex(4).upper()
     if repo.get_experiment_by_code(db, code):
         raise HTTPException(
             status_code=http_status.HTTP_409_CONFLICT,
@@ -60,6 +67,7 @@ def create_experiment(
         )
     return repo.create_experiment(
         db,
+        owner_id=owner_id,
         name=name,
         code=code,
         status=status,
@@ -80,9 +88,7 @@ def list_experiments(db: Session) -> list[Experiment]:
     return repo.list_experiments(db)
 
 
-def update_experiment(
-    db: Session, experiment_id: str, **fields: Any
-) -> Experiment:
+def update_experiment(db: Session, experiment_id: str, **fields: Any) -> Experiment:
     experiment = repo.update_experiment(db, experiment_id, **fields)
     if experiment is None:
         raise HTTPException(status_code=404, detail="Experiment not found")

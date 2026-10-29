@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Integer, String
+from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base

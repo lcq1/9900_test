@@ -1,25 +1,31 @@
 // Synchronous local storage for researcher sessions.
+import { create } from 'zustand'
 import type { Researcher, Session } from '../api/auth'
 
 // Local storage key for the researcher session.
 const KEY = 'p13-researcher-session'
 
+function readSession(): Session | null {
+	try {
+		return JSON.parse(localStorage.getItem(KEY) ?? 'null') as Session | null
+	} catch {
+		return null
+	}
+}
+
+export const useSessionStore = create<{ session: Session | null }>(() => ({
+	session: readSession(),
+}))
+
 // Save the researcher session locally.
 export function setSession(session: Session): void {
 	localStorage.setItem(KEY, JSON.stringify(session))
+	useSessionStore.setState({ session })
 }
 
 // Read the cached session; return null if missing or invalid.
 export function getSession(): Session | null {
-	const raw = localStorage.getItem(KEY)
-	if (!raw) return null
-	try {
-		// Parse cached data; fall back if invalid.
-		return JSON.parse(raw) as Session
-	} catch {
-		// Treat invalid cached data as no active session or identity.
-		return null
-	}
+	return useSessionStore.getState().session
 }
 
 // Return the current researcher or null if logged out.
@@ -30,6 +36,7 @@ export function getCurrentResearcher(): Researcher | null {
 // Clear the local researcher session.
 export function clear(): void {
 	localStorage.removeItem(KEY)
+	useSessionStore.setState({ session: null })
 }
 
 // Check for a valid local researcher session.

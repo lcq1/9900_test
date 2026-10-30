@@ -1,7 +1,8 @@
 // Admin API for accounts and settings; action records are not persisted.
 import type { Researcher } from './auth'
-import { listResearchers } from './auth'
-import { http } from './http'
+import type { Experiment } from '../types'
+import { downloadFile, http } from './http'
+import type { ParticipantSessionResult } from './participant'
 
 // Registration, consent, retention, and session policies.
 export interface PlatformSettings {
@@ -23,20 +24,12 @@ export async function getSettings(): Promise<PlatformSettings> {
 export async function updateSettings(patch: Partial<PlatformSettings>): Promise<PlatformSettings> {
 	return http.patch<PlatformSettings>(SETTINGS_PATH, patch)
 }
+export const getWorkspaceMembers = () => http.get<Researcher[]>('/workspace/members')
+export const getWorkspaceSettings = () => http.get<PlatformSettings>('/workspace/settings')
 
 // Fetch researchers for the admin page.
-export async function listResearchersForAdmin(): Promise<Researcher[]> {
-	return listResearchers()
-}
-
-// Admin action ID, timestamp, and description.
-export interface AdminAuditEntry {
-	id: string
-	at: string
-	message: string
-}
-
-// Create an admin action record without persisting it.
-export async function logAdminAction(message: string): Promise<AdminAuditEntry> {
-	return { id: `log-${Date.now()}`, at: new Date().toISOString(), message }
-}
+export const listResearchersForAdmin = () => http.get<Researcher[]>('/admin/researchers')
+export const listAdminExperiments = () => http.get<Experiment[]>('/admin/experiments')
+export const listAdminParticipants = () => http.get<ParticipantSessionResult[]>('/admin/participants')
+export const downloadAdminResults = (id: string) =>
+	downloadFile('/admin/experiments/' + id + '/results.csv', 'experiment_results.csv')

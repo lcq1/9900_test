@@ -28,15 +28,7 @@ export interface RegisterInput {
 	password?: string
 }
 
-// Register, then log in to obtain a session.
-export async function registerResearcher(input: RegisterInput): Promise<Session> {
-	await http.post<Researcher>('/auth/register', {
-		name: input.name,
-		email: input.email,
-		password: input.password,
-	})
-	return signIn(input.email, input.password ?? '')
-}
+export const registerResearcher = (input: RegisterInput) => http.post<Researcher>('/auth/register', input)
 
 // Log in with email and password to obtain a session.
 export async function signIn(email: string, password: string): Promise<Session> {
@@ -48,12 +40,5 @@ export async function signOut(): Promise<void> {
 	await http.post('/auth/logout')
 }
 
-// Fetch all registered researchers.
-export async function listResearchers(): Promise<Researcher[]> {
-	return http.get<Researcher[]>('/researchers')
-}
-
 // Promote a researcher to admin and return the updated account.
-export async function promoteToAdministrator(id: string): Promise<Researcher> {
-	return http.patch<Researcher>(`/researchers/${id}/promote`, {})
-}
+export const promoteToAdministrator = (id: string) => http.patch<Researcher>('/researchers/' + id + '/promote')

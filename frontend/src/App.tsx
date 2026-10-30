@@ -1,84 +1,627 @@
-import { useState } from 'react'
-import { useExperiments } from './store/experiments'
-import './App.css'
-import { BarChart3, ChevronDown, LayoutDashboard, LogOut, Play, Settings2, UserCog } from 'lucide-react'
-import type { Stage, Experiment } from './types'
-import { makeStage, starterExperiment } from './constants'
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react";
+
+import {
+	Navigate,
+	Route,
+	Routes,
+	useLocation,
+	useNavigate,
+	useParams,
+} from "react-router-dom";
+import { Alert, Modal } from "antd";
+import {
+	BarChart3,
+	ChevronDown,
+	LayoutDashboard,
+	LogOut,
+	Play,
+	Settings2,
+	UserCog,
+} from "lucide-react";
+import { useExperiments } from "./api/experiments";
+import { signOut } from "./api/auth";
+import { clear, getSession, useSessionStore } from "./auth/sessionStore";
 import { AuthScreen } from './pages/LoginPage'
-import { Dashboard } from './pages/ResearcherDashboardPage'
+import { ResearcherRegisterPage } from "./pages/ResearcherRegisterPage";
+import {
+	Dashboard,
+	ResultsPage,
+	WorkspaceSettingsPage,
+} from "./pages/ResearcherDashboardPage";
 import { Editor } from './pages/ExperimentEditorPage'
 import { ParticipantEntry } from './pages/ParticipantPage'
 import { AdministratorPage } from './pages/AdministratorPage'
-import { ResultsPage } from './pages/ResultsPage'
-import { WorkspaceSettingsPage } from './pages/WorkspaceSettingsPage'
+import {
+	createStage,
+	type Experiment,
+	type Stage,
+	getPublishErrors,
+} from "./types";
 
-function App() {
-  const { experiments, error, clearError, addExperiment, removeExperiment, updateExperiment: updateExperimentById, updateStage: updateStageById, deleteStage, reorderStages } = useExperiments()
-  const [signedIn, setSignedIn] = useState(() => localStorage.getItem('p13-signed-in') !== 'false')
-  const [workspaceSettings, setWorkspaceSettings] = useState<{ researcherName: string }>(() => {
-    try {
-      const raw = localStorage.getItem('p13-workspace')
-      if (raw) return JSON.parse(raw) as { researcherName: string }
-    } catch { /* ignore corrupt value */ }
-    return { researcherName: 'Beyong' }
-  })
-  const saveWorkspace = (next: { researcherName: string }) => {
-    setWorkspaceSettings(next)
-    localStorage.setItem('p13-workspace', JSON.stringify(next))
-  }
-  const [entryRole, setEntryRole] = useState<'researcher' | 'participant'>('researcher')
-  const [participantAccess, setParticipantAccess] = useState<{ experimentCode?: string; participantCode?: string }>({})
-  const [view, setView] = useState<'dashboard' | 'editor' | 'participant' | 'administrator' | 'results' | 'settings'>('dashboard')
-  const [selectedId, setSelectedId] = useState(starterExperiment.id)
-  const [selectedStageId, setSelectedStageId] = useState(starterExperiment.stages[0].id)
-  const [query, setQuery] = useState('')
-  const selectedExperiment = experiments.find((experiment) => experiment.id === selectedId) ?? experiments[0]
-  const selectedStage = selectedExperiment?.stages.find((stage) => stage.id === selectedStageId) ?? selectedExperiment?.stages[0]
-  const updateExperiment = (update: (experiment: Experiment) => Experiment) => updateExperimentById(selectedExperiment.id, update)
-  const updateStage = (update: (stage: Stage) => Stage) => updateStageById(selectedExperiment.id, selectedStage.id, update)
-  const createExperiment = () => { const id = `exp-${Date.now()}`; const experiment: Experiment = { id, name: 'Untitled experiment', code: `STUDY-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, status: 'Draft', created: '27 Sep 2026', fullScreen: selectedExperiment?.fullScreen ?? true, stages: [makeStage(`${id}-stage`, 'Welcome', 'Consent', [{ id: `${id}-text`, type: 'text', label: 'Welcome to your study' }])] }; addExperiment(experiment); setSelectedId(id); setSelectedStageId(experiment.stages[0].id); setView('editor') }
-  const deleteExperiment = (id: string) => { if (!window.confirm('Delete this experiment? This cannot be undone.')) return; removeExperiment(id); if (id === selectedId) setView('dashboard') }
-  const addStage = () => { const stage = makeStage(`stage-${Date.now()}`, 'New stage', 'Task', []); updateExperiment((experiment) => ({ ...experiment, stages: [...experiment.stages, stage] })); setSelectedStageId(stage.id) }
-  const deleteStageOf = (id: string) => {
-    const current = experiments.find((e) => e.id === selectedExperiment.id)
-    deleteStage(selectedExperiment.id, id)
-    if (current && id === selectedStageId) {
-      const remaining = current.stages.filter((s) => s.id !== id)
-      if (remaining.length > 0) setSelectedStageId(remaining[0].id)
-    }
-  }
-  const reorder = (from: number, to: number) => reorderStages(selectedExperiment.id, from, to)
-  if (entryRole === 'participant' && selectedExperiment) return <ParticipantEntry experiments={experiments} onBack={() => setEntryRole('researcher')} initialExperimentCode={participantAccess.experimentCode} initialParticipantCode={participantAccess.participantCode} />
-  if (!signedIn) return <AuthScreen onSignIn={() => { localStorage.setItem('p13-signed-in', 'true'); setSignedIn(true) }} onParticipant={(experimentCode, participantCode) => { setParticipantAccess({ experimentCode, participantCode }); setEntryRole('participant') }} />
-
-  return (
-    <div className="app-shell">
-      {error && (
-        <div className="persist-banner" role="alert">
-          <span className="persist-banner-icon">!</span>
-          <span className="persist-banner-text">{error}</span>
-          <button className="persist-banner-close" onClick={clearError} aria-label="Dismiss">
-            ×
-          </button>
-        </div>
-      )}
-      <aside className="sidebar"><div className="brand"><span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 19 19 5" /><path d="M9 5h10v10" /></svg></span><span className="brand-word">Beyond</span></div><div className="workspace-label">WORKSPACE</div><nav><button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} onClick={() => setView('dashboard')}><LayoutDashboard size={17} /> Researcher overview</button><button className={view === 'participant' ? 'nav-item active' : 'nav-item'} onClick={() => setView('participant')}><Play size={17} /> Participant preview</button><button className={view === 'administrator' ? 'nav-item active' : 'nav-item'} onClick={() => setView('administrator')}><UserCog size={17} /> Administration</button><button className={view === 'results' ? 'nav-item active' : 'nav-item'} onClick={() => setView('results')}><BarChart3 size={17} /> Visualization results</button></nav><div className="sidebar-bottom"><button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')}><Settings2 size={17} /> Workspace settings</button><div className="profile"><span className="avatar">{(workspaceSettings.researcherName || 'Beyong').charAt(0).toUpperCase()}</span><div><strong>{workspaceSettings.researcherName || 'Beyong'}</strong><small>Researcher</small></div><ChevronDown size={15} /></div></div></aside><main className="main-content"><header className="topbar"><div className="breadcrumbs"><span>Workspace</span><span>/</span><strong>{view === 'settings' ? 'Workspace settings' : view === 'editor' ? selectedExperiment?.name : view === 'participant' ? 'Participant preview' : 'Experiments'}</strong></div><div className="top-actions"><span className="save-state"><span className="status-dot"></span> Saved just now</span><button className="icon-button" title="Sign out" onClick={() => { localStorage.setItem('p13-signed-in', 'false'); setSignedIn(false) }}><LogOut size={17} /></button></div></header>{view === 'dashboard' && <Dashboard experiments={experiments} query={query} setQuery={setQuery} onCreate={createExperiment} onEdit={(id) => { setSelectedId(id); const experiment = experiments.find((item) => item.id === id); setSelectedStageId(experiment?.stages[0].id ?? ''); setView('editor') }} onDelete={deleteExperiment} />}{view === 'editor' && selectedExperiment && selectedStage && <Editor experiment={selectedExperiment} stage={selectedStage} onBack={() => setView('dashboard')} onAddStage={addStage} onSelectStage={setSelectedStageId} onUpdateExperiment={updateExperiment} onUpdateStage={updateStage} onDelete={deleteExperiment} onDeleteStage={deleteStageOf} onReorderStages={reorder} />}{view === 'participant' && selectedExperiment && <ParticipantEntry experiments={experiments} onBack={() => setView('dashboard')} />}{view === 'administrator' && <AdministratorPage experiments={experiments} />}{view === 'results' && <ResultsPage experiments={experiments} />}{view === 'settings' && (<WorkspaceSettingsPage experiments={experiments} settings={workspaceSettings} onChange={saveWorkspace} onClose={() => setView('dashboard')} onClearAll={clearAllLocalData} />)}</main></div>
-  )
+function Login() {
+	const navigate = useNavigate(),
+		location = useLocation(),
+		session = useSessionStore((s) => s.session);
+	if (session)
+		return (
+			<Navigate
+				replace
+				to={
+					session.researcher.role === "administrator"
+						? "/administrator/dashboard"
+						: "/researcher/dashboard"
+				}
+			/>
+		);
+	return (
+		<AuthScreen
+			initialEmail={(location.state as { email?: string } | null)?.email}
+			onRegister={() => navigate("/researcher/register")}
+			onSignIn={() =>
+				navigate(
+					getSession()?.researcher.role === "administrator"
+						? "/administrator/dashboard"
+						: "/researcher/dashboard",
+				)
+			}
+			onParticipant={(experimentCode, participantCode) =>
+				navigate("/participant", { state: { experimentCode, participantCode } })
+			}
+		/>
+	);
 }
-
-function clearAllLocalData() {
-  const keysToRemove = [
-    'p13-experiments',
-    'p13-workspace',
-    'p13-signed-in',
-    'p13-session',
-    'p13-researchers',
-    'p13-platform-settings',
-  ]
-  keysToRemove.forEach((key) => localStorage.removeItem(key))
-  Object.keys(localStorage)
-    .filter((key) => key.startsWith('p13-api') || key.startsWith('p13-events'))
-    .forEach((key) => localStorage.removeItem(key))
+function Register() {
+	const navigate = useNavigate();
+	return (
+		<ResearcherRegisterPage
+			onRegistered={(r) => navigate("/login", { state: { email: r.email } })}
+			onBack={() => navigate("/login")}
+		/>
+	);
 }
-
-export default App
+function Protected({
+	children,
+	admin = false,
+}: {
+	children: ReactNode;
+	admin?: boolean;
+}) {
+	const session = useSessionStore((s) => s.session);
+	if (!session) return <Navigate to="/login" replace />;
+	if (admin && session.researcher.role !== "administrator")
+		return <Navigate to="/researcher/dashboard" replace />;
+	return children;
+}
+function WorkspaceLayout({
+	children,
+	title = "Experiments",
+	dirty = false,
+	saving = false,
+	onSave,
+}: {
+	children: ReactNode;
+	title?: string;
+	dirty?: boolean;
+	saving?: boolean;
+	onSave?: () => void;
+}) {
+	const navigate = useNavigate(),
+		location = useLocation(),
+		session = useSessionStore((s) => s.session);
+	const me = session?.researcher;
+	const [profileName, setProfileName] = useState(me?.name || "Researcher");
+	useEffect(() => {
+		const update = () => {
+			try {
+				setProfileName(
+					localStorage.getItem("beyond-display-name:" + me?.id) ||
+					JSON.parse(localStorage.getItem("p13-workspace") || "{}")
+						.researcherName ||
+					me?.name ||
+					"Researcher",
+				);
+			} catch {
+				setProfileName(me?.name || "Researcher");
+			}
+		};
+		update();
+		window.addEventListener("beyond-profile-change", update);
+		return () => window.removeEventListener("beyond-profile-change", update);
+	}, [me?.id, me?.name]);
+	const links = [
+		{
+			path: "/researcher/dashboard",
+			label: "Researcher overview",
+			icon: LayoutDashboard,
+		},
+		{ path: "/researcher/preview", label: "Participant preview", icon: Play },
+		...(me?.role === "administrator"
+			? [
+				{
+					path: "/administrator/dashboard",
+					label: "Administration",
+					icon: UserCog,
+				},
+			]
+			: []),
+		{
+			path: "/researcher/results",
+			label: "Visualization results",
+			icon: BarChart3,
+		},
+	];
+	return (
+		<div className="app-shell">
+			<aside className="sidebar">
+				<div className="brand">
+					<span className="brand-mark" aria-hidden="true">
+						<svg
+							viewBox="0 0 24 24"
+							width="16"
+							height="16"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2.4"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M5 19 19 5" />
+							<path d="M9 5h10v10" />
+						</svg>
+					</span>
+					<span className="brand-word">Beyond</span>
+				</div>
+				<div className="workspace-label">WORKSPACE</div>
+				<nav aria-label="Workspace">
+					{links.map(({ path, label, icon: Icon }) => (
+						<button
+							key={path}
+							className={
+								location.pathname === path ? "nav-item active" : "nav-item"
+							}
+							onClick={() => navigate(path)}
+						>
+							<Icon size={17} />
+							{label}
+						</button>
+					))}
+				</nav>
+				<div className="sidebar-bottom">
+					<button
+						className={
+							location.pathname === "/researcher/settings"
+								? "nav-item active"
+								: "nav-item"
+						}
+						onClick={() => navigate("/researcher/settings")}
+					>
+						<Settings2 size={17} />
+						Workspace settings
+					</button>
+					<div className="profile">
+						<span className="avatar">
+							{profileName.charAt(0).toUpperCase()}
+						</span>
+						<div>
+							<strong>{profileName}</strong>
+							<small>
+								{me?.role === "administrator" ? "Administrator" : "Researcher"}
+							</small>
+						</div>
+						<ChevronDown size={15} />
+					</div>
+				</div>
+			</aside>
+			<main className="main-content">
+				<header className="topbar">
+					<div className="breadcrumbs">
+						<span>Workspace</span>
+						<span>/</span>
+						<strong>{title}</strong>
+					</div>
+					<div className="top-actions">
+						{onSave ? (
+							<>
+								<span className="save-state">
+									<span className="status-dot" />
+									{saving ? "Saving…" : dirty ? "Unsaved changes" : "Saved"}
+								</span>
+								<button
+									className="primary-button"
+									disabled={!dirty || saving}
+									onClick={onSave}
+								>
+									{saving ? "Saving…" : "Save draft"}
+								</button>
+							</>
+						) : null}
+						<button
+							className="icon-button"
+							title="Sign out"
+							onClick={async () => {
+								await signOut().catch(() => undefined);
+								clear();
+								navigate("/login");
+							}}
+						>
+							<LogOut size={17} />
+						</button>
+					</div>
+				</header>
+				{children}
+			</main>
+		</div>
+	);
+}
+function WorkspacePage({ view }: { view: "preview" | "results" | "settings" }) {
+	const navigate = useNavigate(),
+		{ experiments } = useExperiments();
+	const me = useSessionStore((s) => s.session?.researcher);
+	const [workspaceSettings, setWorkspaceSettings] = useState(() => {
+		try {
+			return {
+				researcherName:
+					localStorage.getItem("beyond-display-name:" + me?.id) ||
+					JSON.parse(localStorage.getItem("p13-workspace") || "{}")
+						.researcherName ||
+					me?.name ||
+					"Researcher",
+			};
+		} catch {
+			return { researcherName: me?.name || "Researcher" };
+		}
+	});
+	return (
+		<WorkspaceLayout
+			title={
+				view === "preview"
+					? "Participant preview"
+					: view === "results"
+						? "Visualization results"
+						: "Workspace settings"
+			}
+		>
+			{view === "preview" ? (
+				<ParticipantEntry
+					experiments={experiments}
+					onBack={() => navigate("/researcher/dashboard")}
+				/>
+			) : view === "results" ? (
+				<ResultsPage experiments={experiments} />
+			) : (
+				<WorkspaceSettingsPage
+					experiments={experiments}
+					settings={workspaceSettings}
+					onChange={(next) => {
+						setWorkspaceSettings(next);
+						localStorage.setItem("p13-workspace", JSON.stringify(next));
+						localStorage.setItem(
+							"beyond-display-name:" + me?.id,
+							next.researcherName,
+						);
+						window.dispatchEvent(new Event("beyond-profile-change"));
+					}}
+					onClearAll={() => {
+						for (const key of Object.keys(localStorage)) {
+							if (
+								[
+									"p13-experiments",
+									"p13-workspace",
+									"p13-signed-in",
+									"p13-session",
+									"p13-researchers",
+									"p13-platform-settings",
+								].includes(key) ||
+								key.startsWith("p13-api") ||
+								key.startsWith("p13-events")
+							)
+								localStorage.removeItem(key);
+						}
+					}}
+					onClose={() => navigate("/researcher/dashboard")}
+				/>
+			)}
+		</WorkspaceLayout>
+	);
+}
+function Workspace() {
+	const navigate = useNavigate(),
+		{ experiments, loading, error, addExperiment, removeExperiment } =
+			useExperiments();
+	const [query, setQuery] = useState(""),
+		[failure, setFailure] = useState("");
+	const create = async () => {
+		const name = window.prompt("Experiment name");
+		if (!name?.trim()) return;
+		try {
+			const e = await addExperiment({
+				name: name.trim(),
+				stages: [createStage("consent")],
+				fullScreen: false,
+			});
+			navigate("/researcher/experiment/" + e.id);
+		} catch (e) {
+			setFailure(
+				e instanceof Error ? e.message : "Could not create experiment.",
+			);
+		}
+	};
+	const remove = (id: string) => {
+		Modal.confirm({
+			title: "Delete this experiment?",
+			content: "Experiments with participant runs cannot be deleted.",
+			onOk: async () => {
+				try {
+					await removeExperiment(id);
+				} catch (e) {
+					setFailure(
+						e instanceof Error ? e.message : "Could not delete experiment.",
+					);
+					throw e;
+				}
+			},
+		});
+	};
+	return (
+		<WorkspaceLayout>
+			{(error || failure) && (
+				<Alert type="error" showIcon title={failure || error?.message} />
+			)}
+			{loading ? (
+				<p className="page">Loading experiments…</p>
+			) : (
+				<Dashboard
+					experiments={experiments}
+					query={query}
+					setQuery={setQuery}
+					onCreate={() => void create()}
+					onEdit={(id) => navigate("/researcher/experiment/" + id)}
+					onDelete={remove}
+				/>
+			)}
+		</WorkspaceLayout>
+	);
+}
+function ExperimentEditor() {
+	const { experimentId } = useParams(),
+		{ experiments, loading, error } = useExperiments();
+	const remote = experiments.find((e) => e.id === experimentId);
+	if (loading) return <p className="page">Loading experiment…</p>;
+	if (error) return <Alert type="error" title={error.message} />;
+	if (!remote) return <Alert type="error" title="Experiment not found." />;
+	return <ExperimentDraft key={remote.id} remote={remote} />;
+}
+function ExperimentDraft({ remote }: { remote: Experiment }) {
+	const navigate = useNavigate(),
+		{ saveExperiment, removeExperiment } = useExperiments();
+	const revision = useRef(0);
+	const requestInFlight = useRef(false);
+	const [draft, setDraft] = useState<Experiment>(() => structuredClone(remote)),
+		[selected, setSelected] = useState(remote.stages[0]?.id ?? ""),
+		[dirty, setDirty] = useState(false),
+		[saving, setSaving] = useState(false),
+		[publishing, setPublishing] = useState(false),
+		[publishErrors, setPublishErrors] = useState<string[]>([]),
+		[success, setSuccess] = useState(""),
+		[failure, setFailure] = useState("");
+	const stage = draft.stages.find((s) => s.id === selected) ?? draft.stages[0];
+	const change = (fn: (e: Experiment) => Experiment) => {
+		revision.current += 1;
+		setDraft(fn);
+		setDirty(true);
+		setSuccess("");
+		setPublishErrors([]);
+	};
+	const changeStage = (fn: (s: Stage) => Stage) =>
+		change((e) => ({
+			...e,
+			stages: e.stages.map((s) => (s.id === stage.id ? fn(s) : s)),
+		}));
+	const add = () => {
+		if (draft.stages.length >= 20) return;
+		const next = createStage();
+		change((e) => ({ ...e, stages: [...e.stages, next] }));
+		setSelected(next.id);
+	};
+	const removeStage = (id: string) => {
+		if (draft.stages[0]?.id === id) return;
+		change((e) => ({ ...e, stages: e.stages.filter((s) => s.id !== id) }));
+		if (selected === id) setSelected(draft.stages[0].id);
+	};
+	const reorder = (from: number, to: number) => {
+		if (
+			from <= 0 ||
+			to <= 0 ||
+			from >= draft.stages.length ||
+			to >= draft.stages.length
+		)
+			return;
+		change((e) => {
+			const stages = [...e.stages];
+			const [moved] = stages.splice(from, 1);
+			stages.splice(to, 0, moved);
+			return { ...e, stages };
+		});
+	};
+	const save = useCallback(
+		async (publish = false) => {
+			if (requestInFlight.current) return;
+			setFailure("");
+			setSuccess("");
+			const errors = publish ? getPublishErrors(draft) : [];
+			setPublishErrors(errors);
+			if (errors.length) return;
+			if (publish && draft.status === "Live" && !dirty) return;
+			requestInFlight.current = true;
+			setSaving(true);
+			setPublishing(publish);
+			try {
+				const pending = revision.current;
+				const saved = await saveExperiment(
+					publish ? { ...draft, status: "Live" } : draft,
+				);
+				if (publish && saved.status !== "Live")
+					throw new Error(
+						"The server did not confirm publication. Please retry.",
+					);
+				if (pending === revision.current) {
+					setDraft(saved);
+					setDirty(false);
+				} else {
+					setDraft((current) => ({ ...current, status: saved.status }));
+				}
+				if (publish)
+					setSuccess(
+						`Experiment published. Experiment code: ${saved.code}.${pending !== revision.current ? " Newer edits are still unsaved; publish changes when ready." : ""}`,
+					);
+			} catch (e) {
+				setFailure(
+					e instanceof Error
+						? e.message
+						: publish
+							? "Could not publish experiment."
+							: "Could not save experiment.",
+				);
+			} finally {
+				requestInFlight.current = false;
+				setSaving(false);
+				setPublishing(false);
+			}
+		},
+		[draft, dirty, saveExperiment],
+	);
+	useEffect(() => {
+		if (!dirty || saving || failure) return;
+		const timer = window.setTimeout(() => void save(), 600);
+		return () => window.clearTimeout(timer);
+	}, [draft, dirty, saving, failure, save]);
+	return (
+		<WorkspaceLayout
+			title={draft.name}
+			dirty={dirty}
+			saving={saving}
+			onSave={() => void save()}
+		>
+			{failure && <Alert type="error" title={failure} />}
+			{success && <Alert type="success" showIcon title={success} />}
+			{publishErrors.length > 0 && (
+				<Alert
+					type="error"
+					showIcon
+					title="This experiment is not ready to publish"
+					description={
+						<ul>
+							{publishErrors.map((error) => (
+								<li key={error}>{error}</li>
+							))}
+						</ul>
+					}
+				/>
+			)}
+			{stage && (
+				<Editor
+					experiment={draft}
+					onPublish={() => void save(true)}
+					publishing={publishing}
+					saving={saving}
+					dirty={dirty}
+					stage={stage}
+					onBack={() => {
+						if (!dirty || window.confirm("Discard unsaved changes?"))
+							navigate("/researcher/dashboard");
+					}}
+					onAddStage={add}
+					onSelectStage={setSelected}
+					onUpdateExperiment={change}
+					onUpdateStage={changeStage}
+					onDelete={(id) => {
+						Modal.confirm({
+							title: "Delete this experiment?",
+							onOk: async () => {
+								await removeExperiment(id);
+								navigate("/researcher/dashboard");
+							},
+						});
+					}}
+					onDeleteStage={removeStage}
+					onReorderStages={reorder}
+				/>
+			)}
+		</WorkspaceLayout>
+	);
+}
+function Participant() {
+	const navigate = useNavigate(),
+		location = useLocation(),
+		{ experiments } = useExperiments();
+	const access = (location.state ?? {}) as {
+		experimentCode?: string;
+		participantCode?: string;
+	};
+	return (
+		<ParticipantEntry
+			experiments={experiments}
+			onBack={() => navigate("/login")}
+			initialExperimentCode={access.experimentCode}
+			initialParticipantCode={access.participantCode}
+		/>
+	);
+}
+export default function App() {
+	return (
+		<Routes>
+			<Route path="/" element={<Navigate to="/login" replace />} />
+			<Route path="/login" element={<Login />} />
+			<Route path="/researcher/register" element={<Register />} />
+			<Route
+				path="/researcher/dashboard"
+				element={
+					<Protected>
+						<Workspace />
+					</Protected>
+				}
+			/>
+			<Route
+				path="/researcher/experiment/new"
+				element={<Navigate to="/researcher/dashboard" replace />}
+			/>
+			<Route
+				path="/researcher/experiment/:experimentId"
+				element={
+					<Protected>
+						<ExperimentEditor />
+					</Protected>
+				}
+			/>
+			{(["preview", "results", "settings"] as const).map((view) => (
+				<Route
+					key={view}
+					path={"/researcher/" + view}
+					element={
+						<Protected>
+							<WorkspacePage view={view} />
+						</Protected>
+					}
+				/>
+			))}
+			<Route path="/participant" element={<Participant />} />
+			<Route
+				path="/administrator/dashboard"
+				element={
+					<Protected admin>
+						<WorkspaceLayout title="Administration">
+							<AdministratorPage />
+						</WorkspaceLayout>
+					</Protected>
+				}
+			/>
+			<Route path="*" element={<Navigate to="/login" replace />} />
+		</Routes>
+	);
+}

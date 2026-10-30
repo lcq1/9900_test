@@ -1,7 +1,5 @@
-// Session API for answers and events; the results page reads local logs.
-import type { Experiment } from '../types'
 import type { ParticipantEvent } from '../participant/EventQueue'
-import { http, isNotFound } from './http'
+import { downloadFile, http, HttpError, openApiStream } from './http'
 
 // Text or multiple-choice answer for a component.
 export interface ParticipantAnswer {
@@ -28,18 +26,6 @@ export async function listSessions(): Promise<ParticipantSessionResult[]> {
 	return http.get<ParticipantSessionResult[]>(PATH)
 }
 
-// Fetch a session by ID; return null on 404 and rethrow other errors.
-export async function getSession(id: string): Promise<ParticipantSessionResult | null> {
-	try {
-		// Fetch the resource; the catch block handles missing records.
-		return await http.get<ParticipantSessionResult>(`${PATH}/${id}`)
-	} catch (error) {
-		// Return null on 404; rethrow other errors.
-		if (isNotFound(error)) return null
-		throw error
-	}
-}
-
 // Submit a session; the backend generates its ID and start time.
 export async function submitSession(
 	input: Omit<ParticipantSessionResult, 'id' | 'startedAt'>,
@@ -53,18 +39,114 @@ export async function submitSession(
 	})
 }
 
-// Create an empty local session for the experiment and participant.
-export function emptySession(
-	experiment: Experiment,
-	participantCode: string,
-): ParticipantSessionResult {
-	return {
-		id: `sess-${Date.now()}`,
-		experimentCode: experiment.code,
-		participantCode,
-		startedAt: new Date().toISOString(),
-		finishedAt: null,
-		answers: [],
-		events: [],
+export const downloadSessionCsv = (id: string) =>
+	downloadFile(PATH + '/' + encodeURIComponent(id) + '/csv', id + '.csv')
+
+export interface AIConfig {
+	model: string
+	configured: boolean
+}
+
+export const getAIConfig = () => http.get<AIConfig>('/ai/config')
+
+export interface StreamChatOptions {
+	stageId: string
+	prompt: string
+	conversationId: string
+	requestId: string
+	signal?: AbortSignal
+	onDelta: (delta: string) => void
+	onModel?: (model: string) => void
+}
+
+export interface StreamChatResult {
+	text: string
+	model: string
+	aborted: boolean
+}
+
+export class LlmCallError extends Error {
+	readonly retryable: boolean
+	readonly partialText: string
+	constructor(message: string, retryable: boolean, partialText = '') {
+		super(message)
+		this.name = 'LlmCallError'
+		this.retryable = retryable
+		this.partialText = partialText
+	}
+}
+
+export async function streamChat(options: StreamChatOptions): Promise<StreamChatResult> {
+	let text = '',
+		model = '',
+		pending = '',
+		done = false
+	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+	const accept = (line: string) => {
+		if (!line.trim()) return
+		const event = JSON.parse(line) as {
+			type: string
+			text?: string
+			model?: string
+			message?: string
+			retryable?: boolean
+		}
+		if (event.type === 'error')
+			throw new LlmCallError(
+				event.message || 'The AI request failed. Please retry.',
+				event.retryable !== false,
+				text,
+			)
+		if (event.model) {
+			model = event.model
+			options.onModel?.(model)
+		}
+		if (event.type === 'delta') {
+			if (typeof event.text !== 'string')
+				throw new LlmCallError('The study server sent an invalid reply.', true, text)
+			text += event.text
+			options.onDelta(event.text)
+		} else if (event.type === 'done') done = true
+	}
+	try {
+		const response = await openApiStream(
+			'/participant/stages/' + encodeURIComponent(options.stageId) + '/ai-stream',
+			{
+				content: options.prompt,
+				conversationId: options.conversationId,
+				requestId: options.requestId,
+			},
+			options.signal,
+		)
+		if (!response.body) throw new LlmCallError('The study server returned an empty response.', true)
+		reader = response.body.getReader()
+		const decoder = new TextDecoder()
+		while (true) {
+			const chunk = await reader.read()
+			if (chunk.done) break
+			pending += decoder.decode(chunk.value, { stream: true })
+			let end: number
+			while ((end = pending.indexOf('\n')) >= 0) {
+				accept(pending.slice(0, end))
+				pending = pending.slice(end + 1)
+			}
+		}
+		pending += decoder.decode()
+		if (pending.trim()) accept(pending)
+		if (!done) throw new LlmCallError('The AI reply was interrupted. Please retry.', true, text)
+		return { text, model, aborted: false }
+	} catch (error) {
+		if (options.signal?.aborted || (error instanceof Error && error.name === 'AbortError'))
+			return { text, model, aborted: true }
+		if (error instanceof LlmCallError) throw error
+		const retryable = !(error instanceof HttpError) || [0, 409, 429, 502, 503, 504].includes(error.status)
+		throw new LlmCallError(
+			error instanceof Error ? error.message : 'Cannot reach the study server. Please retry.',
+			retryable,
+			text,
+		)
+	} finally {
+		await reader?.cancel().catch(() => undefined)
+		reader?.releaseLock()
 	}
 }

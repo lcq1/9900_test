@@ -1,66 +1,85 @@
 // Shared HTTP layer for authentication, errors, and response parsing.
-import { getSession } from '../auth/sessionStore'
-
-// API base URL; defaults to /api.
-const BASE: string = import.meta.env.VITE_API_BASE ?? '/api'
-
-// Send authenticated JSON requests and handle network and backend errors.
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-	const token = getSession()?.token
-	const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-	if (token) headers.Authorization = `Bearer ${token}`
-
-	let res: Response
-	try {
-		// Serialize the body only when provided.
-		res = await fetch(`${BASE}${path}`, {
-			method,
-			headers,
-			body: body === undefined ? undefined : JSON.stringify(body),
-		})
-	} catch {
-		// Fetch rejects when a network request cannot complete.
-		throw new Error(
-			'Cannot reach the study server. Start the backend first (npm run dev:api in frontend/, or run-dev.sh) and try again.',
-		)
+import axios from 'axios'
+import { clear, getSession } from '../auth/sessionStore'
+export class HttpError extends Error {
+	readonly status: number
+	constructor(message: string, status: number) {
+		super(message)
+		this.name = 'HttpError'
+		this.status = status
 	}
-
-	if (!res.ok) {
-		// Treat 502, 503, and 504 as backend availability errors.
-		if (res.status === 502 || res.status === 503 || res.status === 504) {
-			// Include backend startup instructions.
-			throw new Error(
-				'Cannot reach the study server (backend is not running). Start it with "npm run dev:api" and try again.',
+}
+const apiClient = axios.create({
+	baseURL: import.meta.env.VITE_API_BASE ?? '/api',
+	withCredentials: true,
+})
+apiClient.interceptors.request.use((config) => {
+	const token = getSession()?.token
+	if (token) config.headers.Authorization = 'Bearer ' + token
+	config.headers['X-Request-Id'] = crypto.randomUUID()
+	return config
+})
+apiClient.interceptors.response.use(
+	(r) => r,
+	(error: unknown) => {
+		if (axios.isAxiosError(error)) {
+			if (error.response?.status === 401) clear()
+			const detail = error.response?.data?.error?.message ?? error.response?.data?.detail
+			return Promise.reject(
+				new HttpError(
+					typeof detail === 'string'
+						? detail
+						: error.response
+							? 'Request failed (' + error.response.status + ')'
+							: 'Cannot reach the study server. Check the backend connection.',
+					error.response?.status ?? 0,
+				),
 			)
 		}
-		let message = `Request failed (${res.status})`
-		try {
-			// Parse error details; fall back to the HTTP status.
-			const data = await res.json()
-			if (data?.detail) {
-				// Prefer backend error details.
-				message = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
-			}
-		} catch {
-			// Keep the status message if error details cannot be parsed.
-		}
-		throw new Error(message)
-	}
-
-	if (res.status === 204) return undefined as T
-	const text = await res.text()
-	return (text ? JSON.parse(text) : undefined) as T
-}
-
-// Detect missing resources from a 404 in the error message.
-export function isNotFound(error: unknown): boolean {
-	return error instanceof Error && error.message.includes('404')
-}
-
-// Shared GET, POST, PATCH, and DELETE helpers.
+		return Promise.reject(error)
+	},
+)
 export const http = {
-	get: <T>(path: string) => request<T>('GET', path),
-	post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
-	patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
-	del: <T>(path: string) => request<T>('DELETE', path),
+	get: async <T,>(p: string): Promise<T> => (await apiClient.get<T>(p)).data,
+	post: async <T,>(p: string, b?: unknown): Promise<T> => (await apiClient.post<T>(p, b)).data,
+	patch: async <T,>(p: string, b?: unknown): Promise<T> => (await apiClient.patch<T>(p, b)).data,
+	del: async <T,>(p: string): Promise<T> => (await apiClient.delete<T>(p)).data,
+}
+
+export async function openApiStream(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
+	const token = getSession()?.token
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+		Accept: 'application/x-ndjson',
+		'X-Request-Id': crypto.randomUUID(),
+	}
+	if (token) headers.Authorization = 'Bearer ' + token
+	const base = (import.meta.env.VITE_API_BASE ?? '/api').replace(/\/$/, '')
+	const response = await fetch(base + path, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(body),
+		credentials: 'include',
+		signal,
+	})
+	if (response.status === 401) clear()
+	if (!response.ok) {
+		const data = await response.json().catch(() => null)
+		throw new HttpError(
+			typeof data?.detail === 'string' ? data.detail : 'AI request failed (' + response.status + ').',
+			response.status,
+		)
+	}
+	return response
+}
+export async function downloadFile(p: string, filename: string): Promise<void> {
+	const r = await apiClient.get(p, { responseType: 'blob' })
+	const url = URL.createObjectURL(r.data)
+	const a = document.createElement('a')
+	a.href = url
+	a.download = filename
+	document.body.appendChild(a)
+	a.click()
+	a.remove()
+	URL.revokeObjectURL(url)
 }

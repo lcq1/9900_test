@@ -1,4 +1,5 @@
 """Administrator platform settings ORM model."""
+
 from __future__ import annotations
 
 from sqlalchemy import Boolean, Integer

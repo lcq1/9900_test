@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { AIChat } from './AIChat'
 import { ConsentView } from './ConsentView'
+import { useTimerController } from './TimerController'
 import { EventQueue } from './EventQueue'
 import { submitSession, type ParticipantAnswer } from '../api/participant'
 import {
@@ -105,7 +106,7 @@ export function ParticipantPreview({
         await submitSession({
           experimentCode: experiment.code,
           participantCode,
-          finishedAt: new Date().toISOString(),
+          finishedAt: reason === 'finish' ? new Date().toISOString() : null,
           answers,
           events,
         })
@@ -119,7 +120,11 @@ export function ParticipantPreview({
 
   // Live countdown (minutes-based) for the Countdown Timer feature.
   const totalSeconds = Math.max(1, stage.countdownMinutes) * 60
-  const [remaining, setRemaining] = useState(totalSeconds)
+  const { remaining, reset: setRemaining } = useTimerController({
+    initialSeconds: totalSeconds,
+    enabled: stage.features.timer && !paused,
+    stageId: stage.id,
+  })
 
   const [recordingStatus, setRecordingStatus] = useState<
     Partial<Record<RecordingKind, RecordingStatus>>
@@ -128,14 +133,6 @@ export function ParticipantPreview({
   // read inside handlers/effects, never during render.
   const controllersRef = useRef<Partial<Record<RecordingKind, RecordingController>>>({})
   const videoRef = useRef<HTMLVideoElement>(null)
-
-  useEffect(() => {
-    if (!stage.features.timer || paused) return
-    const id = setInterval(() => {
-      setRemaining((value) => (value > 0 ? value - 1 : 0))
-    }, 1000)
-    return () => clearInterval(id)
-  }, [stage.features.timer, paused, stageIndex, totalSeconds])
 
   const minutes = String(Math.floor(remaining / 60)).padStart(2, '0')
   const seconds = String(remaining % 60).padStart(2, '0')
@@ -168,11 +165,11 @@ export function ParticipantPreview({
     if (!stage.features.copyPaste || paused) return
     const handleCopy = () => {
       const text = window.getSelection()?.toString() ?? ''
-      queue.record('copy', { chars: text.length, text: text.slice(0, 500) }, stage.id)
+      queue.record('copy', { chars: text.length, text }, stage.id)
     }
     const handlePaste = (event: ClipboardEvent) => {
       const text = event.clipboardData?.getData('text') ?? ''
-      queue.record('paste', { chars: text.length, text: text.slice(0, 500) }, stage.id)
+      queue.record('paste', { chars: text.length, text }, stage.id)
     }
     document.addEventListener('copy', handleCopy)
     document.addEventListener('paste', handlePaste)
@@ -591,18 +588,20 @@ export function ParticipantPreview({
             </div>
             <aside className="ai-sidebar">
               <AIChat
+                key={stage.id}
+                stageId={stage.id}
                 contextLabel={stage.name}
                 onUserMessage={(text) =>
                   queue.record(
                     'ai_prompt',
-                    { chars: text.length, text: text.slice(0, 500) },
+                    { chars: text.length, text },
                     stage.id,
                   )
                 }
                 onAssistantReply={(text) =>
                   queue.record(
                     'ai_reply',
-                    { chars: text.length, text: text.slice(0, 500) },
+                    { chars: text.length, text },
                     stage.id,
                   )
                 }

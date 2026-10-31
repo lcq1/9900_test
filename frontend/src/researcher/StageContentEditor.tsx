@@ -1,5 +1,4 @@
-import type { Stage, ComponentType, StageComponent } from '../types'
-import { makeComponent, STAGE_TYPES } from '../constants'
+import { type Stage, type ComponentType, type StageComponent, STAGE_TYPES } from '../types'
 import {
 	Type,
 	TextCursorInput,
@@ -46,7 +45,14 @@ export function StageContentEditor({
 	// Append an empty choice option.
 	const addOption = (id: string) =>
 		updateComponents((comps) =>
-			comps.map((c) => (c.id === id ? { ...c, options: [...(c.options ?? []), ''] } : c)),
+			comps.map((c) =>
+				c.id === id
+					? {
+							...c,
+							options: (c.options ?? []).length < 6 ? [...(c.options ?? []), ''] : c.options,
+						}
+					: c,
+			),
 		)
 
 	// Update a choice option by index.
@@ -63,7 +69,9 @@ export function StageContentEditor({
 	const removeOption = (id: string, index: number) =>
 		updateComponents((comps) =>
 			comps.map((c) =>
-				c.id === id ? { ...c, options: (c.options ?? []).filter((_, i) => i !== index) } : c,
+				c.id === id && (c.options ?? []).length > 2
+					? { ...c, options: (c.options ?? []).filter((_, i) => i !== index) }
+					: c,
 			),
 		)
 
@@ -73,6 +81,7 @@ export function StageContentEditor({
 
 	// Change the stage type and normalize choice options.
 	const onTypeChange = (type: string) => {
+		if (stage.type === 'consent' || type === 'consent') return
 		onUpdateStage((current) => {
 			// Adjust components for the new stage type.
 			let comps = current.components
@@ -81,7 +90,11 @@ export function StageContentEditor({
 				comps = ensureChoice(comps, ['True', 'False'])
 			} else if (type === 'single_choice' || type === 'multiple_choice') {
 				// Keep valid options or create two empty choices.
-				comps = ensureChoice(comps, ['', ''])
+				comps = ensureChoice(comps, ['', '']).map((c) =>
+					c.type === 'choice' || c.type === 'checkbox'
+						? { ...c, type: type === 'multiple_choice' ? 'checkbox' : 'choice' }
+						: c,
+				)
 			} else if (type === 'fill_blank' || type === 'short_answer') {
 				// Remove choice options for fill-in and short-answer stages.
 				comps = comps.map((c) =>
@@ -224,4 +237,18 @@ function ensureChoice(comps: StageComponent[], opts: string[]): StageComponent[]
 				: ['', '']
 	next[index] = { ...existing, type: 'choice', options }
 	return next
+}
+
+function makeComponent(type: ComponentType): StageComponent {
+	return {
+		id: crypto.randomUUID(),
+		type,
+		label: type === 'text' ? 'New instruction' : 'Your response',
+		required: ['textbox', 'signature'].includes(type),
+		options: ['choice', 'checkbox'].includes(type)
+			? ['Option A', 'Option B']
+			: type === 'rating'
+				? ['1', '2', '3', '4', '5']
+				: undefined,
+	}
 }

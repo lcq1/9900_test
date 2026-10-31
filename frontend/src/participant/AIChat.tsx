@@ -1,7 +1,7 @@
 /**
  * AIChat.tsx — participant AI assistant panel (text-only).
  *
- * Talks to a real model through the WorkBuddy Cloud LLM module and renders the
+ * Talks only to the application backend and renders the
  * reply token-by-token as it streams. Everything is text-only: no image, audio
  * or tool-call input is accepted.
  *
@@ -14,15 +14,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Bot, Send, Square } from 'lucide-react'
-import type { PublicLLMModel } from '@tencent-ai/workbuddy-cloud-sdk'
-import {
-  LlmCallError,
-  createConversationId,
-  listChatModels,
-  pickChatModel,
-  streamChat,
-  type ChatTurn,
-} from '../api/ai'
+import { LlmCallError, getAIConfig, streamChat } from '../api/participant'
 
 export interface ChatMessage {
   id: string
@@ -31,6 +23,7 @@ export interface ChatMessage {
 }
 
 export interface AIChatProps {
+  stageId: string
   /** Short label describing the stage context, shown in the header. */
   contextLabel?: string
   placeholder?: string
@@ -40,34 +33,29 @@ export interface AIChatProps {
   onAssistantReply?: (text: string) => void
 }
 
-export function AIChat({ contextLabel, placeholder, onUserMessage, onAssistantReply }: AIChatProps) {
+export function AIChat({ stageId, contextLabel, placeholder, onUserMessage, onAssistantReply }: AIChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
-  const [models, setModels] = useState<PublicLLMModel[]>([])
-  const [modelId, setModelId] = useState('')
+  const [modelLabel, setModelLabel] = useState('')
   const [error, setError] = useState('')
   const [lastPrompt, setLastPrompt] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
-  /** One application-owned conversation id for this chat; rotated on remount. */
-  const conversationIdRef = useRef<string>(createConversationId())
   const streamingRef = useRef(false)
+  /** One application-owned conversation id for this chat; rotated on remount. */
+  const [conversationId] = useState(() => crypto.randomUUID())
+  const requestIdRef = useRef('')
 
   useEffect(() => {
     let active = true
-    listChatModels()
-      .then((list) => {
+    getAIConfig()
+      .then((config) => {
         if (!active) return
-        const selected = pickChatModel(list)
-        setModels(list)
-        setModelId((current) => current || selected?.id || '')
-        if (!selected) {
-          setError('No AI model is available for this app right now.')
-        }
+        setModelLabel(config.model)
       })
       .catch(() => {
-        if (active) setError('Could not load the AI model list. Check the connection and retry.')
+        if (active) setError('Could not load AI settings from the study server. Please retry.')
       })
     return () => {
       active = false
@@ -88,21 +76,17 @@ export function AIChat({ contextLabel, placeholder, onUserMessage, onAssistantRe
     const text = rawText.trim()
     if (!text || streamingRef.current) return
 
-    const last = messages[messages.length - 1]
-    const base = isRetry && last?.role === 'assistant' ? messages.slice(0, -1) : messages
+    const retryIndex = messages.findLastIndex((message) => message.role === 'user')
+    const base = isRetry && retryIndex >= 0 ? messages.slice(0, retryIndex) : messages
 
-    const history: ChatTurn[] = base
-      .filter((message) => message.text.trim().length > 0)
-      .map((message) => ({ role: message.role, content: message.text }))
+    if (!isRetry || !requestIdRef.current) requestIdRef.current = crypto.randomUUID()
 
     const assistantId = `a-${Date.now()}`
-    const nextMessages = isRetry
-      ? [...base, { id: assistantId, role: 'assistant' as const, text: '' }]
-      : [
-          ...base,
-          { id: `u-${Date.now()}`, role: 'user' as const, text },
-          { id: assistantId, role: 'assistant' as const, text: '' },
-        ]
+    const nextMessages = [
+      ...base,
+      { id: `u-${Date.now()}`, role: 'user' as const, text },
+      { id: assistantId, role: 'assistant' as const, text: '' },
+    ]
 
     setMessages(nextMessages)
     setError('')
@@ -121,9 +105,10 @@ export function AIChat({ contextLabel, placeholder, onUserMessage, onAssistantRe
     try {
       const result = await streamChat({
         prompt: text,
-        history,
-        conversationId: conversationIdRef.current,
-        modelId: modelId || undefined,
+        stageId,
+        conversationId,
+        requestId: requestIdRef.current,
+        onModel: setModelLabel,
         signal: controller.signal,
         onDelta: (delta) => {
           received += delta
@@ -152,13 +137,6 @@ export function AIChat({ contextLabel, placeholder, onUserMessage, onAssistantRe
   }
 
   const stop = () => abortRef.current?.abort()
-
-  /**
-   * The model is chosen here, not by the participant: a study that measures how
-   * students use AI needs the model held constant across participants, so the
-   * panel only displays which model answered.
-   */
-  const modelLabel = models.find((model) => model.id === modelId)?.name ?? ''
 
   return (
     <div className="ai-chat">

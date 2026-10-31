@@ -1,5 +1,13 @@
 import type { Stage, FeatureKey } from '../types'
-import { featureLabels } from '../constants'
+import { Copy, MessageCircle, MonitorPlay, PenLine, Paperclip, TimerReset } from 'lucide-react'
+const featureLabels = {
+	ai: { label: 'AI chat', icon: MessageCircle },
+	timer: { label: 'Countdown timer', icon: TimerReset },
+	screenRecording: { label: 'Screen recording', icon: MonitorPlay },
+	copyPaste: { label: 'Copy-paste logging', icon: Copy },
+	signatureBox: { label: 'Signature box', icon: PenLine },
+	attachment: { label: 'Attachment', icon: Paperclip },
+}
 
 // Configure 11 features; copy/paste logging requires fill-in or short-answer stages.
 export function StageFeatureEditor({
@@ -24,7 +32,8 @@ export function StageFeatureEditor({
 				<div className="panel-heading">
 					<span>STAGE FEATURES</span>
 					<span className="feature-count">
-						{Object.values(stage.features).filter(Boolean).length}/11
+						{Object.keys(featureLabels).filter((k) => stage.features[k as FeatureKey]).length}
+						/6
 					</span>
 				</div>
 				{Object.entries(featureLabels).map(([key, item]) => {
@@ -32,7 +41,19 @@ export function StageFeatureEditor({
 					const feature = key as FeatureKey
 					const Icon = item.icon
 					const checked = stage.features[feature]
-					const disabled = feature === 'copyPaste' && !copyPasteEnabled
+					const disabled =
+						(feature === 'copyPaste' && !copyPasteEnabled) ||
+						(stage.type === 'consent' &&
+							[
+								'ai',
+								'timer',
+								'screenRecording',
+								'selfie',
+								'copyPaste',
+								'pauseAbort',
+								'navigation',
+								'confirm',
+							].includes(feature))
 					return (
 						<div className="feature-row" key={feature}>
 							<span className="feature-icon">
@@ -56,7 +77,11 @@ export function StageFeatureEditor({
 									<span className="minutes-unit">min</span>
 								</span>
 							)}
-							{disabled && <small className="feature-hint">Fill / short answer only</small>}
+							{disabled && (
+								<small className="feature-hint">
+									{stage.type === 'consent' ? 'Unavailable for consent' : 'Fill / short answer only'}
+								</small>
+							)}
 							<button
 								className={checked ? 'switch on' : 'switch'}
 								disabled={disabled}

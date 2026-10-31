@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import type { Experiment } from '../types'
 import { getCurrentResearcher } from '../auth/sessionStore'
-import { downloadCsv, eventsToCsv } from '../utils/sessionCsv'
 import {
   getSettings,
   listResearchersForAdmin,
   updateSettings,
+  listAdminExperiments,
+  listAdminParticipants,
   type PlatformSettings,
 } from '../api/administrator'
 import { promoteToAdministrator, type Researcher } from '../api/auth'
-import { getSession, listSessions } from '../api/participant'
+import { downloadSessionCsv } from '../api/participant'
 
 /**
  * AdministratorPage — Plan.md §8.2 administrator surface.
@@ -24,7 +25,8 @@ import { getSession, listSessions } from '../api/participant'
  * finish/abort, so it reflects the authoritative server store rather than the
  * local browser logs.
  */
-export function AdministratorPage({ experiments }: { experiments: Experiment[] }) {
+export function AdministratorPage() {
+  const [experiments, setExperiments] = useState<Experiment[]>([])
   const [researchers, setResearchers] = useState<Researcher[]>([])
   const [settings, setSettings] = useState<PlatformSettings | null>(null)
   const [sessions, setSessions] = useState<SessionSummary[]>([])
@@ -37,13 +39,15 @@ export function AdministratorPage({ experiments }: { experiments: Experiment[] }
     let active = true
     const load = async () => {
       try {
-        const [people, current] = await Promise.all([
+        const [people, current, studies] = await Promise.all([
           listResearchersForAdmin(),
           getSettings(),
+          listAdminExperiments(),
         ])
         if (!active) return
         setResearchers(people)
         setSettings(current)
+        setExperiments(studies)
       } catch {
         if (active) setError('Could not load administrator data.')
       } finally {
@@ -87,7 +91,7 @@ export function AdministratorPage({ experiments }: { experiments: Experiment[] }
     let active = true
     const load = async () => {
       try {
-        const backend = await listSessions()
+        const backend = await listAdminParticipants()
         if (!active) return
         setSessions(
           backend
@@ -269,9 +273,7 @@ interface SessionSummary {
 function downloadSession(sessionId: string): void {
   void (async () => {
     try {
-      const session = await getSession(sessionId)
-      if (!session) return
-      downloadCsv(sessionId, eventsToCsv(session.events))
+      await downloadSessionCsv(sessionId)
     } catch {
       // Malformed timeline — nothing sensible to export.
     }

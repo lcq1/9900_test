@@ -1,10 +1,13 @@
 """Participant lookup, submission and retrieval tests."""
+
 from __future__ import annotations
 
 
 def _make_experiment(client, headers, code="ZZZ1"):
     return client.post(
-        "/api/experiments", json={"name": "E", "code": code, "stages": []}, headers=headers
+        "/api/experiments",
+        json={"name": "E", "code": code, "stages": []},
+        headers=headers,
     )
 
 
@@ -41,20 +44,29 @@ def _submit_payload(experiment_code="ZZZ1"):
 
 
 def test_lookup_and_submit_roundtrip(client, auth_headers):
-    assert _make_experiment(client, auth_headers, code="ZZZ1").status_code == 201
+    created = _make_experiment(client, auth_headers)
+    assert created.status_code == 201
+    code = created.json()["code"]
 
     # lookup requires auth
-    assert client.get("/api/participant/lookup?code=zzz1&participant=abc").status_code == 401
+    assert (
+        client.get(
+            f"/api/participant/lookup?code={code.lower()}&participant=abc"
+        ).status_code
+        == 401
+    )
 
     r = client.get(
-        "/api/participant/lookup?code=zzz1&participant=abc", headers=auth_headers
+        f"/api/participant/lookup?code={code.lower()}&participant=abc",
+        headers=auth_headers,
     )
     assert r.status_code == 200
-    assert r.json()["code"] == "ZZZ1"
+    assert r.json()["code"] == code
 
     # case-insensitive code match
     r = client.get(
-        "/api/participant/lookup?code=ZzZ1&participant=abcde", headers=auth_headers
+        f"/api/participant/lookup?code={code.lower()}&participant=abcde",
+        headers=auth_headers,
     )
     assert r.status_code == 200
 
@@ -66,19 +78,19 @@ def test_lookup_and_submit_roundtrip(client, auth_headers):
 
     # participant code too short
     r = client.get(
-        "/api/participant/lookup?code=zzz1&participant=ab", headers=auth_headers
+        f"/api/participant/lookup?code={code}&participant=ab", headers=auth_headers
     )
     assert r.status_code == 400
 
     # submit session
     r = client.post(
-        "/api/participant/sessions", json=_submit_payload(), headers=auth_headers
+        "/api/participant/sessions", json=_submit_payload(code), headers=auth_headers
     )
     assert r.status_code == 201
     data = r.json()
     assert data["id"]
     assert data["startedAt"]
-    assert data["experimentCode"] == "ZZZ1"
+    assert data["experimentCode"] == code
     assert data["participantCode"] == "abc"
     assert len(data["answers"]) == 2
     assert data["answers"][0]["value"] == "hello"

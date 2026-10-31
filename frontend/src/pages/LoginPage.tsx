@@ -1,9 +1,9 @@
 // Code-based participant entry and backend researcher/admin login.
 import { useState } from 'react'
-import type { FormEvent } from 'react'
 import { ArrowRight, LogIn, Play, ShieldCheck, UserPlus, UserRound } from 'lucide-react'
 import * as auth from '../api/auth'
 import { setSession } from '../auth/sessionStore'
+import type React from 'react'
 
 // Participant, researcher, and admin login roles.
 type Role = 'participant' | 'researcher' | 'administrator'
@@ -12,7 +12,11 @@ type Role = 'participant' | 'researcher' | 'administrator'
 export function AuthScreen({
 	onSignIn,
 	onParticipant,
+	onRegister,
+	initialEmail,
 }: {
+	onRegister?: () => void
+	initialEmail?: string
 	onSignIn: () => void
 	onParticipant: (experimentCode?: string, participantCode?: string) => void
 }) {
@@ -20,7 +24,7 @@ export function AuthScreen({
 	const [role, setRole] = useState<Role>('participant')
 	const [mode, setMode] = useState<'signin' | 'register'>('signin')
 	const [name, setName] = useState('')
-	const [email, setEmail] = useState('researcher@unsw.edu.au')
+	const [email, setEmail] = useState(initialEmail ?? '')
 	const [password, setPassword] = useState('')
 	const [experimentCode, setExperimentCode] = useState('')
 	const [participantCode, setParticipantCode] = useState('')
@@ -28,7 +32,7 @@ export function AuthScreen({
 	const [busy, setBusy] = useState(false)
 
 	// Validate and submit the form, then update session and request state.
-	const submit = async (event: FormEvent) => {
+	const submit = async (event: React.SyntheticEvent<HTMLFormElement>) => {
 		event.preventDefault()
 		setError('')
 		if (role === 'participant') {
@@ -54,10 +58,13 @@ export function AuthScreen({
 		setBusy(true)
 		try {
 			// Authenticate, save the session, and notify the parent.
-			const session =
-				mode === 'register'
-					? await auth.registerResearcher({ name, email, password })
-					: await auth.signIn(email, password)
+			if (mode === 'register') {
+				await auth.registerResearcher({ name, email, password })
+				setMode('signin')
+				setPassword('')
+				return
+			}
+			const session = await auth.signIn(email, password)
 			setSession(session)
 			onSignIn()
 		} catch (err) {
@@ -216,7 +223,11 @@ export function AuthScreen({
 						) : (
 							<>
 								New researcher?{' '}
-								<button type="button" className="consent-clear" onClick={() => setMode('register')}>
+								<button
+									type="button"
+									className="consent-clear"
+									onClick={() => (onRegister ? onRegister() : setMode('register'))}
+								>
 									<UserPlus size={12} /> Create an account
 								</button>
 							</>

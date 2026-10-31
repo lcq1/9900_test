@@ -9,7 +9,7 @@ import { StageFeatureEditor } from '../researcher/StageFeatureEditor'
  * (middle), stage features (right). The header (back link, experiment name,
  * full-screen switch, delete/publish) is preserved from the previous design.
  */
-export function Editor({ experiment, stage, onBack, onAddStage, onSelectStage, onUpdateExperiment, onUpdateStage, onDelete, onDeleteStage, onReorderStages }: {
+export function Editor({ experiment, stage, onBack, onAddStage, onSelectStage, onUpdateExperiment, onUpdateStage, onDelete, onDeleteStage, onReorderStages, onPublish, publishing, saving, dirty }: {
   experiment: Experiment
   stage: Stage
   onBack: () => void
@@ -20,6 +20,10 @@ export function Editor({ experiment, stage, onBack, onAddStage, onSelectStage, o
   onDelete: (id: string) => void
   onDeleteStage: (id: string) => void
   onReorderStages: (from: number, to: number) => void
+  onPublish: () => void
+  publishing: boolean
+  saving: boolean
+  dirty: boolean
 }) {
   return (
     <section className="editor">
@@ -27,8 +31,29 @@ export function Editor({ experiment, stage, onBack, onAddStage, onSelectStage, o
         <button className="back-link" onClick={onBack}><ArrowLeft size={16} /> All experiments</button>
         <div className="editor-actions">
           <button className="secondary-button" onClick={() => onDelete(experiment.id)}><Trash2 size={15} /> Delete</button>
-          <button className="secondary-button" onClick={() => window.alert('Preview opens the participant flow in the next tab.')}><Play size={15} /> Preview</button>
-          <button className="primary-button" onClick={() => window.alert('Experiment saved and ready to share.')}>Publish <ArrowRight size={15} /></button>
+          <button className="secondary-button" onClick={() => window.open('/participant', '_blank', 'noopener')}>
+            <Play size={15} /> Preview
+          </button>
+          <button
+            className="primary-button"
+            disabled={saving || experiment.status === 'Closed' || (experiment.status === 'Live' && !dirty)}
+            aria-busy={publishing}
+            title={
+              experiment.status === 'Closed'
+                ? 'Closed experiments cannot be published again'
+                : 'Save the current experiment and publish it'
+            }
+            onClick={onPublish}
+          >
+            {publishing
+              ? 'Publishing…'
+              : experiment.status === 'Live'
+                ? dirty
+                  ? 'Publish changes'
+                  : 'Published'
+                : 'Publish'}{' '}
+            <ArrowRight size={15} />
+          </button>
         </div>
       </div>
       <div className="editor-title">
@@ -36,8 +61,14 @@ export function Editor({ experiment, stage, onBack, onAddStage, onSelectStage, o
           <p className="eyebrow">EXPERIMENT / {experiment.code}</p>
           <input className="title-input" value={experiment.name} onChange={(event) => onUpdateExperiment((current) => ({ ...current, name: event.target.value }))} />
           <div className="title-meta">
-            <span className="status-pill">Draft</span>
-            <span className="subheading">Last edited a few seconds ago</span>
+            <span className="status-pill">{experiment.status}</span>
+            <span className="subheading">
+              {experiment.status === 'Live'
+                ? dirty
+                  ? 'Unpublished changes'
+                  : 'Published experiment'
+                : 'Experiment draft'}
+            </span>
           </div>
         </div>
         <label className="switch-label">

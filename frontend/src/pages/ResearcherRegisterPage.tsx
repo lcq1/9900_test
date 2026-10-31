@@ -3,7 +3,6 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { ArrowLeft, Check } from 'lucide-react'
 import * as auth from '../api/auth'
-import { setSession } from '../auth/sessionStore'
 
 // Optional registration and back callbacks.
 export interface ResearcherRegisterPageProps {
@@ -44,10 +43,9 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 		setBusy(true)
 		try {
 			// Authenticate, save the session, and notify the parent.
-			const session = await auth.registerResearcher({ name, email, password })
-			setSession(session)
-			setDone(session.researcher)
-			onRegistered?.(session.researcher)
+			const researcher = await auth.registerResearcher({ name, email, password })
+			setDone(researcher)
+			onRegistered?.(researcher)
 		} catch (err) {
 			// Show the request error and retain loaded data.
 			setError(err instanceof Error ? err.message : 'Registration failed.')
@@ -70,7 +68,7 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 					<h1>Welcome, {done.name}</h1>
 					<p className="subheading">Your researcher account ({done.email}) has been created.</p>
 					<button className="primary-button" onClick={() => onBack?.()}>
-						Continue to workspace
+						Return to login
 					</button>
 				</div>
 			</section>

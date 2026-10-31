@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import type { Experiment } from '../types'
+import { type Experiment, stageTypeLabel } from '../types'
 import { GripVertical, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
-import { stageTypeLabel } from '../constants'
 
 // Manage up to 20 stages with drag/button reordering; retain at least one stage.
 export function StageBuilder({
@@ -61,7 +60,7 @@ export function StageBuilder({
 								setDragOverId(null)
 								const from = Number(event.dataTransfer.getData('text/plain'))
 								if (!Number.isInteger(from)) return
-								if (from < 0 || from >= stages.length) return
+								if (from <= 0 || index === 0 || from >= stages.length) return
 								if (from !== index) onReorderStages(from, index)
 							}}
 						>
@@ -72,7 +71,7 @@ export function StageBuilder({
 							</span>
 							<span
 								className="grip"
-								draggable
+								draggable={index > 0}
 								onDragStart={(event) => {
 									// Store the stage index and mark the drag as a move.
 									event.dataTransfer.setData('text/plain', String(index))
@@ -84,7 +83,7 @@ export function StageBuilder({
 							</span>
 							{/* Move and delete controls based on stage position. */}
 							<span className="stage-controls">
-								{index > 0 && (
+								{index > 1 && (
 									<button
 										className="icon-button"
 										title="Move up"
@@ -97,7 +96,7 @@ export function StageBuilder({
 										<ArrowUp size={14} />
 									</button>
 								)}
-								{!isLast && (
+								{index > 0 && !isLast && (
 									<button
 										className="icon-button"
 										title="Move down"
@@ -110,7 +109,7 @@ export function StageBuilder({
 										<ArrowDown size={14} />
 									</button>
 								)}
-								{stages.length > 1 && (
+								{index > 0 && stages.length > 1 && (
 									<button
 										className="icon-button danger"
 										title="Delete stage"

@@ -3,16 +3,43 @@
 # 功能 / Function: 运行前端、后端和端到端检查。 / Run frontend, backend, and end-to-end checks.
 # 输入 / Input: 仓库源码、依赖清单和 CI 变量。 / Repository source, dependency manifests, and CI variables.
 # 输出 / Output: 各流水线任务的检查结果。 / Results from each pipeline job.
-# 状态 / Status: 当前只检查项目文件骨架；功能测试待实现。 / Currently checks the project scaffold only; functional tests are pending.
 
 stages:
-  - validate
+  - test
+  - build
 
-validate_scaffold:
-  stage: validate
-  image: alpine:3.20
+frontend_test:
+  stage: test
+  image: node:22
   script:
-    - test -f README.md
-    - test -f frontend/package.json
-    - test -f backend/requirements.txt
-    - grep -q 'Project File Tree' README.md
+    - cd frontend
+    - npm ci
+    - npm run lint
+    - npm test
+
+backend_test:
+  stage: test
+  image: python:3.12
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    POSTGRES_DB: experiment_platform_test
+    TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/experiment_platform_test
+  script:
+    - cd backend
+    - pip install -r requirements.txt
+    - python -m pytest -q
+
+frontend_build:
+  stage: build
+  image: node:22
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist/

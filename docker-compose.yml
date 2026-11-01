@@ -1,4 +1,4 @@
-name: comp9900-beyond-damoA
+name: comp9900-beyond
 
 services:
   frontend:
@@ -35,7 +35,7 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-experiment_platform}}"
+      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-experiment_platform}}"
       JWT_SECRET: "${JWT_SECRET:-dev-secret-change-me-in-production}"
       CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:${FRONTEND_PORT:-5173},http://127.0.0.1:${FRONTEND_PORT:-5173}}"
     depends_on:
@@ -49,6 +49,7 @@ services:
       start_period: 10s
     volumes:
       - backend_storage:/app/storage
+      - backend_logs:/app/logs
     ports:
       - "${BACKEND_PORT:-8000}:8000"
 
@@ -59,7 +60,7 @@ services:
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      test: ["CMD-SHELL", 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atqc "SELECT 1" >/dev/null']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -72,6 +73,10 @@ services:
 volumes:
   # Named volume keeps local database data across container restarts.
   postgres_data:
+    name: "${POSTGRES_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_postgres_data}"
   # Keep the frontend container's npm packages across restarts.
   frontend_node_modules:
   backend_storage:
+    name: "${BACKEND_STORAGE_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_backend_storage}"
+  backend_logs:
+    name: "${BACKEND_LOGS_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_backend_logs}"

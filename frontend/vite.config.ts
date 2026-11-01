@@ -1,10 +1,15 @@
 // Batch 0: Vite build configuration and frontend tooling
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    include: ['tests/**/*.test.tsx'],
+    globals: true,
+  },
   server: {
     watch: {
       usePolling: process.env.VITE_USE_POLLING === 'true',

@@ -52,6 +52,9 @@ class Stage(CamelModel):
     components: list[StageComponent] = []
     features: dict[str, bool] = {}
     countdown_minutes: int = 0
+    required_features: dict[Literal["questionnaire", "signatureBox", "attachment"], bool] = {}
+    recording_required: bool = False
+    recording_mode: Literal["manual", "auto"] = "manual"
 
 
 class ExperimentCreate(CamelModel):
@@ -64,6 +67,8 @@ class ExperimentCreate(CamelModel):
 
 
 class ExperimentUpdate(CamelModel):
+    publish: bool = False
+    publish_request_id: Optional[str] = None
     name: Optional[str] = None
     code: Optional[str] = None
     status: Optional[str] = None
@@ -79,3 +84,7 @@ class Experiment(CamelORMModel):
     created: str
     full_screen: bool
     stages: list[Stage] = []
+
+
+class StorageSettings(CamelModel):
+    location: str | None = None

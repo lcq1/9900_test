@@ -16,89 +16,102 @@ vi.mock("../src/api/auth", () => ({
   registerResearcher: vi.fn(),
 }));
 
-describe("authentication", () => {
-  beforeEach(() => {
-    localStorage.clear();
-    clear();
-    vi.clearAllMocks();
-  });
+describe('authentication', () => {
+	beforeEach(() => {
+		localStorage.clear()
+		clear()
+		vi.clearAllMocks()
+	})
 
-  afterEach(cleanup);
+	afterEach(cleanup)
 
-  it("keeps the three-role login and stores the authenticated session", async () => {
-    const session = {
-      token: "retained-token",
-      issuedAt: "2026-10-27",
-      researcher: {
-        id: "r1",
-        name: "Alice",
-        email: "alice@example.com",
-        role: "researcher" as const,
-        createdAt: "2026-10-27",
-      },
-    };
-    vi.mocked(signIn).mockResolvedValue(session);
-    const signedIn = vi.fn();
-    render(<AuthScreen onSignIn={signedIn} onParticipant={vi.fn()} />);
-    expect(
-      screen.getByRole("button", { name: "Participant", exact: true }),
-    ).toBeDefined();
-    expect(
-      screen.getByRole("button", { name: "Administrator", exact: true }),
-    ).toBeDefined();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Researcher", exact: true }),
-    );
-    fireEvent.change(screen.getByLabelText("Email address"), {
-      target: { value: "alice@example.com" },
-    });
-    fireEvent.change(screen.getByLabelText("Password"), {
-      target: { value: "password123" },
-    });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Researcher log in", exact: true }),
-    );
-    await waitFor(() => expect(signedIn).toHaveBeenCalledOnce());
-    expect(getSession()).toEqual(session);
-    expect(JSON.parse(localStorage.getItem("p13-researcher-session")!)).toEqual(
-      session,
-    );
-    clear();
-    expect(getSession()).toBeNull();
-  });
+	it('disables administrator entry while researcher login still works', async () => {
+		const session = {
+			token: 'retained-token',
+			issuedAt: '2026-10-27',
+			researcher: {
+				id: 'r1',
+				name: 'Alice',
+				email: 'alice@example.com',
+				role: 'researcher' as const,
+				createdAt: '2026-10-27',
+			},
+		}
+		vi.mocked(signIn).mockResolvedValue(session)
+		const signedIn = vi.fn()
+		render(<AuthScreen onSignIn={signedIn} onParticipant={vi.fn()} />)
+		expect(
+			screen.getByRole('button', { name: 'Participant', exact: true }),
+		).toBeDefined()
+		const administrator = screen.getByRole('button', {
+			name: 'Administrator',
+			exact: true,
+		}) as HTMLButtonElement
+		expect(administrator.disabled).toBe(true)
+		fireEvent.click(administrator)
+		expect(
+			screen.queryByRole('button', {
+				name: 'Administrator log in',
+				exact: true,
+			}),
+		).toBeNull()
+		expect(screen.getByLabelText('Experiment code')).toBeDefined()
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Researcher', exact: true }),
+		)
+		fireEvent.change(screen.getByLabelText('Email address'), {
+			target: { value: 'alice@example.com' },
+		})
+		fireEvent.change(screen.getByLabelText('Password'), {
+			target: { value: 'password123' },
+		})
+		fireEvent.click(
+			screen.getByRole('button', {
+				name: 'Researcher log in',
+				exact: true,
+			}),
+		)
+		await waitFor(() => expect(signedIn).toHaveBeenCalledOnce())
+		expect(getSession()).toEqual(session)
+		expect(
+			JSON.parse(localStorage.getItem('p13-researcher-session')!),
+		).toEqual(session)
+		clear()
+		expect(getSession()).toBeNull()
+	})
 
-  it("passes participant codes through the existing login form", () => {
-    const enter = vi.fn();
-    render(<AuthScreen onSignIn={vi.fn()} onParticipant={enter} />);
-    fireEvent.change(screen.getByLabelText("Experiment code"), {
-      target: { value: " STUDY-123 " },
-    });
-    fireEvent.change(screen.getByLabelText("Participant code"), {
-      target: { value: " P-001 " },
-    });
-    fireEvent.submit(
-      screen.getByLabelText("Participant code").closest("form")!,
-    );
-    expect(enter).toHaveBeenCalledWith("STUDY-123", "P-001");
-  });
+	it('passes participant codes through the existing login form', () => {
+		const enter = vi.fn()
+		render(<AuthScreen onSignIn={vi.fn()} onParticipant={enter} />)
+		fireEvent.change(screen.getByLabelText('Experiment code'), {
+			target: { value: ' STUDY-123 ' },
+		})
+		fireEvent.change(screen.getByLabelText('Participant code'), {
+			target: { value: ' P-001 ' },
+		})
+		fireEvent.submit(
+			screen.getByLabelText('Participant code').closest('form')!,
+		)
+		expect(enter).toHaveBeenCalledWith('STUDY-123', 'P-001')
+	})
 
-  it("notifies subscribers when a saved session is cleared", () => {
-    setSession({
-      token: "token",
-      issuedAt: "",
-      researcher: {
-        id: "r1",
-        name: "Alice",
-        email: "a@b.test",
-        role: "researcher",
-        createdAt: "",
-      },
-    });
-    clear();
-    expect(localStorage.getItem("p13-researcher-session")).toBeNull();
-    expect(getSession()).toBeNull();
-  });
-});
+	it('notifies subscribers when a saved session is cleared', () => {
+		setSession({
+			token: 'token',
+			issuedAt: '',
+			researcher: {
+				id: 'r1',
+				name: 'Alice',
+				email: 'a@b.test',
+				role: 'researcher',
+				createdAt: '',
+			},
+		})
+		clear()
+		expect(localStorage.getItem('p13-researcher-session')).toBeNull()
+		expect(getSession()).toBeNull()
+	})
+})
 
 describe("authenticated AI transport", () => {
   beforeEach(() => {

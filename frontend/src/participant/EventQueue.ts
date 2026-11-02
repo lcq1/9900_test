@@ -10,18 +10,27 @@
  */
 
 export type ParticipantEventType =
-  | 'stage_view'
-  | 'answer'
-  | 'ai_prompt'
-  | 'ai_reply'
-  | 'copy'
-  | 'paste'
-  | 'recording_start'
-  | 'recording_stop'
-  | 'timer_tick'
-  | 'timer_milestone'
-  | 'navigation'
-  | 'abort'
+	| 'fullscreen_enter'
+	| 'fullscreen_exit'
+	| 'stage_view'
+	| 'answer'
+	| 'ai_prompt'
+	| 'ai_reply'
+	| 'ai_error'
+	| 'copy'
+	| 'paste'
+	| 'recording_start'
+	| 'recording_stop'
+	| 'timer_tick'
+	| 'timer_milestone'
+	| 'navigation'
+	| 'abort'
+	| 'pause'
+	| 'resume'
+	| 'consent'
+	| 'stage_exit'
+	| 'clock_sync'
+	| 'recording_media'
 
 export interface ParticipantEvent {
   /** Monotonic sequence number within the session. */
@@ -56,87 +65,100 @@ export function preciseNow(): {
 
 /** In-memory, localStorage-persisted queue of participant events. */
 export class EventQueue {
-  private readonly sessionId: string
-  private events: ParticipantEvent[] = []
-  private seq = 0
+	private readonly sessionId: string
+	private events: ParticipantEvent[] = []
+	private seq = 0
+	private offsetMs = 0
 
-  constructor(sessionId: string) {
-    this.sessionId = sessionId
-    this.load()
-  }
+	setClock(serverEpochMs: number, sent: number, received: number): void {
+		this.offsetMs = serverEpochMs - (sent + received) / 2
+		this.record('clock_sync', {
+			offsetMs: this.offsetMs,
+			roundTripMs: received - sent,
+			uncertaintyMs: (received - sent) / 2,
+		})
+	}
 
-  private storageKey(): string {
-    return `p13-events:${this.sessionId}`
-  }
+	constructor(sessionId: string) {
+		this.sessionId = sessionId
+		this.load()
+	}
 
-  private load(): void {
-    const raw = localStorage.getItem(this.storageKey())
-    if (!raw) return
-    try {
-      const parsed = JSON.parse(raw) as {
-        events?: ParticipantEvent[]
-        seq?: number
-      }
-      this.events = Array.isArray(parsed.events) ? parsed.events : []
-      this.seq = parsed.seq ?? this.events.length
-    } catch {
-      this.events = []
-      this.seq = 0
-    }
-  }
+	private storageKey(): string {
+		return `p13-events:${this.sessionId}`
+	}
 
-  private save(): void {
-    localStorage.setItem(
-      this.storageKey(),
-      JSON.stringify({ events: this.events, seq: this.seq }),
-    )
-  }
+	private load(): void {
+		const raw = localStorage.getItem(this.storageKey())
+		if (!raw) return
+		try {
+			const parsed = JSON.parse(raw) as {
+				events?: ParticipantEvent[]
+				seq?: number
+			}
+			this.events = Array.isArray(parsed.events) ? parsed.events : []
+			this.seq = parsed.seq ?? this.events.length
+		} catch {
+			this.events = []
+			this.seq = 0
+		}
+	}
 
-  /** Record a single event and persist it. */
-  record(
-    type: ParticipantEventType,
-    detail?: Record<string, unknown>,
-    stageId?: string,
-  ): ParticipantEvent {
-    const { timestamp, epochMs, perfMs } = preciseNow()
-    const event: ParticipantEvent = {
-      seq: this.seq++,
-      type,
-      timestamp,
-      epochMs,
-      perfMs,
-    }
-    if (stageId !== undefined) event.stageId = stageId
-    if (detail !== undefined) event.detail = detail
-    this.events.push(event)
-    this.save()
-    return event
-  }
+	private save(): void {
+		localStorage.setItem(
+			this.storageKey(),
+			JSON.stringify({ events: this.events, seq: this.seq }),
+		)
+	}
 
-  /** All recorded events (defensive copy). */
-  all(): ParticipantEvent[] {
-    return [...this.events]
-  }
+	/** Record a single event and persist it. */
+	record(
+		type: ParticipantEventType,
+		detail?: Record<string, unknown>,
+		stageId?: string,
+	): ParticipantEvent {
+		const now = preciseNow()
+		const epochMs = now.epochMs + this.offsetMs
+		const timestamp = new Date(epochMs).toISOString()
+		const perfMs = now.perfMs
+		const event: ParticipantEvent = {
+			seq: this.seq++,
+			type,
+			timestamp,
+			epochMs,
+			perfMs,
+		}
+		if (stageId !== undefined) event.stageId = stageId
+		if (detail !== undefined) event.detail = detail
+		this.events.push(event)
+		this.save()
+		return event
+	}
 
-  /** Number of recorded events. */
-  count(): number {
-    return this.events.length
-  }
+	/** All recorded events (defensive copy). */
+	all(): ParticipantEvent[] {
+		return [...this.events]
+	}
 
-  /** Empty the queue. */
-  clear(): void {
-    this.events = []
-    this.seq = 0
-    this.save()
-  }
+	/** Number of recorded events. */
+	count(): number {
+		return this.events.length
+	}
 
-  /** Export a precise event timeline (Plan.md requirement) as pretty JSON. */
-  exportJson(): string {
-    const snapshot: EventQueueSnapshot = {
-      sessionId: this.sessionId,
-      exportedAt: new Date().toISOString(),
-      events: this.all(),
-    }
-    return JSON.stringify(snapshot, null, 2)
-  }
+	/** Empty the queue. */
+	clear(): void {
+		this.events = []
+		this.seq = 0
+		this.save()
+	}
+
+	/** Export a precise event timeline (Plan.md requirement) as pretty JSON. */
+	exportJson(): string {
+		const snapshot: EventQueueSnapshot = {
+			sessionId: this.sessionId,
+			exportedAt: new Date().toISOString(),
+			events: this.all(),
+		}
+		return JSON.stringify(snapshot, null, 2)
+	}
 }

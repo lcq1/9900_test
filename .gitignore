@@ -12,6 +12,9 @@ dist/
 backend/static/
 *.tsbuildinfo
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+storage/
 .coverage*
 htmlcov/
 logs/

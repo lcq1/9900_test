@@ -31,6 +31,12 @@ export type Stage = {
 	components: StageComponent[]
 	features: Record<FeatureKey, boolean>
 	countdownMinutes: number
+	requiredFeatures?: Partial<
+		Record<'questionnaire' | 'signatureBox' | 'attachment', boolean>
+	>
+	recordingRequired?: boolean
+	recordingMode?: 'manual' | 'auto'
+	materials?: { id: string; name: string; reference: string }[]
 }
 // Experiment metadata, status, fullscreen mode, and ordered stages.
 export type Experiment = {

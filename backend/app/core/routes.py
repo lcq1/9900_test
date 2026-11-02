@@ -17,3 +17,9 @@ def root() -> dict[str, str]:
 def healthz() -> dict[str, str]:
     """Liveness probe."""
     return {"status": "ok"}
+
+
+@router.get("/time")
+def server_time():
+    from app.participant.time_sync import anchor
+    return anchor()

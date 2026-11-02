@@ -59,7 +59,7 @@ def add_answers(db: Session, answers: list[Answer]) -> None:
 def get_events(db: Session, session_id: str) -> list[ParticipantEvent]:
     return (
         db.query(ParticipantEvent)
-        .filter(ParticipantEvent.session_id == session_id)
+        .filter(ParticipantEvent.session_id == session_id, ~ParticipantEvent.type.startswith("server."))
         .order_by(ParticipantEvent.seq)
         .all()
     )

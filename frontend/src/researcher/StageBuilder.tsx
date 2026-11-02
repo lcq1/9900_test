@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { type Experiment, stageTypeLabel } from '../types'
-import { GripVertical, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
+import { GripVertical, Plus, Trash2 } from 'lucide-react'
 
-// Manage up to 20 stages with drag/button reordering; retain at least one stage.
+// Manage up to 20 stages using an accessible drag handle.
 export function StageBuilder({
 	experiment,
 	selectedStageId,
@@ -23,14 +23,18 @@ export function StageBuilder({
 	// Track the highlighted drop target.
 	const [dragOverId, setDragOverId] = useState<string | null>(null)
 
-	// Render the current view.
 	return (
 		<aside className="stage-panel">
 			<div className="panel-heading">
 				<span>
 					STAGES <b>{stages.length}</b>
 				</span>
-				<button className="icon-button" title="Add stage" onClick={onAddStage} disabled={isMax}>
+				<button
+					className="icon-button"
+					title="Add stage"
+					onClick={onAddStage}
+					disabled={isMax}
+				>
 					<Plus size={16} />
 				</button>
 			</div>
@@ -38,12 +42,13 @@ export function StageBuilder({
 			<div className="stage-list">
 				{stages.map((item, index) => {
 					// Determine stage position and drop state.
-					const isLast = index === stages.length - 1
 					const isDropTarget = dragOverId === item.id
 					return (
 						<div
 							className={
-								(item.id === selectedStageId ? 'stage-item selected' : 'stage-item') +
+								(item.id === selectedStageId
+									? 'stage-item selected'
+									: 'stage-item') +
 								(isDropTarget ? ' drop-target' : '')
 							}
 							key={item.id}
@@ -53,28 +58,65 @@ export function StageBuilder({
 								event.preventDefault()
 								setDragOverId(item.id)
 							}}
-							onDragLeave={() => setDragOverId((current) => (current === item.id ? null : current))}
+							onDragLeave={() =>
+								setDragOverId((current) =>
+									current === item.id ? null : current,
+								)
+							}
 							onDrop={(event) => {
 								// Read the drag source and reorder valid indices.
 								event.preventDefault()
 								setDragOverId(null)
-								const from = Number(event.dataTransfer.getData('text/plain'))
+								const from = Number(
+									event.dataTransfer.getData('text/plain'),
+								)
 								if (!Number.isInteger(from)) return
-								if (from <= 0 || index === 0 || from >= stages.length) return
+								if (
+									from <= 0 ||
+									index === 0 ||
+									from >= stages.length
+								)
+									return
 								if (from !== index) onReorderStages(from, index)
 							}}
 						>
-							<span className="stage-number">{String(index + 1).padStart(2, '0')}</span>
+							<span className="stage-number">
+								{String(index + 1).padStart(2, '0')}
+							</span>
 							<span className="stage-name-wrap">
-								<strong>{item.name}</strong>
+								<strong title={item.name}>{item.name}</strong>
 								<small>{stageTypeLabel(item.type)}</small>
 							</span>
 							<span
 								className="grip"
+								role="button"
+								tabIndex={index > 0 ? 0 : -1}
+								aria-label={`Reorder ${item.name}`}
+								title="Drag to reorder; use Alt + arrow keys with the keyboard"
+								onKeyDown={(event) => {
+									if (!event.altKey || index === 0) return
+									const target =
+										event.key === 'ArrowUp'
+											? index - 1
+											: event.key === 'ArrowDown'
+												? index + 1
+												: index
+									if (
+										target > 0 &&
+										target < stages.length &&
+										target !== index
+									) {
+										event.preventDefault()
+										onReorderStages(index, target)
+									}
+								}}
 								draggable={index > 0}
 								onDragStart={(event) => {
 									// Store the stage index and mark the drag as a move.
-									event.dataTransfer.setData('text/plain', String(index))
+									event.dataTransfer.setData(
+										'text/plain',
+										String(index),
+									)
 									event.dataTransfer.effectAllowed = 'move'
 								}}
 								onDragEnd={() => setDragOverId(null)}
@@ -83,32 +125,6 @@ export function StageBuilder({
 							</span>
 							{/* Move and delete controls based on stage position. */}
 							<span className="stage-controls">
-								{index > 1 && (
-									<button
-										className="icon-button"
-										title="Move up"
-										onClick={(event) => {
-											// Stop stage selection and move the stage up.
-											event.stopPropagation()
-											onReorderStages(index, index - 1)
-										}}
-									>
-										<ArrowUp size={14} />
-									</button>
-								)}
-								{index > 0 && !isLast && (
-									<button
-										className="icon-button"
-										title="Move down"
-										onClick={(event) => {
-											// Stop stage selection and move the stage down.
-											event.stopPropagation()
-											onReorderStages(index, index + 1)
-										}}
-									>
-										<ArrowDown size={14} />
-									</button>
-								)}
 								{index > 0 && stages.length > 1 && (
 									<button
 										className="icon-button danger"

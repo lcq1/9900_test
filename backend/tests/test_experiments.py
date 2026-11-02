@@ -40,8 +40,10 @@ def test_experiment_crud_roundtrip(client, auth_headers):
         json={"status": "Live", "fullScreen": True},
         headers=auth_headers,
     )
+    assert r.status_code == 422
+    r = client.patch(f"/api/experiments/{exp_id}", json={"fullScreen": True}, headers=auth_headers)
     assert r.status_code == 200
-    assert r.json()["status"] == "Live"
+    assert r.json()["status"] == "Draft"
     assert r.json()["fullScreen"] is True
 
     r = client.delete(f"/api/experiments/{exp_id}", headers=auth_headers)
@@ -214,3 +216,60 @@ def test_full_session_and_editor_extensions_survive(
         f'/api/experiments/{experiment["id"]}/results/summary', headers=auth_headers
     ).json()
     assert summary == {"completed_count": 0, "incomplete_count": 1}
+
+
+
+def test_unpublish_pauses_participation_and_republish_keeps_history(client, auth_headers):
+    from uuid import uuid4
+    from app.core import database
+    from app.researcher.models import Experiment
+    from app.researcher import repository as versions
+    stages = [{"id": "consent", "name": "Consent", "type": "consent", "components": [{"id": "intro", "type": "text", "label": "Consent text"}]},
+              {"id": "task", "name": "Task", "type": "short_answer", "components": [{"id": "answer", "type": "textbox", "label": "Answer"}]}]
+    experiment = _create(client, auth_headers, stages=stages).json()
+    path = f"/api/experiments/{experiment['id']}"
+    assert client.patch(path, headers=auth_headers, json={"publish": True, "publishRequestId": str(uuid4())}).json()["status"] == "Live"
+    login = {"experimentCode": experiment["code"], "participantCode": "P001"}
+    access = client.post("/api/participant/access", json=login).json()
+    actor = {"X-Participant-Token": access["token"]}
+    sid = str(uuid4())
+    assert client.post("/api/participant/sessions/start", headers=actor, json={**login, "sessionId": sid}).status_code == 200
+    response = client.patch(path, headers=auth_headers, json={"status": "Draft", "publish": False})
+    assert response.status_code == 200 and response.json()["status"] == "Draft"
+    assert client.post("/api/participant/access", json=login).status_code == 403
+    assert client.get("/api/ai/config", headers=actor).status_code == 403
+    with database.SessionLocal() as db:
+        assert len(versions.published_versions(db, db.get(Experiment, experiment["id"]))) == 1
+    assert client.patch(path, headers=auth_headers, json={"publish": True, "publishRequestId": str(uuid4())}).json()["status"] == "Live"
+    assert client.post("/api/participant/access", json=login).status_code == 200
+    with database.SessionLocal() as db:
+        assert [e.detail["version"] for e in versions.published_versions(db, db.get(Experiment, experiment["id"]))] == [1, 2]
+        from app.participant.models import ParticipantSession
+        assert db.get(ParticipantSession, sid) is not None
+
+
+
+def test_editing_live_experiment_requires_manual_republication(client, auth_headers):
+    from uuid import uuid4
+    from tests.test_admin_export import published_stages
+    from app.core import database
+    from app.researcher.models import Experiment
+    from app.researcher import repository as versions
+    experiment = _create(client, auth_headers, stages=published_stages()).json()
+    path = f"/api/experiments/{experiment['id']}"
+    publish = lambda: client.patch(path, headers=auth_headers, json={"publish": True, "publishRequestId": str(uuid4())})
+    assert publish().json()["status"] == "Live"
+    assert client.patch(path, headers=auth_headers, json={"name": experiment["name"]}).json()["status"] == "Live"
+    changed = client.patch(path, headers=auth_headers, json={"name": "Changed", "status": "Live"})
+    assert changed.status_code == 200 and changed.json()["status"] == "Draft"
+    assert client.patch(path, headers=auth_headers, json={"status": "Live"}).status_code == 422
+    # An unfinished draft can be saved without satisfying publication rules.
+    assert client.patch(path, headers=auth_headers, json={"stages": []}).status_code == 200
+    assert publish().status_code == 422
+    assert client.patch(path, headers=auth_headers, json={"stages": published_stages()}).status_code == 200
+    assert publish().json()["status"] == "Live"
+    assert client.patch(path, headers=auth_headers, json={"fullScreen": True}).json()["status"] == "Draft"
+    assert publish().json()["status"] == "Live"
+    assert client.patch(path, headers=auth_headers, json={"stages": published_stages("Changed question")}).json()["status"] == "Draft"
+    with database.SessionLocal() as db:
+        assert len(versions.published_versions(db, db.get(Experiment, experiment["id"]))) == 3

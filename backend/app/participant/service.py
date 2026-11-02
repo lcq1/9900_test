@@ -9,7 +9,7 @@ from app.participant import events as event_helpers
 from app.participant import repository as repo
 from app.participant import ai_proxy
 from contextlib import aclosing
-from app.participant.models import Answer, ParticipantEvent
+from app.participant.models import Answer, ParticipantEvent, ParticipantSession
 from app.participant.schemas import (
     ParticipantAnswer,
     ParticipantEvent as ParticipantEventSchema,
@@ -63,23 +63,81 @@ def lookup_experiment(db: Session, code: str, participant: str) -> Experiment:
     return experiment
 
 
+def validate_stage(stage: dict, answers: list, recording: dict):
+    values = {a.component_id: a.value for a in answers}
+    missing = []
+    if (stage.get("type", "").lower() != "consent"
+            and stage.get("features", {}).get("screenRecording")
+            and recording.get("screen") is not True):
+        missing.append("Screen recording")
+    required = stage.get("requiredFeatures", {})
+    for component in stage.get("components", []):
+        kind = component["type"]
+        if kind in ("text", "button"):
+            continue
+        feature = "signatureBox" if kind == "signature" else "attachment" if kind == "attachment" else "questionnaire"
+        value = values.get(component["id"], "")
+        if required.get(feature, component.get("required", False)) and not (value.strip() if isinstance(value, str) else value):
+            missing.append(component["label"])
+    if stage.get("recordingRequired") and not all(recording.get(k) is True for k in ("self", "screen")):
+        missing.append("Screen and camera recording")
+    if missing:
+        raise HTTPException(status_code=422, detail="Required: " + ", ".join(missing))
+
+
 def submit_session(
     db: Session, payload: ParticipantSessionSubmit
 ) -> ParticipantSessionResult:
-    session_id = gen_uuid()
-    started_at = clock.now_iso()
+    by_sequence = {}
+    for event in payload.events:
+        previous = by_sequence.get(event.seq)
+        if previous is not None and previous != event:
+            raise HTTPException(status_code=422, detail="Conflicting event sequence")
+        by_sequence[event.seq] = event
+    payload.events = [by_sequence[key] for key in sorted(by_sequence)]
+    from app.researcher import repository as versions
+    experiment = lookup_experiment(db, payload.experiment_code, payload.participant_code)
+    if payload.session_id:
+        experiment = versions.session_experiment(db, payload.session_id, experiment, payload.participant_code)
+    if payload.finished_at:
+        for stage in experiment.stages:
+            if stage.get("type", "").lower() == "consent" and not any(event.stage_id == stage["id"] and event.type == "consent" and (event.detail or {}).get("accepted") is True for event in payload.events):
+                raise HTTPException(status_code=422, detail="Consent is required to finish the experiment")
+            recording = {}
+            for event in payload.events:
+                if event.stage_id == stage["id"] and event.type in ("recording_start", "recording_stop", "navigation"):
+                    detail = event.detail or {}
+                    if event.type == "navigation":
+                        recording = detail.get("recording", recording)
+                        break
+                    recording[detail.get("kind")] = event.type == "recording_start" and detail.get("status") == "active"
+            validate_stage(stage, payload.answers, recording)
+    existing = db.query(ParticipantSession).filter_by(id=str(payload.session_id)).with_for_update().first() if payload.session_id else None
+    if payload.session_id and (existing is None or existing.experiment_code != payload.experiment_code or existing.participant_code != payload.participant_code):
+        raise HTTPException(status_code=404, detail="Session not found")
+    if existing and existing.finished_at and not payload.finished_at:
+        raise HTTPException(status_code=409, detail="Completed session cannot be reopened")
+    session_id = existing.id if existing else gen_uuid()
+    started_at = existing.started_at if existing else clock.now_iso()
+    if existing:
+        existing.finished_at = payload.finished_at
+        db.query(ParticipantEvent).filter(ParticipantEvent.session_id == session_id, ParticipantEvent.type != "recording_media", ~ParticipantEvent.type.startswith("server.")).delete()
+        db.query(Answer).filter_by(session_id=session_id).delete()
+    else:
+        db.add(ParticipantSession(
+            id=session_id,
+            experiment_code=payload.experiment_code,
+            participant_code=payload.participant_code,
+            started_at=started_at,
+            finished_at=payload.finished_at,
+        ))
 
-    repo.create_session(
-        db,
-        id=session_id,
-        experiment_code=payload.experiment_code,
-        participant_code=payload.participant_code,
-        started_at=started_at,
-        finished_at=payload.finished_at,
-    )
-
-    orm_events = [event_helpers.make_event_orm(session_id, ev) for ev in payload.events]
-    repo.add_events(db, orm_events)
+    if not existing:
+        db.flush()
+        created_session = db.get(ParticipantSession, session_id)
+        versions.bind_version(db, created_session, experiment)
+    orm_events = [event_helpers.make_event_orm(session_id, ev) for ev in payload.events if ev.type != "recording_media"]
+    db.add_all(orm_events)
 
     orm_answers = [
         Answer(
@@ -89,7 +147,8 @@ def submit_session(
         )
         for answer in payload.answers
     ]
-    repo.add_answers(db, orm_answers)
+    db.add_all(orm_answers)
+    db.commit()
 
     return _build_result(
         session_id=session_id,

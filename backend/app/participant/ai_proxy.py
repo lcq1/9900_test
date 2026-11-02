@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import aclosing
 from dataclasses import dataclass
+from typing import Protocol
 import json
 
 import httpx
@@ -19,6 +21,73 @@ class ChatReply:
     model: str
 
 
+class ChatProvider(Protocol):
+    def validate(self, key: str) -> None: ...
+    async def chat(self, client: httpx.AsyncClient, key: str, payload: dict) -> ChatReply: ...
+    def stream(self, key: str, payload: dict) -> AsyncIterator[dict]: ...
+    def error(self, exc: Exception) -> HTTPException: ...
+
+
+class OpenAICompatibleProvider:
+    def validate(self, key: str) -> None:
+        pass
+
+    def headers(self, key: str) -> dict:
+        return {"Authorization": f"Bearer {key}"}
+
+    def streaming_payload(self, payload: dict) -> dict:
+        return {**payload, "stream": True}
+
+    async def chat(self, client: httpx.AsyncClient, key: str, payload: dict) -> ChatReply:
+        return await _api_key_chat(client, key, payload)
+
+    def stream(self, key: str, payload: dict) -> AsyncIterator[dict]:
+        return _stream_completion(self, key, payload)
+
+    def error(self, exc: Exception) -> HTTPException:
+        return HTTPException(status_code=502, detail="The AI provider request failed. Please retry.")
+
+
+class WorkBuddyProvider(OpenAICompatibleProvider):
+    def validate(self, key: str) -> None:
+        if not key.startswith("wbpk_"):
+            raise HTTPException(status_code=503, detail="WorkBuddy requires its application's wbpk_ publishable key in AI_API_KEY.")
+
+    def headers(self, key: str) -> dict:
+        return {"x-wb-webapp-access-key": key}
+
+    def streaming_payload(self, payload: dict) -> dict:
+        return {**super().streaming_payload(payload), "stream_options": {"include_usage": True}}
+
+    async def chat(self, client: httpx.AsyncClient, key: str, payload: dict) -> ChatReply:
+        return await _workbuddy_chat(client, key, payload)
+
+    def error(self, exc: Exception) -> HTTPException:
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (401, 403):
+            return HTTPException(status_code=503, detail="WorkBuddy rejected server access. Check the application key and cloud access settings.")
+        return super().error(exc)
+
+
+PROVIDERS: dict[str, ChatProvider] = {}
+
+
+def register_provider(name: str, provider: ChatProvider) -> None:
+    if not name or len(name) > 32 or name != name.strip() or name in PROVIDERS:
+        raise ValueError("Provider names must be unique and contain 1–32 characters")
+    PROVIDERS[name] = provider
+
+
+def get_provider() -> ChatProvider:
+    provider = PROVIDERS.get(settings.ai_provider)
+    if provider is None:
+        raise HTTPException(status_code=503, detail="The AI provider is not registered. Please contact the researcher.")
+    return provider
+
+
+register_provider("openai_compatible", OpenAICompatibleProvider())
+register_provider("workbuddy", WorkBuddyProvider())
+
+
 async def chat(
     message: str,
     history: list[dict] | None = None,
@@ -29,9 +98,7 @@ async def chat(
 
     try:
         async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
-            if settings.ai_provider == "workbuddy":
-                return await _workbuddy_chat(client, key, payload)
-            return await _api_key_chat(client, key, payload)
+            return await get_provider().chat(client, key, payload)
     except (
         httpx.HTTPError,
         ValueError,
@@ -51,11 +118,7 @@ def validate_configuration() -> str:
             status_code=503,
             detail="The AI provider is not configured. Please contact the researcher.",
         )
-    if settings.ai_provider == "workbuddy" and not key.startswith("wbpk_"):
-        raise HTTPException(
-            status_code=503,
-            detail="WorkBuddy requires its application's wbpk_ publishable key in AI_API_KEY.",
-        )
+    get_provider().validate(key)
 
     return key
 
@@ -94,19 +157,8 @@ def make_payload(message: str, history: list[dict] | None = None) -> dict:
 
 
 def provider_error(exc: Exception) -> HTTPException:
-    # Never include upstream bodies, URLs or credentials in client errors.
-    if (
-        settings.ai_provider == "workbuddy"
-        and isinstance(exc, httpx.HTTPStatusError)
-        and exc.response.status_code in (401, 403)
-    ):
-        return HTTPException(
-            status_code=503,
-            detail="WorkBuddy rejected server access. Check the application key and cloud access settings.",
-        )
-    return HTTPException(
-        status_code=502, detail="The AI provider request failed. Please retry."
-    )
+    # Adapters must return sanitized errors without upstream bodies or credentials.
+    return get_provider().error(exc)
 
 
 async def stream_chat(
@@ -120,14 +172,18 @@ async def stream_chat(
         yield {"type": "delta", "text": reply.content, "model": reply.model}
         yield {"type": "done", "model": reply.model}
         return
-    headers = (
-        {"x-wb-webapp-access-key": key}
-        if settings.ai_provider == "workbuddy"
-        else {"Authorization": f"Bearer {key}"}
-    )
-    payload["stream"] = True
-    if settings.ai_provider == "workbuddy":
-        payload["stream_options"] = {"include_usage": True}
+    provider = get_provider()
+    try:
+        async with aclosing(provider.stream(key, payload)) as source:
+            async for event in source:
+                yield event
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
+        raise provider.error(exc) from exc
+
+
+async def _stream_completion(provider: OpenAICompatibleProvider, key: str, payload: dict) -> AsyncIterator[dict]:
+    headers = provider.headers(key)
+    payload = provider.streaming_payload(payload)
     model, has_text, finished = settings.ai_model, False, False
     try:
         async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
@@ -158,16 +214,10 @@ async def stream_chat(
                     if "error" in chunk:
                         raise ValueError("Provider stream error")
                     model = _model_name(chunk, model)
-                    for choice in chunk.get("choices", []):
-                        if choice.get("index", 0) != 0:
-                            continue
-                        text = choice.get("delta", {}).get("content")
-                        if text is not None:
-                            if not isinstance(text, str):
-                                raise ValueError("Invalid text delta")
-                            if text:
-                                has_text = True
-                                yield {"type": "delta", "text": text, "model": model}
+                    for text in _text_deltas(chunk, "Invalid text delta"):
+                        if text:
+                            has_text = True
+                            yield {"type": "delta", "text": text, "model": model}
         if not finished or not has_text:
             raise ValueError("Incomplete or empty reply")
         yield {"type": "done", "model": model}
@@ -229,19 +279,23 @@ async def _workbuddy_chat(
             if "error" in chunk:
                 raise ValueError("WorkBuddy stream error")
             model = _model_name(chunk, model)
-            # Usage-only chunks can have an empty choices array.
-            for choice in chunk.get("choices", []):
-                if choice.get("index", 0) != 0:
-                    continue
-                text = choice.get("delta", {}).get("content")
-                if text is not None:
-                    if not isinstance(text, str):
-                        raise ValueError("Invalid assistant text")
-                    parts.append(text)
+            parts.extend(_text_deltas(chunk, "Invalid assistant text"))
         content = "".join(parts)
         if not finished or not content.strip():
             raise ValueError("Incomplete or empty WorkBuddy reply")
         return ChatReply(content=content, model=model)
+
+
+def _text_deltas(chunk: dict, error_detail: str) -> Iterator[str]:
+    """Read the first choice; usage-only chunks may contain no choices."""
+    for choice in chunk.get("choices", []):
+        if choice.get("index", 0) != 0:
+            continue
+        text = choice.get("delta", {}).get("content")
+        if text is not None:
+            if not isinstance(text, str):
+                raise ValueError(error_detail)
+            yield text
 
 
 async def _sse_events(response: httpx.Response) -> AsyncIterator[tuple[str, str]]:

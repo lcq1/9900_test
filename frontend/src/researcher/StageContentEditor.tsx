@@ -1,3 +1,6 @@
+import { useTransientNotice } from '../participant/TimerController'
+import { useState } from 'react'
+import { http, downloadFile } from '../api/http'
 import { type Stage, type ComponentType, type StageComponent, STAGE_TYPES } from '../types'
 import {
 	Type,
@@ -25,18 +28,65 @@ const QUICK_ADD: { type: ComponentType; label: string; icon: typeof Plus }[] = [
 // Edit stage content; normalize choice options when the stage type changes.
 export function StageContentEditor({
 	stage,
+	experimentId,
 	onUpdateStage,
 }: {
 	stage: Stage
+	experimentId?: string
 	onUpdateStage: (update: (s: Stage) => Stage) => void
 }) {
+	const [
+		materialError,
+		setMaterialError,
+		materialErrorVisible,
+		materialErrorRevision,
+	] = useTransientNotice('')
+	const [deletingMaterial, setDeletingMaterial] = useState<string | null>(
+		null,
+	)
+	const deleteMaterial = async (materialId: string) => {
+		if (deletingMaterial || !experimentId) return
+		const sourceStage = stage.id
+		setDeletingMaterial(materialId)
+		setMaterialError('')
+		try {
+			await http.del(
+				`/experiments/${experimentId}/stages/${sourceStage}/materials/${materialId}`,
+			)
+			onUpdateStage((current) =>
+				current.id === sourceStage
+					? {
+							...current,
+							materials: (current.materials ?? []).filter(
+								(item) => item.id !== materialId,
+							),
+						}
+					: current,
+			)
+		} catch (error) {
+			setMaterialError(
+				error instanceof Error
+					? error.message
+					: 'Delete failed. Please retry.',
+			)
+		} finally {
+			setDeletingMaterial(null)
+		}
+	}
 	// Replace components through the stage update callback.
-	const updateComponents = (fn: (components: StageComponent[]) => StageComponent[]) =>
-		onUpdateStage((current) => ({ ...current, components: fn(current.components) }))
+	const updateComponents = (
+		fn: (components: StageComponent[]) => StageComponent[],
+	) =>
+		onUpdateStage((current) => ({
+			...current,
+			components: fn(current.components),
+		}))
 
 	// Update the component label.
 	const setLabel = (id: string, label: string) =>
-		updateComponents((comps) => comps.map((c) => (c.id === id ? { ...c, label } : c)))
+		updateComponents((comps) =>
+			comps.map((c) => (c.id === id ? { ...c, label } : c)),
+		)
 
 	// Remove the content component.
 	const removeComponent = (id: string) =>
@@ -49,7 +99,10 @@ export function StageContentEditor({
 				c.id === id
 					? {
 							...c,
-							options: (c.options ?? []).length < 6 ? [...(c.options ?? []), ''] : c.options,
+							options:
+								(c.options ?? []).length < 6
+									? [...(c.options ?? []), '']
+									: c.options,
 						}
 					: c,
 			),
@@ -60,7 +113,12 @@ export function StageContentEditor({
 		updateComponents((comps) =>
 			comps.map((c) =>
 				c.id === id
-					? { ...c, options: (c.options ?? []).map((o, i) => (i === index ? value : o)) }
+					? {
+							...c,
+							options: (c.options ?? []).map((o, i) =>
+								i === index ? value : o,
+							),
+						}
 					: c,
 			),
 		)
@@ -70,7 +128,12 @@ export function StageContentEditor({
 		updateComponents((comps) =>
 			comps.map((c) =>
 				c.id === id && (c.options ?? []).length > 2
-					? { ...c, options: (c.options ?? []).filter((_, i) => i !== index) }
+					? {
+							...c,
+							options: (c.options ?? []).filter(
+								(_, i) => i !== index,
+							),
+						}
 					: c,
 			),
 		)
@@ -92,38 +155,154 @@ export function StageContentEditor({
 				// Keep valid options or create two empty choices.
 				comps = ensureChoice(comps, ['', '']).map((c) =>
 					c.type === 'choice' || c.type === 'checkbox'
-						? { ...c, type: type === 'multiple_choice' ? 'checkbox' : 'choice' }
+						? {
+								...c,
+								type:
+									type === 'multiple_choice'
+										? 'checkbox'
+										: 'choice',
+							}
 						: c,
 				)
 			} else if (type === 'fill_blank' || type === 'short_answer') {
 				// Remove choice options for fill-in and short-answer stages.
 				comps = comps.map((c) =>
-					c.type === 'choice' || c.type === 'checkbox' ? { ...c, options: undefined } : c,
+					c.type === 'choice' || c.type === 'checkbox'
+						? { ...c, options: undefined }
+						: c,
 				)
 			}
 			return { ...current, type, components: comps }
 		})
 	}
 
-	// Render the current view.
 	return (
 		<div className="canvas-wrap">
+			{experimentId && stage.type.toLowerCase() !== 'consent' && (
+				<section className="settings-card">
+					<label>
+						Study materials (save the stage first, maximum 10 MB)
+						<input
+							type="file"
+							disabled={deletingMaterial !== null}
+							accept=".pdf,.txt,.png,.jpg,.jpeg,.docx"
+							onChange={(event) => {
+								const input = event.currentTarget
+								const file = event.target.files?.[0]
+								if (!file) return
+								if (file.size > 10 * 1024 * 1024) {
+									setMaterialError(
+										'Maximum material size is 10 MB.',
+									)
+									return
+								}
+								const sourceStage = stage.id
+								void http
+									.post<{
+										id: string
+										name: string
+										reference: string
+									}>(
+										`/experiments/${experimentId}/stages/${sourceStage}/materials?filename=${encodeURIComponent(file.name)}`,
+										file,
+									)
+									.then((material) => {
+										onUpdateStage((current) =>
+											current.id === sourceStage
+												? {
+														...current,
+														materials: [
+															...(current.materials ??
+																[]),
+															material,
+														],
+													}
+												: current,
+										)
+										setMaterialError('')
+									})
+									.catch(() =>
+										setMaterialError(
+											'Upload failed. Save this draft stage and check the file and storage location.',
+										),
+									)
+									.finally(() => {
+										input.value = ''
+									})
+							}}
+						/>
+					</label>
+					{stage.materials?.map((material) => (
+						<div
+							key={material.id}
+							style={{
+								display: 'flex',
+								alignItems: 'center',
+								gap: 8,
+							}}
+						>
+							<button
+								type="button"
+								className="secondary-button"
+								style={{ flex: 1 }}
+								onClick={() =>
+									void downloadFile(
+										`/experiments/${experimentId}/stages/${stage.id}/materials/${material.id}`,
+										material.name,
+									).catch(() =>
+										setMaterialError('Download failed.'),
+									)
+								}
+							>
+								{material.name}
+							</button>
+							<button
+								type="button"
+								className="secondary-button"
+								aria-label={`Delete ${material.name}`}
+								disabled={deletingMaterial !== null}
+								onClick={() => void deleteMaterial(material.id)}
+							>
+								{deletingMaterial === material.id
+									? 'Deleting…'
+									: 'Delete'}
+							</button>
+						</div>
+					))}
+					{materialError && materialErrorVisible && (
+						<p
+							key={materialErrorRevision}
+							className="entry-error transient-notice"
+							role="alert"
+						>
+							{materialError}
+						</p>
+					)}
+				</section>
+			)}
 			<div className="canvas-toolbar">
 				<span>
 					<span className="live-dot" /> Stage content
 				</span>
-				<span className="canvas-hint">Edit the stage name, type and components</span>
+				<span className="canvas-hint">
+					Edit the stage name, type and components
+				</span>
 			</div>
 			<div className="builder-canvas">
 				<div className="canvas-paper">
 					{/* Stage type and editable name. */}
 					<div className="paper-header">
-						<span className="section-tag">{stage.type.toUpperCase()}</span>
+						<span className="section-tag">
+							{stage.type.toUpperCase()}
+						</span>
 						<input
 							className="stage-name"
 							value={stage.name}
 							onChange={(event) =>
-								onUpdateStage((current) => ({ ...current, name: event.target.value }))
+								onUpdateStage((current) => ({
+									...current,
+									name: event.target.value,
+								}))
 							}
 							placeholder="Untitled stage"
 							aria-label="Stage name"
@@ -131,20 +310,26 @@ export function StageContentEditor({
 					</div>
 
 					{/* Stage type selection and option defaults. */}
-					<div className="content-field">
-						<label className="content-label">Stage type</label>
-						<select
-							className="type-select"
-							value={stage.type}
-							onChange={(event) => onTypeChange(event.target.value)}
-						>
-							{STAGE_TYPES.map((t) => (
-								<option key={t.type} value={t.type}>
-									{t.label}
-								</option>
-							))}
-						</select>
-					</div>
+					{stage.type.toLowerCase() !== 'consent' && (
+						<div className="content-field">
+							<label className="content-label">Stage type</label>
+							<select
+								className="type-select"
+								value={stage.type}
+								onChange={(event) =>
+									onTypeChange(event.target.value)
+								}
+							>
+								{STAGE_TYPES.filter(
+									(t) => t.type !== 'consent',
+								).map((t) => (
+									<option key={t.type} value={t.type}>
+										{t.label}
+									</option>
+								))}
+							</select>
+						</div>
+					)}
 
 					{/* Stage components and choice options. */}
 					<div className="components-editor">
@@ -153,42 +338,96 @@ export function StageContentEditor({
 							<b>{stage.components.length}</b>
 						</div>
 						{stage.components.length === 0 && (
-							<div className="empty-components">No components yet. Add one below.</div>
+							<div className="empty-components">
+								No components yet. Add one below.
+							</div>
 						)}
 						{stage.components.map((component) => (
 							<div className="builder-block" key={component.id}>
 								<div className="block-top">
-									<span className="block-type">{component.type}</span>
-									<button className="block-delete" onClick={() => removeComponent(component.id)}>
+									<span className="block-type">
+										{component.type}
+									</span>
+									<button
+										className="block-delete"
+										onClick={() =>
+											removeComponent(component.id)
+										}
+									>
 										<X size={14} />
 									</button>
 								</div>
-								<input
-									className="component-label"
-									value={component.label}
-									onChange={(event) => setLabel(component.id, event.target.value)}
-									placeholder="Label"
-								/>
+								{stage.type === 'consent' &&
+								component.type === 'text' ? (
+									<textarea
+										className="component-label"
+										rows={4}
+										value={component.label}
+										onChange={(event) =>
+											setLabel(
+												component.id,
+												event.target.value,
+											)
+										}
+										placeholder="Consent text"
+										aria-label="Consent text"
+									/>
+								) : (
+									<input
+										className="component-label"
+										value={component.label}
+										onChange={(event) =>
+											setLabel(
+												component.id,
+												event.target.value,
+											)
+										}
+										placeholder="Label"
+									/>
+								)}
 								{/* Add, edit, and remove choice options. */}
-								{(component.type === 'choice' || component.type === 'checkbox') && (
+								{(component.type === 'choice' ||
+									component.type === 'checkbox') && (
 									<div className="options-editor">
-										{(component.options ?? []).map((option, i) => (
-											<div className="option-row" key={i}>
-												<input
-													className="option-input"
-													value={option}
-													onChange={(event) => setOption(component.id, i, event.target.value)}
-													placeholder={`Option ${i + 1}`}
-												/>
-												<button
-													className="icon-button"
-													onClick={() => removeOption(component.id, i)}
+										{(component.options ?? []).map(
+											(option, i) => (
+												<div
+													className="option-row"
+													key={i}
 												>
-													<X size={13} />
-												</button>
-											</div>
-										))}
-										<button className="add-option" onClick={() => addOption(component.id)}>
+													<input
+														className="option-input"
+														value={option}
+														onChange={(event) =>
+															setOption(
+																component.id,
+																i,
+																event.target
+																	.value,
+															)
+														}
+														placeholder={`Option ${i + 1}`}
+													/>
+													<button
+														className="icon-button"
+														onClick={() =>
+															removeOption(
+																component.id,
+																i,
+															)
+														}
+													>
+														<X size={13} />
+													</button>
+												</div>
+											),
+										)}
+										<button
+											className="add-option"
+											onClick={() =>
+												addOption(component.id)
+											}
+										>
 											<Plus size={13} /> Add option
 										</button>
 									</div>

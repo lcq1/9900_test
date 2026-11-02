@@ -1,4 +1,4 @@
-// Code-based participant entry and backend researcher/admin login.
+import { useTransientNotice } from '../participant/TimerController'// Code-based participant entry and backend researcher/admin login.
 import { useState } from 'react'
 import { ArrowRight, LogIn, Play, ShieldCheck, UserPlus, UserRound } from 'lucide-react'
 import * as auth from '../api/auth'
@@ -28,7 +28,8 @@ export function AuthScreen({
 	const [password, setPassword] = useState('')
 	const [experimentCode, setExperimentCode] = useState('')
 	const [participantCode, setParticipantCode] = useState('')
-	const [error, setError] = useState('')
+	const [error, setError, errorVisible, errorRevision] =
+		useTransientNotice('')
 	const [busy, setBusy] = useState(false)
 
 	// Validate and submit the form, then update session and request state.
@@ -39,7 +40,9 @@ export function AuthScreen({
 			// Validate participant codes and pass entry to the parent.
 			if (!experimentCode.trim() || !participantCode.trim()) {
 				// Require both access codes before submitting.
-				setError('Experiment code and participant code are both required.')
+				setError(
+					'Experiment code and participant code are both required.',
+				)
 				return
 			}
 			onParticipant(experimentCode.trim(), participantCode.trim())
@@ -69,14 +72,17 @@ export function AuthScreen({
 			onSignIn()
 		} catch (err) {
 			// Show the request error and retain loaded data.
-			setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+			setError(
+				err instanceof Error
+					? err.message
+					: 'Something went wrong. Please try again.',
+			)
 		} finally {
 			// Reset loading state after the request.
 			setBusy(false)
 		}
 	}
 
-	// Render the current view.
 	return (
 		<div className="auth-screen">
 			<div className="auth-panel">
@@ -105,28 +111,44 @@ export function AuthScreen({
 						<UserRound size={22} />
 					</div>
 					<h1>Sign in</h1>
-					<p className="auth-copy">Select your role, then enter your details.</p>
+					<p className="auth-copy">
+						Select your role, then enter your details.
+					</p>
 				</div>
 
 				{/* Login role selection. */}
 				<div className="auth-tabs">
 					<button
 						type="button"
-						className={role === 'participant' ? 'auth-tab active' : 'auth-tab'}
+						className={
+							role === 'participant'
+								? 'auth-tab active'
+								: 'auth-tab'
+						}
 						onClick={() => setRole('participant')}
 					>
 						<Play size={14} /> Participant
 					</button>
 					<button
 						type="button"
-						className={role === 'researcher' ? 'auth-tab active' : 'auth-tab'}
+						className={
+							role === 'researcher'
+								? 'auth-tab active'
+								: 'auth-tab'
+						}
 						onClick={() => setRole('researcher')}
 					>
 						<LogIn size={14} /> Researcher
 					</button>
 					<button
 						type="button"
-						className={role === 'administrator' ? 'auth-tab active' : 'auth-tab'}
+						className={
+							role === 'administrator'
+								? 'auth-tab active'
+								: 'auth-tab'
+						}
+						disabled
+						title="Administrator sign-in is temporarily unavailable"
 						onClick={() => setRole('administrator')}
 					>
 						<ShieldCheck size={14} /> Administrator
@@ -141,7 +163,9 @@ export function AuthScreen({
 								Experiment code
 								<input
 									value={experimentCode}
-									onChange={(event) => setExperimentCode(event.target.value)}
+									onChange={(event) =>
+										setExperimentCode(event.target.value)
+									}
 									placeholder="EXP-2026-013"
 								/>
 							</label>
@@ -149,7 +173,9 @@ export function AuthScreen({
 								Participant code
 								<input
 									value={participantCode}
-									onChange={(event) => setParticipantCode(event.target.value)}
+									onChange={(event) =>
+										setParticipantCode(event.target.value)
+									}
 									placeholder="P07"
 								/>
 							</label>
@@ -161,7 +187,9 @@ export function AuthScreen({
 							Full name
 							<input
 								value={name}
-								onChange={(event) => setName(event.target.value)}
+								onChange={(event) =>
+									setName(event.target.value)
+								}
 								placeholder="Jane Researcher"
 							/>
 						</label>
@@ -174,7 +202,9 @@ export function AuthScreen({
 								<input
 									type="email"
 									value={email}
-									onChange={(event) => setEmail(event.target.value)}
+									onChange={(event) =>
+										setEmail(event.target.value)
+									}
 									placeholder="you@university.edu"
 								/>
 							</label>
@@ -183,16 +213,29 @@ export function AuthScreen({
 								<input
 									type="password"
 									value={password}
-									onChange={(event) => setPassword(event.target.value)}
+									onChange={(event) =>
+										setPassword(event.target.value)
+									}
 									placeholder="••••••••"
 								/>
 							</label>
 						</>
 					)}
 
-					{error && <p className="entry-error">{error}</p>}
+					{error && errorVisible && (
+						<p
+							key={errorRevision}
+							className="entry-error transient-notice"
+						>
+							{error}
+						</p>
+					)}
 
-					<button className="primary-button wide" type="submit" disabled={busy}>
+					<button
+						className="primary-button wide"
+						type="submit"
+						disabled={busy}
+					>
 						{busy
 							? 'Please wait…'
 							: role === 'participant'
@@ -208,7 +251,8 @@ export function AuthScreen({
 
 				{role === 'participant' && (
 					<p className="auth-code-note">
-						Entering the same code again resumes your session where you left off.
+						Entering the same code again resumes your session where
+						you left off.
 					</p>
 				)}
 				{role === 'researcher' && (
@@ -216,7 +260,11 @@ export function AuthScreen({
 						{mode === 'register' ? (
 							<>
 								Already have an account?{' '}
-								<button type="button" className="consent-clear" onClick={() => setMode('signin')}>
+								<button
+									type="button"
+									className="consent-clear"
+									onClick={() => setMode('signin')}
+								>
 									Sign in
 								</button>
 							</>
@@ -226,7 +274,11 @@ export function AuthScreen({
 								<button
 									type="button"
 									className="consent-clear"
-									onClick={() => (onRegister ? onRegister() : setMode('register'))}
+									onClick={() =>
+										onRegister
+											? onRegister()
+											: setMode('register')
+									}
 								>
 									<UserPlus size={12} /> Create an account
 								</button>
@@ -236,7 +288,8 @@ export function AuthScreen({
 				)}
 				{role === 'administrator' && (
 					<p className="auth-foot">
-						Administrator accounts are promoted by an existing administrator.
+						Administrator accounts are promoted by an existing
+						administrator.
 					</p>
 				)}
 			</div>

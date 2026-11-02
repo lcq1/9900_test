@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
-    include: ['tests/**/*.test.tsx'],
+    include: ['tests/**/*.test.tsx', 'tests/end-to-end.spec.ts'],
     globals: true,
   },
   server: {

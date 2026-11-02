@@ -757,11 +757,11 @@ function aiSettingsFields(value: ExperimentAIKeyStatus): ExperimentAISettingsInp
 }
 
 export function ExperimentAIKeySettings({ experiments }: { experiments: Experiment[] }) {
-	const [experimentId, setExperimentId] = useState('')
+	const [experimentId, setExperimentId] = useState('__common__')
 	const [apiKey, setApiKey] = useState('')
 	const [status, setStatus] = useState<ExperimentAIKeyStatus | null>(null)
 	const [configuration, setConfiguration] = useState<ExperimentAISettingsInput | null>(null)
-	const [loading, setLoading] = useState(false)
+	const [loading, setLoading] = useState(true)
 	const [saving, setSaving] = useState(false)
 	const [message, setMessage] = useState('')
 	const isCommon = experimentId === '__common__'
@@ -821,24 +821,18 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 					setLoading(Boolean(event.target.value))
 					setExperimentId(event.target.value)
 				}}>
-					<option value="">Select an experiment</option>
 					<option value="__common__">Common configuration (all my experiments)</option>
 					{experiments.map((experiment) => <option key={experiment.id} value={experiment.id}>{experiment.name} ({experiment.code})</option>)}
 				</select>
 			</div>
 			{loading && <p>Loading AI key settings…</p>}
-			{status && !isCommon && <div className="settings-field">
-				<label htmlFor="ai-configuration-source">Configuration source</label>
-				<select id="ai-configuration-source" value={status.useCommon ? 'common' : 'independent'} disabled={saving}
-					onChange={(event) => void updateSource(event.target.value === 'common')}>
-					<option value="common">Use common configuration</option>
-					<option value="independent">Use independent configuration</option>
-				</select>
-			</div>}
+			{status && !isCommon && <label className="ai-independent-option">
+				<input type="checkbox" checked={!status.useCommon} disabled={saving}
+					onChange={(event) => void updateSource(!event.target.checked)} />
+				Use independent configuration
+			</label>}
 			{status?.useCommon && !isCommon && <div className="ai-key-controls">
 				<p>This experiment follows your common configuration, including future updates.</p>
-				<p>{status.provider} · {status.model}</p>
-				<p>{status.apiBase}</p>
 				{!status.configured && <p>The common AI configuration is incomplete.</p>}
 				<button type="button" className="secondary-button" disabled={saving || loading} onClick={() => {
 					setStatus(null); setConfiguration(null); setApiKey(''); setMessage(''); setLoading(true); setExperimentId('__common__')

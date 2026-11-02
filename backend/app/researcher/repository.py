@@ -139,7 +139,7 @@ def create_experiment(
     )
     db.add(experiment)
     db.flush()
-    audit(db, experiment, "server.created", {"snapshot": snapshot(experiment), "actor": owner_id})
+    audit(db, experiment, "server.created", {"actor": owner_id})
     if status == "Live":
         audit(db, experiment, "server.published", {"version": 1, "snapshot": snapshot(experiment), "baseline": False})
     db.commit()
@@ -187,12 +187,6 @@ def update_experiment(
     if not publish and before["status"] == "Live" and content_changed and experiment.status != "Closed":
         experiment.status = "Draft"
     after = snapshot(experiment)
-    changed = [key for key in after if after[key] != before[key]]
-    if changed:
-        published = published_versions(db, experiment)
-        audit(db, experiment, "server.changed", {"actor": actor, "fields": changed,
-              "version": published[-1].detail["version"] if published else "Draft",
-              "summary": "Changed: " + ", ".join(changed), "snapshot": after})
     if publish:
         versions = published_versions(db, experiment)
         latest = versions[-1] if versions else None
@@ -203,11 +197,6 @@ def update_experiment(
         if new_version:
             audit(db, experiment, "server.published", {"version": max((e.detail["version"] for e in versions), default=0) + 1,
                   "snapshot": after, "actor": actor, "request_id": publish_request_id, "baseline": False})
-        elif publish_request_id:
-            # Track retries without creating another published snapshot or sheet.
-            audit(db, experiment, "server.publish_reused", {"version": latest.detail["version"],
-                  "snapshot": after, "actor": actor, "request_id": publish_request_id,
-                  "summary": "Published content unchanged; existing version reused."})
     db.commit()
     db.refresh(experiment)
     return experiment

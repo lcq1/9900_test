@@ -79,11 +79,11 @@ export function StageFeatureEditor({
 				</div>
 				{stage.type !== 'consent' && <>
 				<div className="feature-row">
-					<span className="feature-label">Require screen and camera recording</span>
+					<span className="feature-label">Request camera and microphone</span>
 					<button
 						type="button"
 						role="switch"
-						aria-label="Require screen and camera recording"
+						aria-label="Request camera and microphone"
 						aria-checked={stage.recordingRequired ?? false}
 						className={stage.recordingRequired ? 'switch on' : 'switch'}
 						disabled={stage.type === 'consent'}

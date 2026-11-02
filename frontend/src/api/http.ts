@@ -17,7 +17,7 @@ apiClient.interceptors.request.use((config) => {
 	const token = getSession()?.token
 	const participantToken =
 		!token &&
-		(config.url?.startsWith('/participant/') || config.url === '/ai/config')
+		(config.url?.startsWith('/participant/') || config.url?.split('?')[0] === '/ai/config')
 			? getParticipantToken()
 			: null
 	if (participantToken)

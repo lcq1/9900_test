@@ -72,6 +72,8 @@ export function ParticipantPreview({
 	initialSessionId?: string
 }) {
 	const [stageIndex, setStageIndex] = useState(0)
+	const allowFreeOrder = Boolean(experiment.stages[0]?.features.navigation)
+	const stageTimes = useRef<Record<string, number>>({})
 	const [consentedStageId, setConsentedStageId] = useState<string | null>(
 		null,
 	)
@@ -92,7 +94,7 @@ export function ParticipantPreview({
 	const requiresScreen =
 		!previewOnly &&
 		stage.type.toLowerCase() !== 'consent' &&
-		Boolean(stage.features.screenRecording || stage.recordingRequired)
+		Boolean(stage.features.screenRecording)
 	const [recordingStatus, setRecordingStatus] = useState<
 		Partial<Record<RecordingKind, RecordingStatus>>
 	>({})
@@ -373,7 +375,7 @@ export function ParticipantPreview({
 		if (
 			requiresScreen ||
 			(stage.recordingMode === 'auto' &&
-				(stage.features.screenRecording || stage.recordingRequired))
+				stage.features.screenRecording)
 		)
 			void startRecording('screen')
 		if (
@@ -407,8 +409,12 @@ export function ParticipantPreview({
 	 * `skipConfirm` bypasses the double-confirm dialog — used by the
 	 * time-is-up modal, which is itself an explicit user action.
 	 */
-	const advance = async (skipConfirm: boolean) => {
+	const advance = async (skipConfirm: boolean, targetIndex?: number) => {
 		if (busyRef.current) return
+		const choosingStage = targetIndex !== undefined
+		if (choosingStage && (!allowFreeOrder || stage.type.toLowerCase() === 'consent' ||
+			!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= experiment.stages.length ||
+			targetIndex === stageIndex || experiment.stages[targetIndex].type.toLowerCase() === 'consent')) return
 		setValidationError('')
 		setValidationAttempt((attempt) => attempt + 1)
 		const consentAccepted = consentedStageId === stage.id
@@ -460,16 +466,28 @@ export function ParticipantPreview({
 						screen:
 							controllersRef.current.screen?.status === 'active',
 					}
-		if (stage.recordingRequired && (!recording.self || !recording.screen))
-			missing.push('Screen and camera recording')
-		if (missing.length) {
+		if (stage.recordingRequired && !recording.self)
+			missing.push('Camera and microphone recording')
+		if (!choosingStage && allowFreeOrder && stageIndex === experiment.stages.length - 1) {
+			for (const other of experiment.stages) {
+				if (other.id === stage.id || other.type.toLowerCase() === 'consent') continue
+				for (const component of other.components) {
+					if (['text', 'button'].includes(component.type)) continue
+					const feature = component.type === 'signature' ? 'signatureBox' : component.type === 'attachment' ? 'attachment' : 'questionnaire'
+					const value = selections[component.id]
+					if ((other.requiredFeatures?.[feature] ?? component.required) &&
+						!(typeof value === 'string' ? value.trim() : value?.length)) missing.push(`${other.name}: ${component.label}`)
+				}
+			}
+		}
+		if ((!choosingStage && missing.length) || (stage.recordingRequired && !recording.self)) {
 			setValidationError('Required: ' + missing.join(', '))
 			return
 		}
 		busyRef.current = true
 		setSaving(true)
 		try {
-			if (!previewOnly)
+			if (!previewOnly && !choosingStage)
 				await submitStage(stage.id, {
 					experimentCode: experiment.code,
 					participantCode,
@@ -502,7 +520,7 @@ export function ParticipantPreview({
 		approvedRef.current = { stageId: stage.id, recording }
 		setSaving(true)
 		try {
-			const following = experiment.stages[stageIndex + 1]
+			const following = experiment.stages[targetIndex ?? stageIndex + 1]
 			await Promise.all(
 				(
 					Object.entries(controllersRef.current) as [
@@ -515,7 +533,7 @@ export function ParticipantPreview({
 						(following.recordingMode === 'auto' ||
 							(!previewOnly && kind === 'screen')) &&
 						following.type.toLowerCase() !== 'consent' &&
-						(following.recordingRequired ||
+						((kind === 'self' && following.recordingRequired) ||
 							following.features[
 								kind === 'self' ? 'selfie' : 'screenRecording'
 							])
@@ -534,21 +552,22 @@ export function ParticipantPreview({
 		setSaving(false)
 		queue.record(
 			'navigation',
-			{ from: stage.name, triggeredBy: 'participant', recording },
+			{ from: stage.name, to: experiment.stages[targetIndex ?? stageIndex + 1]?.name, triggeredBy: 'participant', recording },
 			stage.id,
 		)
-		if (stageIndex >= experiment.stages.length - 1) {
+		if (!choosingStage && stageIndex >= experiment.stages.length - 1) {
 			await finishSession('finish')
 			busyRef.current = false
 			return
 		}
 		approvedRef.current = null
 		busyRef.current = false
-		const nextIndex = stageIndex + 1
+		const nextIndex = targetIndex ?? stageIndex + 1
+		stageTimes.current[stage.id] = remaining
 		setStageIndex(nextIndex)
-		setSelections({})
+		if (!allowFreeOrder) setSelections({})
 		setRemaining(
-			Math.max(1, experiment.stages[nextIndex].countdownMinutes) * 60,
+			stageTimes.current[experiment.stages[nextIndex].id] ?? Math.max(1, experiment.stages[nextIndex].countdownMinutes) * 60,
 		)
 	}
 
@@ -721,8 +740,7 @@ export function ParticipantPreview({
 	}
 
 	const wantsSelfVideo = stage.features.selfie || stage.recordingRequired
-	const wantsScreen =
-		stage.features.screenRecording || stage.recordingRequired
+	const wantsScreen = stage.features.screenRecording
 
 	// The stage body (everything except the AI rail and the footer) is shared by
 	// both the single-column and split layouts.
@@ -1212,6 +1230,16 @@ export function ParticipantPreview({
 						/>
 					)}
 					{/* Mockup-style step header: eyebrow label + segmented progress bar */}
+					{allowFreeOrder && !isConsent && (
+						<label className="participant-stage-picker">
+							Go to stage
+							<select value={stageIndex} disabled={saving || paused || interactionLocked}
+								onChange={(event) => void advance(false, Number(event.target.value))}>
+								{experiment.stages.map((item, index) => item.type.toLowerCase() !== 'consent' &&
+									<option key={item.id} value={index}>{index + 1}. {item.name}</option>)}
+							</select>
+						</label>
+					)}
 					<div className="step-eyebrow">
 						Step {stageIndex + 1} · {stage.name}
 					</div>

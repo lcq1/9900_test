@@ -13,6 +13,23 @@ from fastapi import HTTPException
 
 from app.core.config import settings
 from app.researcher.ai_config import get_system_prompt
+from contextvars import ContextVar
+from contextlib import contextmanager
+
+_request_settings = ContextVar("ai_request_settings", default=None)
+
+
+def current_settings():
+    return _request_settings.get() or settings
+
+
+@contextmanager
+def use_configuration(configuration):
+    token = _request_settings.set(configuration)
+    try:
+        yield
+    finally:
+        _request_settings.reset(token)
 
 
 @dataclass(frozen=True)
@@ -78,7 +95,7 @@ def register_provider(name: str, provider: ChatProvider) -> None:
 
 
 def get_provider() -> ChatProvider:
-    provider = PROVIDERS.get(settings.ai_provider)
+    provider = PROVIDERS.get(current_settings().ai_provider)
     if provider is None:
         raise HTTPException(status_code=503, detail="The AI provider is not registered. Please contact the researcher.")
     return provider
@@ -98,7 +115,7 @@ async def chat(
     payload = make_payload(message, history)
 
     try:
-        async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
+        async with httpx.AsyncClient(timeout=current_settings().ai_timeout_seconds) as client:
             return await get_provider().chat(client, key, payload)
     except (
         httpx.HTTPError,
@@ -113,8 +130,8 @@ async def chat(
 
 def validate_configuration(api_key: str | None = None) -> str:
     """Reject unconfigured providers before starting a streaming response."""
-    key = (api_key if api_key is not None else settings.ai_api_key or "").strip()
-    if not key or not settings.ai_api_base.strip() or not settings.ai_model.strip():
+    key = (api_key if api_key is not None else current_settings().ai_api_key or "").strip()
+    if not key or not current_settings().ai_api_base.strip() or not current_settings().ai_model.strip():
         raise HTTPException(
             status_code=503,
             detail="The AI provider is not configured. Please contact the researcher.",
@@ -126,10 +143,10 @@ def validate_configuration(api_key: str | None = None) -> str:
 
 def make_payload(message: str, history: list[dict] | None = None) -> dict:
     """Only the server owns the model, system prompt and context limits."""
-    if not message.strip() or len(message) > settings.ai_max_prompt_chars:
+    if not message.strip() or len(message) > current_settings().ai_max_prompt_chars:
         raise HTTPException(
             status_code=422,
-            detail=f"Prompt must contain 1–{settings.ai_max_prompt_chars} characters.",
+            detail=f"Prompt must contain 1–{current_settings().ai_max_prompt_chars} characters.",
         )
     filtered = [
         item
@@ -138,22 +155,22 @@ def make_payload(message: str, history: list[dict] | None = None) -> dict:
         and isinstance(item.get("content"), str)
     ]
     bounded = (
-        filtered[-settings.ai_history_messages :]
-        if settings.ai_history_messages
+        filtered[-current_settings().ai_history_messages :]
+        if current_settings().ai_history_messages
         else []
     )
-    messages = [{"role": "system", "content": get_system_prompt()}]
+    messages = [{"role": "system", "content": get_system_prompt(current_settings())}]
     messages.extend(
         {
             "role": item["role"],
-            "content": item["content"][: settings.ai_history_message_chars],
+            "content": item["content"][: current_settings().ai_history_message_chars],
         }
         for item in bounded
     )
     messages.append({"role": "user", "content": message})
-    payload = {"model": settings.ai_model, "messages": messages}
-    if settings.ai_temperature is not None:
-        payload["temperature"] = settings.ai_temperature
+    payload = {"model": current_settings().ai_model, "messages": messages}
+    if current_settings().ai_temperature is not None:
+        payload["temperature"] = current_settings().ai_temperature
     return payload
 
 
@@ -168,7 +185,7 @@ async def stream_chat(
     """Normalize either provider to local delta/done events; cancellation closes HTTP."""
     key = validate_configuration(api_key)
     payload = make_payload(message, history)
-    if not settings.ai_stream:
+    if not current_settings().ai_stream:
         reply = await chat(message, history, api_key=api_key) if api_key is not None else await chat(message, history)
         yield {"type": "delta", "text": reply.content, "model": reply.model}
         yield {"type": "done", "model": reply.model}
@@ -185,12 +202,12 @@ async def stream_chat(
 async def _stream_completion(provider: OpenAICompatibleProvider, key: str, payload: dict) -> AsyncIterator[dict]:
     headers = provider.headers(key)
     payload = provider.streaming_payload(payload)
-    model, has_text, finished = settings.ai_model, False, False
+    model, has_text, finished = current_settings().ai_model, False, False
     try:
-        async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
+        async with httpx.AsyncClient(timeout=current_settings().ai_timeout_seconds) as client:
             async with client.stream(
                 "POST",
-                settings.ai_api_base,
+                current_settings().ai_api_base,
                 json=payload,
                 headers={**headers, "Accept": "text/event-stream"},
             ) as response:
@@ -237,7 +254,7 @@ async def _api_key_chat(
     client: httpx.AsyncClient, key: str, payload: dict
 ) -> ChatReply:
     response = await client.post(
-        settings.ai_api_base,
+        current_settings().ai_api_base,
         json=payload,
         headers={"Authorization": f"Bearer {key}"},
     )
@@ -256,7 +273,7 @@ async def _workbuddy_chat(
     headers = {"x-wb-webapp-access-key": key, "Accept": "text/event-stream"}
     payload = {**payload, "stream": True, "stream_options": {"include_usage": True}}
     async with client.stream(
-        "POST", settings.ai_api_base, json=payload, headers=headers
+        "POST", current_settings().ai_api_base, json=payload, headers=headers
     ) as response:
         response.raise_for_status()
         if (
@@ -266,7 +283,7 @@ async def _workbuddy_chat(
         ):
             raise ValueError("Expected a WorkBuddy event stream")
         parts: list[str] = []
-        model = settings.ai_model
+        model = current_settings().ai_model
         finished = False
         async for event, data in _sse_events(response):
             if event == "error":
@@ -325,5 +342,5 @@ def _model_name(data: dict, fallback: str | None = None) -> str:
     return (
         model
         if isinstance(model, str) and model.strip()
-        else (fallback or settings.ai_model)
+        else (fallback or current_settings().ai_model)
     )

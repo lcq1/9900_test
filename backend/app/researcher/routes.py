@@ -201,43 +201,109 @@ def owned_experiment(db: Session, experiment_id: str, researcher: Researcher):
     return experiment
 
 
-@router.get("/experiments/{experiment_id}/ai-key")
+def ai_settings_status(configuration, overrides, use_common=False):
+    from app.participant import ai_proxy
+    from app.researcher.ai_config import AI_PARAMETERS
+    with ai_proxy.use_configuration(configuration):
+        try:
+            ai_proxy.validate_configuration()
+            configured = True
+        except HTTPException:
+            configured = False
+    values = {name: getattr(configuration, 'ai_' + name) for name in AI_PARAMETERS if name != 'api_key'}
+    result = ExperimentAIKey.model_construct(**values).model_dump(by_alias=True, exclude={'api_key', 'use_common'})
+    return {**result, 'hasCustomKey': bool(overrides.get('api_key')) and not use_common,
+            'hasCustomSettings': any(name in overrides for name in AI_PARAMETERS),
+            'useCommon': use_common, 'configured': configured}
+
+
+def ai_settings_changes(payload):
+    changes = {name: value for name, value in payload.model_dump(exclude_unset=True).items()
+               if name != 'api_key' and (value is not None or name in ('temperature', 'system_prompt'))}
+    if payload.api_key is not None:
+        key = payload.api_key.get_secret_value().strip()
+        if not key or len(key) > 4096 or any(char.isspace() for char in key):
+            raise HTTPException(status_code=422, detail='Enter a valid API key without whitespace (up to 4096 characters).')
+        changes['api_key'] = key
+    return changes
+
+
+def validate_ai_settings(configuration, validate_key=True):
+    from app.participant import ai_proxy
+    with ai_proxy.use_configuration(configuration):
+        provider = ai_proxy.get_provider()
+        if validate_key and configuration.ai_api_key:
+            provider.validate(configuration.ai_api_key)
+
+
+@router.get('/workspace/ai-config')
+def common_ai_settings(db: Session = Depends(get_db), researcher: Researcher = Depends(get_current_researcher)):
+    from app.researcher.ai_config import get_experiment_config, common_scope, resolve_common_config
+    return ai_settings_status(resolve_common_config(db, researcher.id), get_experiment_config(db, common_scope(researcher.id)))
+
+
+@router.patch('/workspace/ai-config')
+def update_common_ai_settings(payload: ExperimentAIKey, db: Session = Depends(get_db),
+                              researcher: Researcher = Depends(get_current_researcher)):
+    from app.researcher.ai_config import save_common_config, resolve_common_config
+    changes = ai_settings_changes(payload)
+    changes.pop('use_common', None)
+    configuration = resolve_common_config(db, researcher.id).model_copy(update={'ai_' + name: value for name, value in changes.items()})
+    validate_ai_settings(configuration)
+    if changes:
+        save_common_config(db, researcher.id, changes)
+    return common_ai_settings(db, researcher)
+
+
+@router.delete('/workspace/ai-config')
+def reset_common_ai_settings(db: Session = Depends(get_db), researcher: Researcher = Depends(get_current_researcher)):
+    from app.researcher.ai_config import save_common_config
+    save_common_config(db, researcher.id, None)
+    return common_ai_settings(db, researcher)
+
+
+@router.get('/experiments/{experiment_id}/ai-key')
 def experiment_ai_key(experiment_id: str, db: Session = Depends(get_db),
                       researcher: Researcher = Depends(get_current_researcher)):
-    from app.researcher.ai_config import get_experiment_key
-    from app.participant.ai_proxy import validate_configuration
+    from app.researcher.ai_config import get_experiment_config, resolve_experiment_config, uses_common
     experiment = owned_experiment(db, experiment_id, researcher)
-    key = get_experiment_key(db, experiment.id)
-    try:
-        validate_configuration(key)
-        configured = True
-    except HTTPException:
-        configured = False
-    return {"hasCustomKey": key is not None, "configured": configured,
-            "provider": settings.ai_provider, "model": settings.ai_model}
+    overrides = get_experiment_config(db, experiment.id)
+    return ai_settings_status(resolve_experiment_config(db, experiment.id), overrides, uses_common(overrides))
 
 
-@router.patch("/experiments/{experiment_id}/ai-key")
+@router.patch('/experiments/{experiment_id}/ai-key')
 def update_experiment_ai_key(experiment_id: str, payload: ExperimentAIKey,
                              db: Session = Depends(get_db),
                              researcher: Researcher = Depends(get_current_researcher)):
-    from app.researcher.ai_config import save_experiment_key
-    from app.participant.ai_proxy import get_provider
+    from app.researcher.ai_config import (AI_PARAMETERS, get_experiment_config, resolve_common_config,
+                                          save_experiment_config, uses_common)
     experiment = owned_experiment(db, experiment_id, researcher)
-    key = payload.api_key.get_secret_value().strip()
-    if not key or len(key) > 4096 or any(char.isspace() for char in key):
-        raise HTTPException(status_code=422, detail="Enter a valid API key without whitespace (up to 4096 characters).")
-    get_provider().validate(key)
-    save_experiment_key(db, experiment, key)
+    changes = ai_settings_changes(payload)
+    overrides = get_experiment_config(db, experiment.id)
+    parameters = {name: value for name, value in changes.items() if name in AI_PARAMETERS}
+    # Parameter edits select independent mode; source-only edits preserve saved values.
+    mode = changes.get('use_common', False if parameters else uses_common(overrides))
+    if mode and parameters:
+        raise HTTPException(status_code=422, detail='Select independent configuration before changing experiment parameters.')
+    if not mode and not any(name in overrides for name in AI_PARAMETERS):
+        common = resolve_common_config(db, researcher.id)
+        for name in AI_PARAMETERS:
+            if name != 'api_key':
+                changes.setdefault(name, getattr(common, 'ai_' + name))
+    changes['use_common'] = mode
+    candidate = {**overrides, **changes}
+    configuration = settings.model_copy(update={'ai_' + name: value for name, value in candidate.items() if name in AI_PARAMETERS})
+    validate_ai_settings(configuration, validate_key=bool(parameters))
+    save_experiment_config(db, experiment, changes)
     return experiment_ai_key(experiment_id, db, researcher)
 
 
-@router.delete("/experiments/{experiment_id}/ai-key")
+@router.delete('/experiments/{experiment_id}/ai-key')
 def remove_experiment_ai_key(experiment_id: str, db: Session = Depends(get_db),
                              researcher: Researcher = Depends(get_current_researcher)):
-    from app.researcher.ai_config import save_experiment_key
+    from app.researcher.ai_config import save_experiment_config
     experiment = owned_experiment(db, experiment_id, researcher)
-    save_experiment_key(db, experiment, None)
+    save_experiment_config(db, experiment, {'use_common': True})
     return experiment_ai_key(experiment_id, db, researcher)
 
 
@@ -309,11 +375,6 @@ async def upload_material(
     material = {"id": material_id, "name": name, "reference": reference}
     stage.setdefault("materials", []).append(material)
     experiment.stages = stages
-    published = versions.published_versions(db, experiment)
-    versions.audit(db, experiment, "server.changed", {
-        "actor": researcher.id, "fields": ["stages"],
-        "version": published[-1].detail["version"] if published else "Draft",
-        "summary": "Uploaded study material: " + name, "snapshot": versions.snapshot(experiment)})
     db.commit()
     return material
 
@@ -379,9 +440,5 @@ async def delete_material(
             raise HTTPException(status_code=503, detail="Material storage is unavailable")
     stage["materials"] = [item for item in stage.get("materials", []) if item["id"] != material_id]
     experiment.stages = stages
-    versions.audit(db, experiment, "server.changed", {
-        "actor": researcher.id, "fields": ["stages"],
-        "version": published[-1].detail["version"] if published else "Draft",
-        "summary": "Deleted study material: " + material["name"], "snapshot": versions.snapshot(experiment)})
     db.commit()
     return {"deleted": True}

@@ -33,7 +33,7 @@ describe('stage content', () => {
 			expect(Boolean(screen.queryByLabelText('AI chat'))).toBe(type !== 'consent')
 			expect(Boolean(screen.queryByLabelText('Countdown timer'))).toBe(type !== 'consent')
 			expect(Boolean(screen.queryByLabelText('Screen recording'))).toBe(type !== 'consent')
-			expect(Boolean(screen.queryByLabelText('Require screen and camera recording'))).toBe(type !== 'consent')
+			expect(Boolean(screen.queryByLabelText('Request camera and microphone'))).toBe(type !== 'consent')
 			expect(Boolean(screen.queryByLabelText('Start recording after permission'))).toBe(type !== 'consent')
 			expect(screen.getByLabelText('Signature box')).toBeTruthy()
 			expect(container.querySelector('.feature-count')?.textContent).toContain(
@@ -51,6 +51,27 @@ describe('stage content', () => {
 			</>
 		)
 	}
+
+	it('defaults oral video stages to no response components and enabled camera/microphone', () => {
+		const stage = createStage('video_oral_answer')
+		expect(stage.components.map((component) => component.type)).toEqual(['text'])
+		expect(stage.recordingRequired).toBe(true)
+		expect(stage.recordingMode).toBe('auto')
+		expect(stage.features.selfie).toBe(true)
+		const draft = experiment()
+		draft.stages[1] = stage
+		expect(getPublishErrors(draft)).toEqual([])
+		render(<Harness />)
+		fireEvent.change(screen.getByRole('combobox'), { target: { value: 'video_oral_answer' } })
+		const updated = JSON.parse(screen.getByTestId('stage').textContent!)
+		expect(updated.components.map((component: { type: string }) => component.type)).toEqual(['text'])
+		expect(updated.recordingRequired).toBe(true)
+		expect(updated.recordingMode).toBe('auto')
+		expect(screen.getByText('No components yet. Add one below.')).toBeTruthy()
+		fireEvent.change(screen.getByRole('combobox'), { target: { value: 'short_answer' } })
+		const reverted = JSON.parse(screen.getByTestId('stage').textContent!)
+		expect(reverted.components[1].type).toBe('textbox')
+	})
 
 	it('only allows editing the consent name and text', () => {
 		const { container } = render(<Harness initialType="consent" />)
@@ -186,7 +207,7 @@ it('combines dashboard status filters with search and resets only filters', () =
 })
 
 it('saves experiment keys privately and clears inputs when switching experiments', async () => {
-	const status = { hasCustomKey: false, configured: true, provider: 'openai_compatible', model: 'test-model' }
+	const status = { hasCustomKey: false, configured: true, provider: 'openai_compatible', model: 'test-model', apiBase: 'https://ai.example/v1/chat/completions' }
 	const get = vi.spyOn(http, 'get').mockResolvedValue(status)
 	const save = vi.spyOn(http, 'patch').mockResolvedValue({ ...status, hasCustomKey: true })
 	const remove = vi.spyOn(http, 'del').mockResolvedValue(status)
@@ -198,18 +219,54 @@ it('saves experiment keys privately and clears inputs when switching experiments
 		const input = await screen.findByLabelText('API key') as HTMLInputElement
 		expect(input.type).toBe('password')
 		fireEvent.change(input, { target: { value: 'private-test-key' } })
-		fireEvent.click(screen.getByRole('button', { name: 'Save API key' }))
-		await screen.findByText('API key saved for this experiment.')
-		expect(save).toHaveBeenCalledWith('/experiments/' + first.id + '/ai-key', { apiKey: 'private-test-key' })
+		fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'experiment-model' } })
+		fireEvent.change(screen.getByLabelText('API endpoint URL'), { target: { value: 'https://experiment.example/v1/chat/completions' } })
+		fireEvent.change(screen.getByLabelText('Timeout (seconds)'), { target: { value: '120' } })
+		fireEvent.click(screen.getByRole('switch', { name: 'Streaming responses' }))
+		fireEvent.click(screen.getByText('Advanced AI settings'))
+		fireEvent.change(screen.getByLabelText('System prompt'), { target: { value: 'Experiment instructions' } })
+		fireEvent.change(screen.getByLabelText('History messages'), { target: { value: '4' } })
+		fireEvent.click(screen.getByRole('button', { name: 'Save AI settings' }))
+		await screen.findByText('AI settings saved for this experiment.')
+		expect(save).toHaveBeenCalledWith('/experiments/' + first.id + '/ai-key', expect.objectContaining({ apiKey: 'private-test-key', model: 'experiment-model', apiBase: 'https://experiment.example/v1/chat/completions', timeoutSeconds: 120, stream: false, systemPrompt: 'Experiment instructions', historyMessages: 4 }))
 		expect(input.value).toBe('')
 		expect(JSON.stringify(localStorage)).not.toContain('private-test-key')
-		fireEvent.click(screen.getByRole('button', { name: 'Use server default' }))
-		await screen.findByText('Custom key removed. This experiment now uses the server default.')
-		expect(remove).toHaveBeenCalledWith('/experiments/' + first.id + '/ai-key')
-		fireEvent.change(input, { target: { value: 'unsaved-key' } })
+		save.mockResolvedValueOnce({ ...status, useCommon: true })
+		fireEvent.change(screen.getByLabelText('Configuration source'), { target: { value: 'common' } })
+		await screen.findByText('This experiment follows your common configuration, including future updates.')
+		expect(save).toHaveBeenLastCalledWith('/experiments/' + first.id + '/ai-key', { useCommon: true })
+		expect(remove).not.toHaveBeenCalled()
+		expect(screen.queryByLabelText('API key')).toBeNull()
+		save.mockResolvedValueOnce({ ...status, useCommon: false, hasCustomKey: true })
+		fireEvent.change(screen.getByLabelText('Configuration source'), { target: { value: 'independent' } })
+		const restored = await screen.findByLabelText('API key') as HTMLInputElement
+		expect(restored.value).toBe('')
+		fireEvent.change(restored, { target: { value: 'unsaved-key' } })
 		fireEvent.change(screen.getByLabelText('Experiment'), { target: { value: second.id } })
 		expect((await screen.findByLabelText('API key') as HTMLInputElement).value).toBe('')
 		expect(get).toHaveBeenCalledWith('/experiments/second-study/ai-key')
+	} finally { get.mockRestore(); save.mockRestore(); remove.mockRestore() }
+})
+
+it('edits and resets the common AI configuration', async () => {
+	const status = { hasCustomKey: false, hasCustomSettings: false, configured: true,
+		provider: 'openai_compatible', model: 'default-model', apiBase: 'https://ai.example/v1/chat/completions' }
+	const get = vi.spyOn(http, 'get').mockResolvedValue(status)
+	const save = vi.spyOn(http, 'patch').mockResolvedValue({ ...status, hasCustomSettings: true })
+	const remove = vi.spyOn(http, 'del').mockResolvedValue(status)
+	try {
+		render(<ExperimentAIKeySettings experiments={[]} />)
+		fireEvent.change(screen.getByLabelText('Experiment'), { target: { value: '__common__' } })
+		await screen.findByLabelText('API key')
+		expect(get).toHaveBeenCalledWith('/workspace/ai-config')
+		expect(screen.queryByLabelText('Configuration source')).toBeNull()
+		fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'common-model' } })
+		fireEvent.click(screen.getByRole('button', { name: 'Save AI settings' }))
+		await screen.findByText('Common AI configuration saved.')
+		expect(save).toHaveBeenCalledWith('/workspace/ai-config', expect.objectContaining({ model: 'common-model' }))
+		fireEvent.click(screen.getByRole('button', { name: 'Use server default' }))
+		await screen.findByText('Common configuration reset to server defaults.')
+		expect(remove).toHaveBeenCalledWith('/workspace/ai-config')
 	} finally { get.mockRestore(); save.mockRestore(); remove.mockRestore() }
 })
 
@@ -272,6 +329,23 @@ function openEditor() {
 		</MemoryRouter>,
 	)
 }
+
+it('saves the answer-order setting and applies it to newly added stages', async () => {
+	openEditor()
+	const control = screen.getByRole('switch', { name: 'Choose answer order' })
+	fireEvent.click(control)
+	expect(control.getAttribute('aria-checked')).toBe('true')
+	await waitFor(() => {
+		const saved = api.save.mock.calls.at(-1)?.[0] as Experiment | undefined
+		expect(saved?.stages.every((stage) => stage.features.navigation)).toBe(true)
+	})
+	fireEvent.click(screen.getAllByRole('button', { name: /Add stage/i })[0])
+	await waitFor(() => {
+		const saved = api.save.mock.calls.at(-1)?.[0] as Experiment | undefined
+		expect(saved?.stages).toHaveLength(3)
+		expect(saved?.stages.every((stage) => stage.features.navigation)).toBe(true)
+	})
+})
 
 beforeEach(() => {
 	vi.mocked(Modal.success).mockClear()

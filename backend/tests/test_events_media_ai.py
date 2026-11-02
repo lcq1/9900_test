@@ -24,6 +24,150 @@ def chat_input(content="hello", conversation_id=None, request_id=None):
     }
 
 
+def test_common_ai_settings_follow_source_and_preserve_independent_credentials(client, auth_headers, monkeypatch, ai_transport):
+    from tests.conftest import register_and_login
+    from app.core import database
+    from app.researcher.ai_config import get_experiment_config
+    monkeypatch.setattr(settings, 'ai_api_key', None)
+    experiments = []
+    for index in range(2):
+        result = client.post('/api/experiments', headers=auth_headers, json={
+            'name': f'Common study {index}', 'stages': [{'id': f'common-stage-{index}', 'name': 'Question',
+            'type': 'short_answer', 'features': {'ai': True}}]})
+        assert result.status_code == 201
+        experiments.append(result.json())
+    paths = [f"/api/experiments/{experiment['id']}/ai-key" for experiment in experiments]
+    assert all(client.get(path, headers=auth_headers).json()['useCommon'] for path in paths)
+    common = {'provider': 'openai_compatible', 'apiBase': 'https://common.example/v1/chat/completions',
+              'model': 'common-A', 'apiKey': 'shared-test-key', 'stream': False}
+    saved = client.patch('/api/workspace/ai-config', headers=auth_headers, json=common)
+    assert saved.status_code == 200 and 'shared-test-key' not in saved.text
+    assert client.get(paths[0], headers=auth_headers).json()['model'] == 'common-A'
+    assert client.patch(paths[0], headers=auth_headers, json={'useCommon': True, 'model': 'invalid-edit'}).status_code == 422
+    assert client.patch(paths[1], headers=auth_headers, json={'useCommon': False}).status_code == 200
+    independent = {'model': 'independent-model', 'apiBase': 'https://independent.example/v1/chat/completions', 'apiKey': 'independent-test-key'}
+    assert client.patch(paths[1], headers=auth_headers, json=independent).status_code == 200
+    assert client.patch('/api/workspace/ai-config', headers=auth_headers, json={'model': 'common-B', 'apiKey': 'shared-new-key'}).status_code == 200
+    assert client.get(paths[0], headers=auth_headers).json()['model'] == 'common-B'
+    assert client.get(paths[1], headers=auth_headers).json()['model'] == 'independent-model'
+    source = client.patch(paths[1], headers=auth_headers, json={'useCommon': True}).json()
+    assert source['useCommon'] and source['model'] == 'common-B'
+    with database.SessionLocal() as db:
+        assert get_experiment_config(db, experiments[1]['id'])['api_key'] == 'independent-test-key'
+    restored = client.patch(paths[1], headers=auth_headers, json={'useCommon': False}).json()
+    assert restored['model'] == 'independent-model' and restored['hasCustomKey']
+    captured = []
+    def upstream(request):
+        captured.append((request.headers['Authorization'], json.loads(request.content)['model']))
+        return httpx.Response(200, json={'choices': [{'message': {'content': 'reply'}}]})
+    ai_transport(upstream)
+    for index in range(2):
+        response = client.post(f'/api/participant/stages/common-stage-{index}/ai-stream', headers=auth_headers, json=chat_input())
+        assert response.status_code == 200 and '"type": "done"' in response.text
+    assert captured == [('Bearer shared-new-key', 'common-B'), ('Bearer independent-test-key', 'independent-model')]
+    other = {'Authorization': 'Bearer ' + register_and_login(client, email='common-other@example.com')}
+    assert client.get('/api/workspace/ai-config', headers=other).json()['model'] == settings.ai_model
+    assert client.patch('/api/workspace/ai-config', headers=other, json={'model': 'other-common'}).status_code == 200
+    assert client.get('/api/workspace/ai-config', headers=auth_headers).json()['model'] == 'common-B'
+    assert client.get(paths[0], headers=other).status_code == 404
+    assert client.get('/api/workspace/ai-config').status_code == 401
+    assert client.delete('/api/workspace/ai-config', headers=auth_headers).status_code == 200
+    assert client.get(paths[0], headers=auth_headers).json()['model'] == settings.ai_model
+    assert client.get(paths[1], headers=auth_headers).json()['model'] == 'independent-model'
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_experiment_ai_parameters_reach_each_provider(client, auth_headers, monkeypatch, ai_transport, streaming):
+    from app.core import database
+    from app.participant.models import AIChatTurn
+    monkeypatch.setattr(settings, "ai_api_key", None)
+    captured = []
+    def upstream(request):
+        payload = json.loads(request.content)
+        captured.append((request, payload))
+        if streaming or request.url.host == 'provider-1.example':
+            return stream_response('data: {"choices":[{"delta":{"content":"reply"}}]}\n\ndata: [DONE]\n\n')
+        return httpx.Response(200, json={"choices": [{"message": {"content": "reply"}}]})
+    ai_transport(upstream)
+    for index, provider in enumerate(('openai_compatible', 'workbuddy')):
+        stage_id = f'parameters-{index}'
+        experiment = client.post('/api/experiments', headers=auth_headers, json={
+            "name": f'Parameters {index}', "stages": [{"id": stage_id, "name": "Question",
+            "type": "short_answer", "features": {"ai": True}}]}).json()
+        path = f"/api/experiments/{experiment['id']}/ai-key"
+        key = 'wbpk_private-test-key' if index else 'private-test-key'
+        parameters = {"provider": provider, "apiKey": key,
+                      "apiBase": f'https://provider-{index}.example/v1/chat/completions',
+                      "model": f'custom-model-{index}', "stream": streaming, "timeoutSeconds": 120,
+                      "temperature": 0.5, "systemPrompt": f'Instructions {index}',
+                      "maxPromptChars": 20, "historyMessages": 2, "historyMessageChars": 5}
+        response = client.patch(path, headers=auth_headers, json=parameters)
+        assert response.status_code == 200, response.text
+        assert key not in response.text and 'apiKey' not in response.json()
+        assert response.json()['hasCustomSettings'] is True
+        assert response.json()['apiBase'] == parameters['apiBase']
+        # An omitted key must preserve the secret while other parameters change.
+        response = client.patch(path, headers=auth_headers, json={"model": f'updated-model-{index}'})
+        assert response.status_code == 200 and response.json()['hasCustomKey'] is True
+        config = client.get('/api/ai/config', params={"stageId": stage_id}, headers=auth_headers).json()
+        assert config['configured'] is True and config['model'] == f'updated-model-{index}'
+        for invalid in ({"apiBase": 'file:///private/key'}, {"apiBase": 'https://user:password@example.com/v1'},
+                        {"timeoutSeconds": 0}, {"temperature": 3}, {"historyMessages": 101}, {"model": ' '}):
+            assert client.patch(path, headers=auth_headers, json=invalid).status_code == 422
+        result = client.post(f'/api/participant/stages/{stage_id}/ai-stream', headers=auth_headers, json=chat_input())
+        assert result.status_code == 200 and '"type": "done"' in result.text, result.text
+        request, payload = captured[-1]
+        assert str(request.url) == parameters['apiBase']
+        assert request.extensions['timeout']['read'] == 120
+        assert payload['model'] == f'updated-model-{index}' and payload['temperature'] == 0.5
+        assert payload['messages'][0] == {"role": "system", "content": f'Instructions {index}'}
+        header = 'x-wb-webapp-access-key' if index else 'Authorization'
+        assert request.headers[header] == (key if index else f'Bearer {key}')
+        rejected = client.post(f'/api/participant/stages/{stage_id}/ai-stream', headers=auth_headers, json=chat_input('x' * 21))
+        assert rejected.status_code == 422
+        reset = client.delete(path, headers=auth_headers).json()
+        assert reset['useCommon'] is True and reset['model'] == settings.ai_model
+    with database.SessionLocal() as db:
+        turns = db.query(AIChatTurn).all()
+        assert {(turn.model, turn.provider) for turn in turns} == {
+            ('updated-model-0', 'openai_compatible'), ('updated-model-1', 'workbuddy')}
+    assert settings.ai_api_key is None and settings.ai_model == 'test-model'
+
+
+def test_ai_configuration_contexts_are_isolated_and_bound_history(monkeypatch):
+    async def run():
+        async def task(index):
+            config = settings.model_copy(update={"ai_model": f'model-{index}',
+                "ai_system_prompt": f'prompt-{index}', "ai_history_messages": 1,
+                "ai_history_message_chars": 3, "ai_max_prompt_chars": 10})
+            with ai_proxy.use_configuration(config):
+                await asyncio.sleep(0)
+                payload = ai_proxy.make_payload('new', [
+                    {"role": "user", "content": "older"}, {"role": "assistant", "content": "abcdef"}])
+                assert payload['model'] == f'model-{index}'
+                assert payload['messages'] == [{"role": "system", "content": f'prompt-{index}'},
+                    {"role": "assistant", "content": "abc"}, {"role": "user", "content": "new"}]
+                with pytest.raises(HTTPException):
+                    ai_proxy.make_payload('x' * 11)
+        await asyncio.gather(task(0), task(1))
+    asyncio.run(run())
+    assert ai_proxy.current_settings() is settings
+
+
+def test_experiment_settings_can_replace_incomplete_server_defaults(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(settings, 'ai_api_base', '')
+    monkeypatch.setattr(settings, 'ai_model', '')
+    monkeypatch.setattr(settings, 'ai_api_key', None)
+    experiment = create_ai_stage(client, auth_headers)
+    path = f"/api/experiments/{experiment['id']}/ai-key"
+    loaded = client.get(path, headers=auth_headers)
+    assert loaded.status_code == 200 and loaded.json()['configured'] is False
+    saved = client.patch(path, headers=auth_headers, json={
+        'apiBase': 'https://ai.example/v1/chat/completions', 'model': 'experiment-model',
+        'apiKey': 'test-key', 'provider': 'openai_compatible'})
+    assert saved.status_code == 200 and saved.json()['configured'] is True
+
+
 @pytest.mark.parametrize("streaming", [False, True])
 def test_experiment_api_keys_are_private_and_used_by_chat(client, auth_headers, monkeypatch, ai_transport, streaming):
     from app.core import database
@@ -1093,7 +1237,7 @@ def test_recording_upload_session_roundtrip(client, auth_headers, tmp_path, monk
 
 @pytest.mark.parametrize("required,self_active,screen_active,allowed", [
     (False, False, False, True), (False, True, False, True),
-    (True, False, False, False), (True, True, False, False),
+    (True, False, False, False), (True, True, False, True),
     (True, False, True, False), (True, True, True, True),
 ])
 def test_recording_gate_combinations(required, self_active, screen_active, allowed):
@@ -1353,7 +1497,7 @@ def test_delete_material_permissions_failures_and_published_files(client, auth_h
     assert Path(storage._safe_local_path(material["reference"])).read_bytes() == b"historical"
     with database.SessionLocal() as db:
         changes = versions.experiment_history(db, db.get(Experiment, study["id"]))
-        assert any(e.detail.get("summary") == "Deleted study material: published.pdf" for e in changes)
+        assert not any(e.type == "server.changed" for e in changes)
 
     with database.SessionLocal() as db:
         db.get(Experiment, study["id"]).status = "Live"

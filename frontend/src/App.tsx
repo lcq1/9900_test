@@ -366,7 +366,6 @@ function WorkspacePage({ view }: { view: 'preview' | 'results' | 'settings' }) {
 								localStorage.removeItem(key)
 						}
 					}}
-					onClose={() => navigate('/researcher/dashboard')}
 				/>
 			)}
 		</WorkspaceLayout>
@@ -502,6 +501,7 @@ function ExperimentDraft({ remote }: { remote: Experiment }) {
 	const add = () => {
 		if (draft.stages.length >= 20) return
 		const next = createStage()
+		next.features.navigation = draft.stages[0]?.features.navigation ?? false
 		change((e) => ({ ...e, stages: [...e.stages, next] }))
 		setSelected(next.id)
 	}

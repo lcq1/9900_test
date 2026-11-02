@@ -180,13 +180,13 @@ Omitting `view` selects `answers`. CSV files use UTF-8 with a byte-order mark an
 
 | Sheet | Purpose |
 | --- | --- |
-| `Study information` | Experiment identity, creation/export times, configuration changes, publication records, and published stage/component snapshots. |
+| `Study information` | Experiment identity, creation/export times, publication records, and published stage/component snapshots. |
 | `V1`, `V2`, ... | One sheet per published version, with one row per participation session bound to that version. A version without sessions still has its header row. |
 | `Unknown legacy version` | Sessions whose original published version cannot be established. Appears only when needed. |
 
 The first publication creates `V1`. A later Publish creates the next version only when the experiment name, stage configuration, or full-screen setting differs from the immediately preceding publication. Saving Draft does not create a version. Repeated publication, or unpublishing and republishing unchanged content, reuses the existing version. Draft changes reverted before publication do not create a version. Returning to an older configuration after a different publication does create a new version because it differs from the latest publication.
 
-Sessions remain bound to their captured publication snapshot. Later edits do not move their data to a newer sheet. Existing historical versions are retained; the current rule does not merge older sheets retroactively. Draft changes may appear in `Study information` without producing a new version sheet. Experiment API key changes are separate from experiment content and do not create publication versions.
+Sessions remain bound to their captured publication snapshot. Later edits do not move their data to a newer sheet. Existing historical versions are retained; the current rule does not merge older sheets retroactively. Draft saves update the current editable experiment but do not write configuration-history snapshots. Unchanged republications do not write new history records. The workbook excludes draft-change and unchanged-republication records from older installations. Experiment API key changes are separate from experiment content and do not create publication versions.
 
 ### Excel Field Reference
 
@@ -194,8 +194,8 @@ Sessions remain bound to their captured publication snapshot. Later edits do not
 
 | Field | Meaning |
 | --- | --- |
-| `Category` | Metadata category, configuration change, publication, unchanged republication, stage, or component. |
-| `Version` | Published version number associated with the record, or a draft/unknown marker when applicable. |
+| `Category` | Metadata category, publication, published stage, or published component. |
+| `Version` | Published version number associated with the record, when applicable. |
 | `Time (Australia/Sydney)` | Record time in Sydney local time, displayed to the second with its UTC offset. |
 | `Content / Full configuration` | Metadata value, explanatory text, or JSON configuration snapshot. |
 | `Actor ID` | Researcher identifier recorded for the operation, when available. |
@@ -319,7 +319,7 @@ When the allowlist is enabled, an email must match an allowed address or domain.
 | Variable | Purpose and default behavior |
 | --- | --- |
 | `AI_PROVIDER` | Provider adapter: `openai_compatible` (default) or `workbuddy`. |
-| `AI_API_KEY` | Server default API key; empty/unset means no global key. An experiment-specific key configured in Workspace settings overrides it for that experiment. |
+| `AI_API_KEY` | Server fallback API key; empty/unset means no server key. Workspace settings can override it in the researcher's common configuration or an experiment's independent configuration. |
 | `AI_API_BASE` | Full Chat Completions URL, including its endpoint path. Backend default `https://api.openai.com/v1/chat/completions`; the template uses a placeholder endpoint. |
 | `AI_MODEL` | Provider model identifier; backend default `gpt-4o-mini`. Replace the template model placeholder. |
 | `AI_STREAM` | Request streaming responses; default `true`. Use `false` for JSON-only providers. |
@@ -330,7 +330,9 @@ When the allowlist is enabled, an email must match an allowed address or domain.
 | `AI_HISTORY_MESSAGES` | Maximum retained user/assistant history messages; default `8`, range `0`-`100`. Counts messages, not conversation pairs. |
 | `AI_HISTORY_MESSAGE_CHARS` | Maximum characters per retained history message; default `2000`, range `1`-`20000`. |
 
-Workspace settings supports a separate API key per experiment, including replacement and removal. Removing it restores the server default. Provider, model, API address, and context limits remain server-wide. Saving a key does not perform a live provider test. The server does not return the saved key to the browser.
+Workspace settings > AI API keys supports all AI parameters in the table above. Select Common configuration (all my experiments) to edit the signed-in researcher's shared provider, completion URL, model, API key, streaming, timeout, prompt, and context limits. Each experiment has a Configuration source selector: Use common configuration follows that shared configuration and its future updates; Use independent configuration uses the experiment's own settings. Switching sources retains the saved independent settings and key. New experiments use common configuration; previously configured experiments retain independent mode. Common configurations are isolated between researchers.
+
+The main form contains connection settings; Advanced AI settings contains optional prompt and context controls. Independent parameter fields initially copy common values when no independent settings exist; the common key is not copied. A blank key input keeps the existing key or the server default. Unconfigured independent fields inherit server defaults, not subsequent common changes. A blank temperature omits that parameter; a blank system prompt uses the built-in research assistant instructions. In common configuration, Use server default removes the custom common settings and key and reloads `.env` defaults without changing independent experiments. Saving settings does not perform a live provider test. Keys are never returned to the browser, and AI configuration is not included in published experiment snapshots or exports.
 
 For WorkBuddy, use `AI_PROVIDER=workbuddy`, the application's `wbpk_` publishable key, the full WorkBuddy completion URL, and its model identifier. This is the application's public access key, not a model-provider secret.
 
@@ -345,7 +347,7 @@ For WorkBuddy, use `AI_PROVIDER=workbuddy`, the application's `wbpk_` publishabl
 | `ONEDRIVE_CLIENT_SECRET` | Optional Microsoft Graph client secret. |
 | `ONEDRIVE_TENANT_ID` | Optional Microsoft Graph tenant ID. |
 
-A researcher can select among configured storage locations in Workspace settings. A directory outside the default storage volume needs its own persistent mount in a container deployment. The Microsoft Graph variables apply to the optional storage helper; they do not automatically replace all local recording/material storage.
+Storage locations are configured on the server; Workspace settings does not provide a storage-location selector. Existing saved researcher storage preferences remain applicable. A directory outside the default storage volume needs its own persistent mount in a container deployment. The Microsoft Graph variables apply to the optional storage helper; they do not automatically replace all local recording/material storage.
 
 ### Frontend Variables
 

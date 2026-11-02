@@ -79,18 +79,19 @@ ai_router = APIRouter(prefix="/ai", tags=["ai"])
 def ai_config(stage_id: str | None = Query(default=None, alias="stageId"),
               db: Session = Depends(get_db), actor: Researcher = Depends(get_study_actor)):
     from app.core.config import settings
-    from app.researcher.ai_config import get_experiment_key
+    from app.researcher.ai_config import resolve_experiment_config, resolve_common_config
 
     experiment_id = actor.experiment_id if isinstance(actor, ParticipantAccess) else None
     if experiment_id is None and stage_id:
         experiment_id = require_ai_stage(db, stage_id, actor).id
-    key = get_experiment_key(db, experiment_id) if experiment_id else None
+    configuration = resolve_experiment_config(db, experiment_id) if experiment_id else resolve_common_config(db, actor.id)
     try:
-        ai_proxy.validate_configuration(key) if key is not None else ai_proxy.validate_configuration()
+        with ai_proxy.use_configuration(configuration):
+            ai_proxy.validate_configuration()
         configured = True
     except HTTPException:
         configured = False
-    return {"model": settings.ai_model, "configured": configured}
+    return {"model": configuration.ai_model, "configured": configured}
 
 
 @ai_router.post("/chat")
@@ -296,29 +297,31 @@ def stage_chat_stream(
     researcher: Researcher = Depends(get_study_actor),
 ):
     experiment, conversation_id = chat_context(db, stage_id, payload, researcher)
-    from app.researcher.ai_config import get_experiment_key
-    api_key = get_experiment_key(db, experiment.id)
-    ai_proxy.make_payload(payload.content)
-    prepared = repo.prepare_ai_turn(
-        db,
-        conversation_id=conversation_id,
-        request_id=str(payload.request_id),
-        content=payload.content,
-        researcher_id=researcher.id,
-        experiment_id=experiment.id,
-        stage_id=stage_id,
-    )
+    from app.researcher.ai_config import resolve_experiment_config
+    configuration = resolve_experiment_config(db, experiment.id)
+    with ai_proxy.use_configuration(configuration):
+        ai_proxy.make_payload(payload.content)
+        prepared = repo.prepare_ai_turn(
+            db,
+            conversation_id=conversation_id,
+            request_id=str(payload.request_id),
+            content=payload.content,
+            researcher_id=researcher.id,
+            experiment_id=experiment.id,
+            stage_id=stage_id,
+        )
     if payload.session_id:
         from app.participant.models import ParticipantEvent
         link = db.query(ParticipantEvent).filter_by(session_id=str(payload.session_id), type="server.ai").all()
         if not any(e.detail.get("conversation_id") == conversation_id for e in link):
             versions.server_event(db, str(payload.session_id), "server.ai", {"conversation_id": conversation_id})
     if prepared.cached is None:
-        ai_proxy.validate_configuration(api_key) if api_key is not None else ai_proxy.validate_configuration()
+        with ai_proxy.use_configuration(configuration):
+            ai_proxy.validate_configuration()
 
     async def events():
         try:
-            async with aclosing(svc.generate_ai_turn(db, prepared, api_key=api_key) if api_key is not None else svc.generate_ai_turn(db, prepared)) as source:
+            async with aclosing(svc.generate_ai_turn(db, prepared, configuration=configuration)) as source:
                 async for event in source:
                     yield json.dumps(
                         {**event, "server_time": now_iso()}, ensure_ascii=False
@@ -365,28 +368,30 @@ async def stage_chat(
     researcher: Researcher = Depends(get_study_actor),
 ):
     experiment, conversation_id = chat_context(db, stage_id, payload, researcher)
-    from app.researcher.ai_config import get_experiment_key
-    api_key = get_experiment_key(db, experiment.id)
-    ai_proxy.make_payload(payload.content)
-    prepared = repo.prepare_ai_turn(
-        db,
-        conversation_id=conversation_id,
-        request_id=str(payload.request_id),
-        content=payload.content,
-        researcher_id=researcher.id,
-        experiment_id=experiment.id,
-        stage_id=stage_id,
-    )
+    from app.researcher.ai_config import resolve_experiment_config
+    configuration = resolve_experiment_config(db, experiment.id)
+    with ai_proxy.use_configuration(configuration):
+        ai_proxy.make_payload(payload.content)
+        prepared = repo.prepare_ai_turn(
+            db,
+            conversation_id=conversation_id,
+            request_id=str(payload.request_id),
+            content=payload.content,
+            researcher_id=researcher.id,
+            experiment_id=experiment.id,
+            stage_id=stage_id,
+        )
     if payload.session_id:
         from app.participant.models import ParticipantEvent
         link = db.query(ParticipantEvent).filter_by(session_id=str(payload.session_id), type="server.ai").all()
         if not any(e.detail.get("conversation_id") == conversation_id for e in link):
             versions.server_event(db, str(payload.session_id), "server.ai", {"conversation_id": conversation_id})
     if prepared.cached is None:
-        ai_proxy.validate_configuration(api_key) if api_key is not None else ai_proxy.validate_configuration()
+        with ai_proxy.use_configuration(configuration):
+            ai_proxy.validate_configuration()
     sent = now_iso()
     parts, model = [], ""
-    async with aclosing(svc.generate_ai_turn(db, prepared, api_key=api_key) if api_key is not None else svc.generate_ai_turn(db, prepared)) as source:
+    async with aclosing(svc.generate_ai_turn(db, prepared, configuration=configuration)) as source:
         async for event in source:
             if event["type"] == "delta":
                 parts.append(event["text"])
@@ -450,7 +455,7 @@ async def upload_recording(
     if kind not in ("self", "screen") or stage is None:
         raise HTTPException(status_code=422, detail="Invalid recording stage or kind")
     feature = "selfie" if kind == "self" else "screenRecording"
-    if stage.get("type", "").lower() == "consent" or not (stage.get("recordingRequired") or stage.get("features", {}).get(feature)):
+    if stage.get("type", "").lower() == "consent" or not ((kind == "self" and stage.get("recordingRequired")) or stage.get("features", {}).get(feature)):
         raise HTTPException(status_code=403, detail="Recording is disabled for this stage")
     if session.finished_at:
         raise HTTPException(status_code=409, detail="Session is already complete")

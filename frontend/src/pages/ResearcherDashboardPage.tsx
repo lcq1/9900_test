@@ -12,13 +12,12 @@ import {
 	Trash2,
 } from 'lucide-react'
 import {
-	getStorageSettings,
-	saveStorageSettings,
-	type StorageSettings,
 	getExperimentAIKey,
 	saveExperimentAIKey,
 	removeExperimentAIKey,
+	setExperimentAISource,
 	type ExperimentAIKeyStatus,
+	type ExperimentAISettingsInput,
 } from '../api/experiments'
 import { ExportDialog } from '../researcher/ExportDialog'
 import type { ParticipantEvent, ParticipantEventType } from '../participant/EventQueue'
@@ -749,133 +748,179 @@ function detailText(detail?: Record<string, unknown>): string {
   return text.length > 96 ? `${text.slice(0, 96)}…` : text
 }
 
-// Device-local workspace notification preferences.
-interface WorkspacePrefs {
-	notifyStudyEvents: boolean
-	notifyWeeklySummary: boolean
-	notifyExports: boolean
-}
-
-// Local storage key for notification preferences.
-const PREFS_KEY = 'p13-workspace-prefs'
-// Default preferences for missing or invalid cached settings.
-const DEFAULT_PREFS: WorkspacePrefs = {
-	notifyStudyEvents: true,
-	notifyWeeklySummary: false,
-	notifyExports: true,
-}
-
-// Merge saved preferences with defaults; fall back if invalid.
-function loadPrefs(): WorkspacePrefs {
-	try {
-		// Parse cached data; fall back if invalid.
-		const raw = localStorage.getItem(PREFS_KEY)
-		if (raw) return { ...DEFAULT_PREFS, ...(JSON.parse(raw) as Partial<WorkspacePrefs>) }
-	} catch {
-		// Use default notification preferences if the cache is invalid.
-	}
-	return DEFAULT_PREFS
+function aiSettingsFields(value: ExperimentAIKeyStatus): ExperimentAISettingsInput {
+	return { provider: value.provider, model: value.model, apiBase: value.apiBase ?? '',
+		stream: value.stream ?? true, timeoutSeconds: value.timeoutSeconds ?? 60,
+		temperature: value.temperature ?? null, systemPrompt: value.systemPrompt ?? '',
+		maxPromptChars: value.maxPromptChars ?? 4000, historyMessages: value.historyMessages ?? 8,
+		historyMessageChars: value.historyMessageChars ?? 2000 }
 }
 
 export function ExperimentAIKeySettings({ experiments }: { experiments: Experiment[] }) {
 	const [experimentId, setExperimentId] = useState('')
 	const [apiKey, setApiKey] = useState('')
 	const [status, setStatus] = useState<ExperimentAIKeyStatus | null>(null)
+	const [configuration, setConfiguration] = useState<ExperimentAISettingsInput | null>(null)
 	const [loading, setLoading] = useState(false)
 	const [saving, setSaving] = useState(false)
 	const [message, setMessage] = useState('')
+	const isCommon = experimentId === '__common__'
 	useEffect(() => {
 		let active = true
 		if (experimentId) void getExperimentAIKey(experimentId)
-			.then((value) => { if (active) setStatus(value) })
+			.then((value) => { if (active) {
+				setStatus(value)
+				setConfiguration(aiSettingsFields(value))
+			} })
 			.catch(() => { if (active) setMessage('Could not load AI key settings. Select the experiment again to retry.') })
 			.finally(() => { if (active) setLoading(false) })
 		return () => { active = false }
 	}, [experimentId])
 	const updateKey = async (remove: boolean) => {
-		if (!experimentId || saving || loading || !status) return
+		if (!experimentId || saving || loading || !status || !configuration) return
 		setSaving(true)
 		setMessage('')
 		try {
 			const value = remove
 				? await removeExperimentAIKey(experimentId)
-				: await saveExperimentAIKey(experimentId, apiKey.trim())
+				: await saveExperimentAIKey(experimentId, apiKey.trim(), configuration)
 			setStatus(value)
+			setConfiguration(aiSettingsFields(value))
 			setApiKey('')
-			setMessage(remove ? 'Custom key removed. This experiment now uses the server default.' : 'API key saved for this experiment.')
+			setMessage(remove ? 'Common configuration reset to server defaults.' : isCommon ? 'Common AI configuration saved.' : 'AI settings saved for this experiment.')
 		} catch {
-			setMessage('Could not save AI key settings. Check the key and try again.')
+			setMessage('Could not save AI settings. Check the parameters and try again.')
 		} finally { setSaving(false) }
 	}
-	return <section className="settings-card">
-		<h3>AI API keys</h3>
-		<p className="card-sub">Configure a separate API key for each experiment. Experiments without a custom key use the server default. The provider, model and API address follow server settings.</p>
-		<div className="settings-field">
-			<label htmlFor="ai-key-experiment">Experiment</label>
-			<select id="ai-key-experiment" value={experimentId} disabled={saving} onChange={(event) => {
-				setApiKey('')
-				setStatus(null)
-				setMessage('')
-				setLoading(Boolean(event.target.value))
-				setExperimentId(event.target.value)
-			}}>
-				<option value="">Select an experiment</option>
-				{experiments.map((experiment) => <option key={experiment.id} value={experiment.id}>{experiment.name} ({experiment.code})</option>)}
-			</select>
+	const updateSource = async (useCommon: boolean) => {
+		if (saving || loading || isCommon || !experimentId) return
+		setSaving(true)
+		setApiKey('')
+		setMessage('')
+		try {
+			const value = await setExperimentAISource(experimentId, useCommon)
+			setStatus(value)
+			setConfiguration(aiSettingsFields(value))
+			setMessage('Configuration source saved.')
+		} catch { setMessage('Could not change the configuration source. Please retry.') }
+		finally { setSaving(false) }
+	}
+	return <section className="settings-card ai-settings-card">
+		<div className="settings-card-heading">
+			<h3>AI API keys</h3>
+			<p className="card-sub">Set a common AI configuration for your experiments, or choose an independent configuration for a specific experiment. Switching sources keeps the saved independent settings.</p>
 		</div>
-		{loading && <p>Loading AI key settings…</p>}
-		{status && <>
-			<p>{status.hasCustomKey ? 'Custom API key configured' : 'Using server default'} · {status.provider} · {status.model}</p>
-			{!status.configured && <p>AI is not configured. Check the API key and server settings.</p>}
+		<div className="ai-key-controls">
 			<div className="settings-field">
-				<label htmlFor="experiment-ai-key">API key</label>
-				<input id="experiment-ai-key" type="password" autoComplete="new-password" value={apiKey} disabled={saving} maxLength={4096}
-					onChange={(event) => setApiKey(event.target.value)} placeholder={status.hasCustomKey ? 'Enter a replacement key' : 'Enter API key'} />
+				<label htmlFor="ai-key-experiment">Experiment</label>
+				<select id="ai-key-experiment" value={experimentId} disabled={saving} onChange={(event) => {
+					setApiKey('')
+					setStatus(null)
+					setConfiguration(null)
+					setMessage('')
+					setLoading(Boolean(event.target.value))
+					setExperimentId(event.target.value)
+				}}>
+					<option value="">Select an experiment</option>
+					<option value="__common__">Common configuration (all my experiments)</option>
+					{experiments.map((experiment) => <option key={experiment.id} value={experiment.id}>{experiment.name} ({experiment.code})</option>)}
+				</select>
 			</div>
-			<p className="settings-hint">Saved keys are kept on the server and are never displayed. Saving does not send a test request to the provider.</p>
-			<button type="button" className="primary-button" disabled={saving || !apiKey.trim()} onClick={() => void updateKey(false)}>{saving ? 'Saving…' : 'Save API key'}</button>
-			{status.hasCustomKey && <button type="button" className="secondary-button" disabled={saving} onClick={() => void updateKey(true)}>Use server default</button>}
-		</>}
-		<p role="status">{message}</p>
+			{loading && <p>Loading AI key settings…</p>}
+			{status && !isCommon && <div className="settings-field">
+				<label htmlFor="ai-configuration-source">Configuration source</label>
+				<select id="ai-configuration-source" value={status.useCommon ? 'common' : 'independent'} disabled={saving}
+					onChange={(event) => void updateSource(event.target.value === 'common')}>
+					<option value="common">Use common configuration</option>
+					<option value="independent">Use independent configuration</option>
+				</select>
+			</div>}
+			{status?.useCommon && !isCommon && <div className="ai-key-controls">
+				<p>This experiment follows your common configuration, including future updates.</p>
+				<p>{status.provider} · {status.model}</p>
+				<p>{status.apiBase}</p>
+				{!status.configured && <p>The common AI configuration is incomplete.</p>}
+				<button type="button" className="secondary-button" disabled={saving || loading} onClick={() => {
+					setStatus(null); setConfiguration(null); setApiKey(''); setMessage(''); setLoading(true); setExperimentId('__common__')
+				}}>Edit common configuration</button>
+			</div>}
+			{status && configuration && (isCommon || !status.useCommon) && <form className="ai-key-controls" onSubmit={(event) => { event.preventDefault(); void updateKey(false) }}>
+				<p>{status.hasCustomKey ? 'Custom API key configured' : 'Using server default API key'} · {status.provider} · {status.model}</p>
+				{!status.configured && <p>AI is not configured. Check the API key and server settings.</p>}
+				<div className="ai-parameter-grid">
+					<div className="settings-field">
+						<label htmlFor="ai-provider">Provider</label>
+						<select id="ai-provider" value={configuration.provider} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, provider: event.target.value })}>
+							<option value="openai_compatible">OpenAI compatible</option><option value="workbuddy">WorkBuddy</option>
+						</select>
+					</div>
+					<div className="settings-field">
+						<label htmlFor="ai-model">Model</label>
+						<input id="ai-model" required maxLength={255} value={configuration.model} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, model: event.target.value })} />
+					</div>
+				</div>
+				<div className="settings-field">
+					<label htmlFor="ai-api-base">API endpoint URL</label>
+					<input id="ai-api-base" type="url" required maxLength={2048} value={configuration.apiBase ?? ''} disabled={saving} placeholder="https://your-provider.com/v1/chat/completions" onChange={(event) => setConfiguration({ ...configuration, apiBase: event.target.value })} />
+				</div>
+				<div className="settings-field">
+					<label htmlFor="experiment-ai-key">API key</label>
+					<input id="experiment-ai-key" type="password" autoComplete="new-password" value={apiKey} disabled={saving} maxLength={4096}
+						onChange={(event) => setApiKey(event.target.value)} placeholder={status.hasCustomKey ? 'Enter a replacement key' : 'Enter API key'} />
+				</div>
+				<p className="settings-hint">Leave the key blank to keep the current key or server default. WorkBuddy requires its wbpk_ application key. Saved keys are never displayed. Saving does not send a test request.</p>
+				<div className="ai-parameter-grid">
+					<label className="switch-label"><span>Streaming responses</span>
+						<button type="button" role="switch" aria-label="Streaming responses" aria-checked={configuration.stream ?? true} className={configuration.stream ? 'switch on' : 'switch'} disabled={saving} onClick={() => setConfiguration({ ...configuration, stream: !configuration.stream })}><span></span></button>
+					</label>
+					<div className="settings-field"><label htmlFor="ai-timeout">Timeout (seconds)</label>
+						<input id="ai-timeout" type="number" required min="0.1" max="600" step="any" value={configuration.timeoutSeconds} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, timeoutSeconds: Number(event.target.value) })} />
+					</div>
+				</div>
+				<details className="ai-advanced-settings"><summary>Advanced AI settings</summary>
+					<div className="settings-field"><label htmlFor="ai-temperature">Temperature (optional)</label>
+						<input id="ai-temperature" type="number" min="0" max="2" step="any" placeholder="Provider default" value={configuration.temperature ?? ''} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, temperature: event.target.value === '' ? null : Number(event.target.value) })} />
+					</div>
+					<div className="settings-field"><label htmlFor="ai-system-prompt">System prompt</label>
+						<textarea id="ai-system-prompt" rows={5} maxLength={50000} placeholder="Use the built-in research assistant instructions" value={configuration.systemPrompt ?? ''} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, systemPrompt: event.target.value })} />
+					</div>
+					<div className="ai-parameter-grid">
+						{([
+							['maxPromptChars', 'Maximum prompt characters', 1, 20000],
+							['historyMessages', 'History messages', 0, 100],
+							['historyMessageChars', 'Characters per history message', 1, 20000],
+						] as const).map(([key, label, min, max]) => <div className="settings-field" key={key}>
+							<label htmlFor={'ai-' + key}>{label}</label>
+							<input id={'ai-' + key} type="number" required min={min} max={max} step="1" value={configuration[key]} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, [key]: Number(event.target.value) })} />
+						</div>)}
+					</div>
+				</details>
+				<div className="settings-actions">
+					<button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving…' : 'Save AI settings'}</button>
+					{isCommon && (status.hasCustomKey || status.hasCustomSettings) && <button type="button" className="secondary-button" disabled={saving} onClick={() => void updateKey(true)}>Use server default</button>}
+				</div>
+			</form>}
+			<p role="status">{message}</p>
+		</div>
 	</section>
 }
 
-// Show profiles, members, preferences, platform settings, and local usage.
+// Show AI settings, profiles, members, platform settings, and local usage.
 export function WorkspaceSettingsPage({
 	experiments,
 	settings,
 	onChange,
-	onClose,
 	onClearAll,
 }: {
 	experiments: Experiment[]
 	settings: { researcherName: string }
 	onChange: (next: { researcherName: string }) => void
-	onClose: () => void
 	onClearAll: () => void
 }) {
-	// Initialize local preferences and track backend members and settings.
-	const [prefs, setPrefs] = useState<WorkspacePrefs>(loadPrefs)
+	// Track backend members and platform settings.
 	const [members, setMembers] = useState<Researcher[]>([])
 	const [platform, setPlatform] = useState<PlatformSettings | null>(null)
 	const me = getCurrentResearcher()
-	const [storage, setStorage] = useState<StorageSettings | null>(null)
-	const [storageMessage, setStorageMessage] = useState('')
-	useEffect(() => {
-		let active = true
-		void getStorageSettings()
-			.then((value) => {
-				if (active) setStorage(value)
-			})
-			.catch(() => {
-				if (active)
-					setStorageMessage('Storage settings are unavailable.')
-			})
-		return () => {
-			active = false
-		}
-	}, [])
-
 	// Load data and ignore results after unmount.
 	useEffect(() => {
 		let active = true
@@ -899,13 +944,6 @@ export function WorkspaceSettingsPage({
 			active = false
 		}
 	}, [])
-
-	// Toggle a notification preference and save it locally.
-	const togglePref = (key: keyof WorkspacePrefs) => {
-		const next = { ...prefs, [key]: !prefs[key] }
-		setPrefs(next)
-		localStorage.setItem(PREFS_KEY, JSON.stringify(next))
-	}
 
 	// Count local workspace sessions, events, and stored characters.
 	let sessionCount = 0
@@ -932,53 +970,19 @@ export function WorkspaceSettingsPage({
 	const storageKb = (storageBytes / 1024).toFixed(1)
 
 	return (
-		<div className="page">
+		<div className="page workspace-settings-page">
 			{/* Page heading and main actions. */}
 			<div className="page-heading">
 				<div>
 					<p className="eyebrow">WORKSPACE</p>
 					<h1>Workspace settings</h1>
-					<label>
-						Server storage location{' '}
-						<select
-							aria-label="Server storage location"
-							value={storage?.location ?? ''}
-							disabled={!storage}
-							onChange={(event) => {
-								void saveStorageSettings(event.target.value)
-									.then((value) => {
-										setStorage(value)
-										setStorageMessage(
-											'Storage preference saved. Existing files stay accessible.',
-										)
-									})
-									.catch(() =>
-										setStorageMessage(
-											'Could not save storage location. Check server configuration and free space.',
-										),
-									)
-							}}
-						>
-							{storage?.locations.map((location) => (
-								<option key={location} value={location}>
-									{location}
-								</option>
-							))}
-						</select>
-					</label>
-					<p role="status">{storageMessage}</p>
 					<p className="subheading">
-						Profile, members, notifications and workspace
-						statistics. Platform-level configuration lives in
-						Administration.
+						Manage AI configurations, your profile, members and workspace policies.
 					</p>
 				</div>
-				<button className="secondary-button" onClick={onClose}>
-					Back
-				</button>
 			</div>
 
-			{/* Profile, members, preferences, policies, usage, and cache settings. */}
+			{/* AI configuration, profile, members, policies, usage, and cache settings. */}
 			<div className="settings-grid">
 				<ExperimentAIKeySettings experiments={experiments} />
 				{/* Researcher profile and display name. */}
@@ -1033,71 +1037,6 @@ export function WorkspaceSettingsPage({
 							</div>
 						))
 					)}
-				</section>
-
-				{/* Device-local notification preferences. */}
-				<section className="settings-card">
-					<h3>Notifications</h3>
-					<p className="card-sub">
-						Workspace-level notification preferences, stored on this
-						device.
-					</p>
-					<div className="pref-row">
-						<div className="pref-info">
-							<strong>Study events</strong>
-							<small>
-								Alert me when a participant session starts or is
-								aborted.
-							</small>
-						</div>
-						<button
-							className={
-								prefs.notifyStudyEvents ? 'switch on' : 'switch'
-							}
-							onClick={() => togglePref('notifyStudyEvents')}
-							aria-label="Toggle study event notifications"
-						>
-							<span></span>
-						</button>
-					</div>
-					<div className="pref-row">
-						<div className="pref-info">
-							<strong>Weekly summary</strong>
-							<small>
-								Send me a weekly digest of captured sessions and
-								events.
-							</small>
-						</div>
-						<button
-							className={
-								prefs.notifyWeeklySummary
-									? 'switch on'
-									: 'switch'
-							}
-							onClick={() => togglePref('notifyWeeklySummary')}
-							aria-label="Toggle weekly summary notifications"
-						>
-							<span></span>
-						</button>
-					</div>
-					<div className="pref-row">
-						<div className="pref-info">
-							<strong>Export notifications</strong>
-							<small>
-								Notify me when an export of event timelines
-								completes.
-							</small>
-						</div>
-						<button
-							className={
-								prefs.notifyExports ? 'switch on' : 'switch'
-							}
-							onClick={() => togglePref('notifyExports')}
-							aria-label="Toggle export notifications"
-						>
-							<span></span>
-						</button>
-					</div>
 				</section>
 
 				{/* Platform settings from the admin API. */}
@@ -1180,7 +1119,7 @@ export function WorkspaceSettingsPage({
 				</section>
 
 				{/* Clear local workspace data after confirmation. */}
-				<section className="settings-card">
+				<section className="settings-card settings-danger-card">
 					<h3>Danger zone</h3>
 					<p className="card-sub">
 						Irreversible local-data operations.
@@ -1192,7 +1131,6 @@ export function WorkspaceSettingsPage({
 					</p>
 					<button
 						className="danger-button"
-						style={{ marginTop: 12 }}
 						onClick={() => {
 							// Clear local caches after user confirmation.
 							if (

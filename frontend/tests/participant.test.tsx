@@ -44,6 +44,43 @@ describe('participant runtime', () => {
 
 	afterEach(cleanup)
 
+	it('allows choosing stage order while preserving answers and checking skipped required questions', async () => {
+		const experiment = study()
+		const first = experiment.stages[0]
+		first.name = 'First task'
+		first.features.navigation = true
+		const second = createStage('short_answer')
+		second.name = 'Second task'
+		second.features.timer = false
+		second.features.screenRecording = false
+		experiment.stages = [first, second]
+		render(<ParticipantPreview experiment={experiment} participantCode="PREVIEW-ORDER" previewOnly onBack={() => {}} />)
+		fireEvent.change(screen.getByRole('combobox', { name: 'Go to stage' }), { target: { value: '1' } })
+		await screen.findByText('Step 2 · Second task')
+		fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'Second answer' } })
+		fireEvent.click(screen.getByRole('button', { name: 'Finish', exact: true }))
+		await screen.findByText(/Required: First task/)
+		fireEvent.change(screen.getByRole('combobox', { name: 'Go to stage' }), { target: { value: '0' } })
+		await screen.findByText('Step 1 · First task')
+		fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'First answer' } })
+		fireEvent.change(screen.getByRole('combobox', { name: 'Go to stage' }), { target: { value: '1' } })
+		await screen.findByText('Step 2 · Second task')
+		expect((screen.getByPlaceholderText('Type your response...') as HTMLTextAreaElement).value).toBe('Second answer')
+		fireEvent.change(screen.getByRole('combobox', { name: 'Go to stage' }), { target: { value: '0' } })
+		await screen.findByText('Step 1 · First task')
+		expect((screen.getByPlaceholderText('Type your response...') as HTMLTextAreaElement).value).toBe('First answer')
+	})
+
+	it('does not expose stage selection before consent or when free order is disabled', () => {
+		const experiment = study()
+		const { rerender } = render(<ParticipantPreview experiment={experiment} participantCode="PREVIEW-ORDER" previewOnly onBack={() => {}} />)
+		expect(screen.queryByRole('combobox', { name: 'Go to stage' })).toBeNull()
+		const consent = createStage('consent')
+		consent.features.navigation = true
+		rerender(<ParticipantPreview key="consent" experiment={{ ...experiment, stages: [consent, ...experiment.stages] }} participantCode="PREVIEW-ORDER" previewOnly onBack={() => {}} />)
+		expect(screen.queryByRole('combobox', { name: 'Go to stage' })).toBeNull()
+	})
+
 	it('renders true/false components as mutually exclusive choices', () => {
 		const experiment = study()
 		const stage = createStage('true_false')
@@ -58,6 +95,21 @@ describe('participant runtime', () => {
 		fireEvent.click(falseOption)
 		expect(falseOption.classList.contains('is-selected')).toBe(true)
 		expect(trueOption.classList.contains('is-selected')).toBe(false)
+	})
+
+	it('requests camera and microphone without implicitly requesting the screen', async () => {
+		const camera = vi.fn().mockRejectedValue(new DOMException('denied', 'NotAllowedError'))
+		const screenCapture = vi.fn()
+		vi.stubGlobal('MediaRecorder', class {})
+		vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: camera, getDisplayMedia: screenCapture } })
+		const experiment = study()
+		experiment.stages[0].recordingRequired = true
+		experiment.stages[0].recordingMode = 'auto'
+		try {
+			render(<ParticipantPreview experiment={experiment} participantCode="PREVIEW-CAMERA" previewOnly onBack={() => {}} />)
+			await waitFor(() => expect(camera).toHaveBeenCalledWith({ video: true, audio: true }))
+			expect(screenCapture).not.toHaveBeenCalled()
+		} finally { cleanup(); vi.unstubAllGlobals() }
 	})
 
 	it.each([false, true])(
@@ -317,6 +369,7 @@ describe('participant runtime', () => {
 		first.components = []
 		first.features.confirm = false
 		first.recordingRequired = true
+		first.features.screenRecording = true
 		first.recordingMode = 'auto'
 		experiment.stages.push({
 			...first,

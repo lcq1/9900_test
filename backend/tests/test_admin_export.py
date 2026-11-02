@@ -382,6 +382,9 @@ def test_workbook_versions_unknown_history_and_long_cells():
     config = {"name": study.name, "code": study.code, "stages": study.stages}
     history = [SimpleNamespace(type="server.published", timestamp="2026-01-01T00:00:00Z",
                               detail={"version": v, "snapshot": config}) for v in (1, 2)]
+    history += [SimpleNamespace(type=kind, timestamp="2026-01-01T00:00:00Z",
+                                detail={"snapshot": {"name": "UNPUBLISHED_CONFIGURATION"}})
+                for kind in ("server.created", "server.changed", "server.publish_reused")]
     def internal(kind, detail):
         return SimpleNamespace(session_id="s1", type=kind, detail=detail)
     events += [internal("server.version", {"version": 1}), internal("server.ai", {"conversation_id": "chat"})]
@@ -412,6 +415,7 @@ def test_workbook_versions_unknown_history_and_long_cells():
     assert unknown.cell(2, 6).value is None
     text = "\n".join(str(cell.value or "") for ws in book for row in ws for cell in row)
     assert "base64" not in text and "/private" not in text
+    assert "UNPUBLISHED_CONFIGURATION" not in text
     assert "Unix time (ms)" in text and "Performance time (ms)" in text
     assert all(c.data_type != "f" for ws in book for row in ws for c in row)
     assert all(len(str(c.value or "")) <= 30000 for ws in book for row in ws for c in row)
@@ -564,7 +568,7 @@ def test_publication_concurrency_and_idempotency(client, auth_headers):
         assert [e.detail["version"] for e in history] == [1, 2]
         assert {e.detail["snapshot"]["stages"][1]["components"][0]["label"] for e in history[:2]} == {"A", "B"}
         assert history[-1].detail["snapshot"]["stages"] == exp.stages
-    assert client.patch(path, headers=auth_headers, json={**same, "name": "Conflicting reuse"}).status_code == 409
+    assert client.patch(path, headers=auth_headers, json={**bodies[0], "name": "Conflicting reuse"}).status_code == 409
 
 
 def test_only_changed_publications_create_version_sheets(client, auth_headers):
@@ -588,13 +592,21 @@ def test_only_changed_publications_create_version_sheets(client, auth_headers):
         response = client.get(path + '/results.xlsx', headers=auth_headers)
         assert response.status_code == 200
         return load_workbook(io.BytesIO(response.content)).sheetnames
+    def assert_publication_history(count):
+        with database.SessionLocal() as db:
+            history = versions.experiment_history(db, db.get(Experiment, experiment['id']))
+            assert len(history) == count + 1
+            assert all(event.type in ('server.created', 'server.published') for event in history)
+            assert 'snapshot' not in next(event.detail for event in history if event.type == 'server.created')
     for text in ['Draft A', 'Draft B', 'Published question']:
         patch({"stages": published_stages(text)})
     assert sheets() == ['Study information']
+    assert_publication_history(0)
     publish()
     assert sheets() == ['Study information', 'V1']
     publish()
     assert sheets() == ['Study information', 'V1']
+    assert_publication_history(1)
     patch({"status": "Draft"})
     publish()
     assert sheets() == ['Study information', 'V1']
@@ -605,11 +617,13 @@ def test_only_changed_publications_create_version_sheets(client, auth_headers):
     patch({"stages": published_stages('New published question')})
     patch({"stages": published_stages('Final published question')})
     assert sheets() == ['Study information', 'V1']
+    assert_publication_history(1)
     publish()
     assert sheets() == ['Study information', 'V1', 'V2']
     patch({"stages": published_stages('Published question')})
     publish()
     assert sheets() == ['Study information', 'V1', 'V2', 'V3']
+    assert_publication_history(3)
     with database.SessionLocal() as db:
         exp = db.get(Experiment, experiment['id'])
         history = versions.published_versions(db, exp)

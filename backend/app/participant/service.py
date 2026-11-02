@@ -19,37 +19,38 @@ from app.participant.schemas import (
 from app.researcher.models import Experiment
 
 
-async def generate_ai_turn(db: Session, prepared: repo.PreparedAITurn, api_key: str | None = None):
+async def generate_ai_turn(db: Session, prepared: repo.PreparedAITurn, api_key: str | None = None, configuration=None):
     """Keep context server-side; replay retries and commit only completed turns."""
-    try:
-        if prepared.cached is not None:
-            reply, model = prepared.cached.reply, prepared.cached.model
-            db.rollback()  # Release the read/idempotency lock before replay.
-            yield {"type": "delta", "text": reply, "model": model}
-            yield {"type": "done", "model": model}
-            return
-        chunks, completion = [], None
-        async with aclosing(
-            ai_proxy.stream_chat(prepared.content, prepared.history, api_key=api_key)
-            if api_key is not None else ai_proxy.stream_chat(prepared.content, prepared.history)
-        ) as source:
-            async for event in source:
-                if event["type"] == "done":
-                    completion = event
-                else:
-                    if event["type"] == "delta":
-                        chunks.append(event["text"])
-                    yield event
-        if completion is None:
-            raise HTTPException(
-                status_code=502, detail="The AI reply was interrupted. Please retry."
-            )
-        repo.save_ai_turn(db, prepared, "".join(chunks), completion["model"])
-        yield completion
-    finally:
-        # Cancellation/provider failures roll back incomplete pairs and release
-        # the lock. A successfully committed turn remains available on retry.
-        db.rollback()
+    with ai_proxy.use_configuration(configuration):
+        try:
+            if prepared.cached is not None:
+                reply, model = prepared.cached.reply, prepared.cached.model
+                db.rollback()  # Release the read/idempotency lock before replay.
+                yield {"type": "delta", "text": reply, "model": model}
+                yield {"type": "done", "model": model}
+                return
+            chunks, completion = [], None
+            async with aclosing(
+                ai_proxy.stream_chat(prepared.content, prepared.history, api_key=api_key)
+                if api_key is not None else ai_proxy.stream_chat(prepared.content, prepared.history)
+            ) as source:
+                async for event in source:
+                    if event["type"] == "done":
+                        completion = event
+                    else:
+                        if event["type"] == "delta":
+                            chunks.append(event["text"])
+                        yield event
+            if completion is None:
+                raise HTTPException(
+                    status_code=502, detail="The AI reply was interrupted. Please retry."
+                )
+            repo.save_ai_turn(db, prepared, "".join(chunks), completion["model"])
+            yield completion
+        finally:
+            # Cancellation/provider failures roll back incomplete pairs and release
+            # the lock. A successfully committed turn remains available on retry.
+            db.rollback()
 
 
 def lookup_experiment(db: Session, code: str, participant: str) -> Experiment:
@@ -80,8 +81,8 @@ def validate_stage(stage: dict, answers: list, recording: dict):
         value = values.get(component["id"], "")
         if required.get(feature, component.get("required", False)) and not (value.strip() if isinstance(value, str) else value):
             missing.append(component["label"])
-    if stage.get("recordingRequired") and not all(recording.get(k) is True for k in ("self", "screen")):
-        missing.append("Screen and camera recording")
+    if stage.get("recordingRequired") and recording.get("self") is not True:
+        missing.append("Camera and microphone recording")
     if missing:
         raise HTTPException(status_code=422, detail="Required: " + ", ".join(missing))
 

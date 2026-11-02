@@ -12,7 +12,7 @@ from app.participant.models import (
     AIChatTurn,
 )
 from app.core.clock import now_iso
-from app.core.config import settings
+from app.participant.ai_proxy import current_settings
 from app.researcher.models import Experiment
 
 
@@ -138,7 +138,7 @@ def prepare_ai_turn(
         .order_by(AIChatTurn.sequence.desc())
         .first()
     )
-    count = (settings.ai_history_messages + 1) // 2
+    count = (current_settings().ai_history_messages + 1) // 2
     turns = (
         db.query(AIChatTurn)
         .filter_by(conversation_id=conversation_id)
@@ -175,7 +175,7 @@ def save_ai_turn(db: Session, prepared: PreparedAITurn, reply: str, model: str):
             prompt=prepared.content,
             reply=reply,
             model=model,
-            provider=settings.ai_provider,
+            provider=current_settings().ai_provider,
             created_at=now_iso(),
         )
     )

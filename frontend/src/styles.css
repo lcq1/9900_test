@@ -599,6 +599,26 @@ nav {
 	color: #6b7785;
 	font-size: 11px;
 }
+.experiment-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+}
+.participant-stage-picker {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-bottom: 16px;
+	font-size: 13px;
+}
+.participant-stage-picker select {
+	max-width: 100%;
+	padding: 8px 12px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: #fff;
+}
 .switch {
 	width: 36px;
 	height: 21px;
@@ -2623,6 +2643,107 @@ nav {
 }
 .settings-grid .settings-card {
 	max-width: none;
+}
+/* Keep workspace configuration readable without affecting stage settings cards. */
+.workspace-settings-page {
+	max-width: 1240px;
+	margin-inline: auto;
+}
+.workspace-settings-page .page-heading {
+	margin-bottom: 28px;
+}
+.workspace-settings-page .settings-grid {
+	gap: 20px;
+	align-items: stretch;
+}
+.workspace-settings-page .settings-card {
+	min-width: 0;
+	gap: 14px;
+	align-content: start;
+	padding: 24px;
+}
+.workspace-settings-page .settings-card p {
+	margin: 0;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+.workspace-settings-page .ai-settings-card {
+	grid-column: 1 / -1;
+	grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
+	gap: 32px;
+	border-top: 3px solid #2563eb;
+}
+.workspace-settings-page .settings-card-heading,
+.ai-key-controls {
+	display: grid;
+	gap: 14px;
+	min-width: 0;
+	align-content: start;
+}
+.workspace-settings-page [role="status"]:empty {
+	display: none;
+}
+.settings-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+.ai-parameter-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+}
+.ai-advanced-settings > summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+.ai-advanced-settings[open] > summary,
+.ai-advanced-settings > .settings-field {
+	margin-bottom: 14px;
+}
+.ai-key-controls textarea {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 11px 12px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	font: inherit;
+	resize: vertical;
+}
+@media (max-width: 600px) {
+	.ai-parameter-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.workspace-settings-page .pref-row .switch,
+.workspace-settings-page .member-row .pill {
+	flex-shrink: 0;
+}
+.workspace-settings-page .settings-danger-card {
+	grid-column: 1 / -1;
+	grid-template-columns: minmax(0, 1fr) auto;
+	border-color: #f3d2ce;
+	align-items: center;
+}
+.workspace-settings-page .settings-danger-card > h3,
+.workspace-settings-page .settings-danger-card > p {
+	grid-column: 1;
+}
+.workspace-settings-page .settings-danger-card > h3 {
+	color: #a33b32;
+}
+.workspace-settings-page .settings-danger-card > button {
+	grid-column: 2;
+	grid-row: 1 / 4;
+}
+@media (max-width: 900px) {
+	.workspace-settings-page .ai-settings-card,
+	.workspace-settings-page .settings-danger-card {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.workspace-settings-page .settings-danger-card > button {
+		grid-column: 1;
+		grid-row: auto;
+		justify-self: start;
+	}
 }
 .settings-card h3 {
 	font:

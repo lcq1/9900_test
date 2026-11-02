@@ -73,7 +73,7 @@ export function createStage(type: string = "single_choice"): Stage {
 				: "Enter your question.",
 		},
 	];
-	if (!consent)
+	if (!consent && type !== 'video_oral_answer')
 		components.push({
 			id: crypto.randomUUID(),
 			type:
@@ -100,6 +100,8 @@ export function createStage(type: string = "single_choice"): Stage {
 		duration: 0,
 		components,
 		countdownMinutes: consent ? 0 : 2,
+		recordingRequired: type === 'video_oral_answer',
+		recordingMode: type === 'video_oral_answer' ? 'auto' : 'manual',
 		features: {
 			ai: false,
 			timer: !consent,

@@ -355,6 +355,8 @@ def build_workbook(experiment, sessions, answers=(), events=(), consents=(), rec
         ["Notes", "", "", "One row per session. Legacy records have unknown versions and questions are identified by original component IDs. Only explicitly linked legacy AI conversations are exported.", ""],
     ]
     for event in history:
+        if event.type != "server.published":
+            continue
         payload = event.detail or {}
         category = {"server.created": "Study created", "server.changed": "Configuration changed", "server.published": "Version published", "server.publish_reused": "Existing version republished"}.get(event.type, event.type)
         if payload.get("baseline"):

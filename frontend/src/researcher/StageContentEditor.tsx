@@ -152,7 +152,12 @@ export function StageContentEditor({
 		onUpdateStage((current) => {
 			// Adjust components for the new stage type.
 			let comps = current.components
-			if (type === 'true_false') {
+			if (type === 'video_oral_answer') {
+				// Remove only the default response; retain authored extra components.
+				comps = comps.filter((component, index) => !(index === 1 &&
+					['textbox', 'choice', 'checkbox', 'true_false'].includes(component.type) &&
+					['Question', 'Your response'].includes(component.label)))
+			} else if (type === 'true_false') {
 				// Use True and False options for true/false stages.
 				comps = ensureChoice(comps, ['True', 'False']).map((c) =>
 					c.type === 'choice' || c.type === 'checkbox' || c.type === 'true_false'
@@ -179,6 +184,8 @@ export function StageContentEditor({
 						? { ...c, type: 'textbox', options: undefined }
 						: c,
 				)
+				if (!comps.some((component) => component.type === 'textbox'))
+					comps = [...comps, makeComponent('textbox')]
 			}
 			return {
 				...current,
@@ -187,6 +194,11 @@ export function StageContentEditor({
 					? 'Stage name'
 					: current.name,
 				components: comps,
+				...(type === 'video_oral_answer' ? {
+					recordingRequired: true,
+					recordingMode: 'auto',
+					features: { ...current.features, selfie: true, copyPaste: false },
+				} : {}),
 			}
 		})
 	}

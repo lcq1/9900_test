@@ -36,13 +36,28 @@ export interface ExperimentAIKeyStatus {
 	configured: boolean
 	provider: string
 	model: string
+	hasCustomSettings?: boolean
+	useCommon?: boolean
+	apiBase?: string
+	stream?: boolean
+	timeoutSeconds?: number
+	temperature?: number | null
+	systemPrompt?: string | null
+	maxPromptChars?: number
+	historyMessages?: number
+	historyMessageChars?: number
 }
+export type ExperimentAISettingsInput = Omit<ExperimentAIKeyStatus, 'hasCustomKey' | 'hasCustomSettings' | 'configured' | 'useCommon'>
+const aiSettingsPath = (id: string) => id === '__common__' ? '/workspace/ai-config' : PATH + '/' + encodeURIComponent(id) + '/ai-key'
 export const getExperimentAIKey = (id: string) =>
-	http.get<ExperimentAIKeyStatus>(PATH + '/' + encodeURIComponent(id) + '/ai-key')
-export const saveExperimentAIKey = (id: string, apiKey: string) =>
-	http.patch<ExperimentAIKeyStatus>(PATH + '/' + encodeURIComponent(id) + '/ai-key', { apiKey })
+	http.get<ExperimentAIKeyStatus>(aiSettingsPath(id))
+export const saveExperimentAIKey = (id: string, apiKey: string, configuration?: ExperimentAISettingsInput) =>
+	http.patch<ExperimentAIKeyStatus>(aiSettingsPath(id),
+		{ ...configuration, ...(apiKey ? { apiKey } : {}) })
 export const removeExperimentAIKey = (id: string) =>
-	http.del<ExperimentAIKeyStatus>(PATH + '/' + encodeURIComponent(id) + '/ai-key')
+	http.del<ExperimentAIKeyStatus>(aiSettingsPath(id))
+export const setExperimentAISource = (id: string, useCommon: boolean) =>
+	http.patch<ExperimentAIKeyStatus>(aiSettingsPath(id), { useCommon })
 export function useExperiments() {
 	const session = useSessionStore((s) => s.session),
 		client = useQueryClient(),

@@ -128,6 +128,7 @@ export function Editor({
 						</span>
 					</div>
 				</div>
+				<div className="experiment-options">
 				<label className="switch-label">
 					<span>Full-screen mode</span>
 					<button
@@ -144,6 +145,21 @@ export function Editor({
 						<span></span>
 					</button>
 				</label>
+				<label className="switch-label">
+					<span>Choose answer order</span>
+					<button type="button" role="switch" aria-label="Choose answer order"
+						aria-checked={Boolean(experiment.stages[0]?.features.navigation)}
+						className={experiment.stages[0]?.features.navigation ? 'switch on' : 'switch'}
+						onClick={() => onUpdateExperiment((current) => ({
+							...current,
+							stages: current.stages.map((item) => ({ ...item, features: {
+								...item.features, navigation: !current.stages[0]?.features.navigation,
+							} })),
+						}))}>
+						<span></span>
+					</button>
+				</label>
+				</div>
 			</div>
 			{/* Stage list, content editor, and feature settings. */}
 			<div className="editor-grid">

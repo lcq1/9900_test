@@ -19,7 +19,7 @@ from app.participant.schemas import (
 from app.researcher.models import Experiment
 
 
-async def generate_ai_turn(db: Session, prepared: repo.PreparedAITurn):
+async def generate_ai_turn(db: Session, prepared: repo.PreparedAITurn, api_key: str | None = None):
     """Keep context server-side; replay retries and commit only completed turns."""
     try:
         if prepared.cached is not None:
@@ -30,7 +30,8 @@ async def generate_ai_turn(db: Session, prepared: repo.PreparedAITurn):
             return
         chunks, completion = [], None
         async with aclosing(
-            ai_proxy.stream_chat(prepared.content, prepared.history)
+            ai_proxy.stream_chat(prepared.content, prepared.history, api_key=api_key)
+            if api_key is not None else ai_proxy.stream_chat(prepared.content, prepared.history)
         ) as source:
             async for event in source:
                 if event["type"] == "done":

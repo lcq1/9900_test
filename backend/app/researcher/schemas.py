@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal, Optional
-from pydantic import ConfigDict
+from pydantic import ConfigDict, SecretStr
 
 from app.core.schemas import CamelModel, CamelORMModel
 
@@ -88,3 +88,7 @@ class Experiment(CamelORMModel):
 
 class StorageSettings(CamelModel):
     location: str | None = None
+
+
+class ExperimentAIKey(CamelModel):
+    api_key: SecretStr

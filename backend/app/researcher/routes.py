@@ -32,6 +32,7 @@ from app.researcher.schemas import (
     Researcher as ResearcherSchema,
     ResearcherCreate,
     StorageSettings,
+    ExperimentAIKey,
 )
 
 router = APIRouter(tags=["auth", "researcher", "experiments"])
@@ -198,6 +199,46 @@ def owned_experiment(db: Session, experiment_id: str, researcher: Researcher):
     if experiment.owner_id != researcher.id:
         raise HTTPException(status_code=404, detail="Experiment not found")
     return experiment
+
+
+@router.get("/experiments/{experiment_id}/ai-key")
+def experiment_ai_key(experiment_id: str, db: Session = Depends(get_db),
+                      researcher: Researcher = Depends(get_current_researcher)):
+    from app.researcher.ai_config import get_experiment_key
+    from app.participant.ai_proxy import validate_configuration
+    experiment = owned_experiment(db, experiment_id, researcher)
+    key = get_experiment_key(db, experiment.id)
+    try:
+        validate_configuration(key)
+        configured = True
+    except HTTPException:
+        configured = False
+    return {"hasCustomKey": key is not None, "configured": configured,
+            "provider": settings.ai_provider, "model": settings.ai_model}
+
+
+@router.patch("/experiments/{experiment_id}/ai-key")
+def update_experiment_ai_key(experiment_id: str, payload: ExperimentAIKey,
+                             db: Session = Depends(get_db),
+                             researcher: Researcher = Depends(get_current_researcher)):
+    from app.researcher.ai_config import save_experiment_key
+    from app.participant.ai_proxy import get_provider
+    experiment = owned_experiment(db, experiment_id, researcher)
+    key = payload.api_key.get_secret_value().strip()
+    if not key or len(key) > 4096 or any(char.isspace() for char in key):
+        raise HTTPException(status_code=422, detail="Enter a valid API key without whitespace (up to 4096 characters).")
+    get_provider().validate(key)
+    save_experiment_key(db, experiment, key)
+    return experiment_ai_key(experiment_id, db, researcher)
+
+
+@router.delete("/experiments/{experiment_id}/ai-key")
+def remove_experiment_ai_key(experiment_id: str, db: Session = Depends(get_db),
+                             researcher: Researcher = Depends(get_current_researcher)):
+    from app.researcher.ai_config import save_experiment_key
+    experiment = owned_experiment(db, experiment_id, researcher)
+    save_experiment_key(db, experiment, None)
+    return experiment_ai_key(experiment_id, db, researcher)
 
 
 @router.get("/workspace/storage")

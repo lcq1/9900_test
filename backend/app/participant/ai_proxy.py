@@ -91,9 +91,10 @@ register_provider("workbuddy", WorkBuddyProvider())
 async def chat(
     message: str,
     history: list[dict] | None = None,
+    api_key: str | None = None,
 ) -> ChatReply:
     """Build the same context for either provider; credentials stay on the server."""
-    key = validate_configuration()
+    key = validate_configuration(api_key)
     payload = make_payload(message, history)
 
     try:
@@ -110,9 +111,9 @@ async def chat(
         raise provider_error(exc) from exc
 
 
-def validate_configuration() -> str:
+def validate_configuration(api_key: str | None = None) -> str:
     """Reject unconfigured providers before starting a streaming response."""
-    key = (settings.ai_api_key or "").strip()
+    key = (api_key if api_key is not None else settings.ai_api_key or "").strip()
     if not key or not settings.ai_api_base.strip() or not settings.ai_model.strip():
         raise HTTPException(
             status_code=503,
@@ -162,13 +163,13 @@ def provider_error(exc: Exception) -> HTTPException:
 
 
 async def stream_chat(
-    message: str, history: list[dict] | None = None
+    message: str, history: list[dict] | None = None, api_key: str | None = None
 ) -> AsyncIterator[dict]:
     """Normalize either provider to local delta/done events; cancellation closes HTTP."""
-    key = validate_configuration()
+    key = validate_configuration(api_key)
     payload = make_payload(message, history)
     if not settings.ai_stream:
-        reply = await chat(message, history)
+        reply = await chat(message, history, api_key=api_key) if api_key is not None else await chat(message, history)
         yield {"type": "delta", "text": reply.content, "model": reply.model}
         yield {"type": "done", "model": reply.model}
         return

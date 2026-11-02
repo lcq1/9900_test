@@ -425,9 +425,38 @@ nav {
 	font-size: 12px;
 	width: 100%;
 }
+.search-input input:focus-visible {
+	outline: none;
+}
+.search-input:focus-within {
+	border-bottom-color: #1f5f9e;
+}
 .filter-button {
 	min-height: 31px;
 	padding: 0 10px;
+}
+.dashboard-filter-panel {
+	display: flex;
+	align-items: flex-end;
+	flex-wrap: wrap;
+	gap: 12px;
+	padding: 14px;
+	margin-bottom: 13px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--paper);
+}
+.dashboard-filter-panel label {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 13px;
+}
+.dashboard-filter-panel select {
+	padding: 8px 12px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: #fff;
 }
 .experiment-table {
 	border: 1px solid var(--line);
@@ -742,16 +771,17 @@ nav {
 	margin: 8px 0;
 }
 .stage-name {
-	border: 0;
-	background: transparent;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: #fff;
+	box-sizing: border-box;
 	outline: 0;
 	width: 100%;
 	font:
 		600 18px "Space Grotesk",
 		sans-serif;
 	color: var(--ink);
-	padding: 0;
-	border-bottom: 1px solid transparent;
+	padding: 10px 12px;
 }
 .builder-block {
 	border: 1px solid var(--line);
@@ -1993,7 +2023,7 @@ nav {
 	color: #aab6c6;
 }
 .stage-name:focus {
-	border-bottom-color: var(--green);
+	border-color: var(--green);
 }
 
 /* ---- Countdown minutes unit (Task 1) ---- */
@@ -2375,8 +2405,10 @@ nav {
 	font-weight: 600;
 	margin-bottom: 7px;
 }
-.settings-field input {
+.settings-field input,
+.settings-field select {
 	width: 100%;
+	box-sizing: border-box;
 	border: 1px solid #dde6f0;
 	border-radius: 6px;
 	padding: 11px 12px;

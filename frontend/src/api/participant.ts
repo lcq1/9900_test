@@ -85,7 +85,8 @@ export interface AIConfig {
 	configured: boolean
 }
 
-export const getAIConfig = () => http.get<AIConfig>('/ai/config')
+export const getAIConfig = (stageId?: string) => http.get<AIConfig>('/ai/config' +
+	(stageId ? '?stageId=' + encodeURIComponent(stageId) : ''))
 
 export interface StreamChatOptions {
 	sessionId?: string

@@ -1,5 +1,5 @@
 import { useTransientNotice } from '../participant/TimerController'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import type { Experiment } from '../types'
 import {
 	ChevronDown,
@@ -15,6 +15,10 @@ import {
 	getStorageSettings,
 	saveStorageSettings,
 	type StorageSettings,
+	getExperimentAIKey,
+	saveExperimentAIKey,
+	removeExperimentAIKey,
+	type ExperimentAIKeyStatus,
 } from '../api/experiments'
 import { ExportDialog } from '../researcher/ExportDialog'
 import type { ParticipantEvent, ParticipantEventType } from '../participant/EventQueue'
@@ -39,11 +43,15 @@ export function Dashboard({
 	onEdit: (id: string) => void
 	onDelete: (id: string) => void
 }) {
-	// Filter by experiment name or code, ignoring case.
+	const [filtersOpen, setFiltersOpen] = useState(false)
+	const [statusFilter, setStatusFilter] = useState<Experiment['status'] | ''>('')
+	const filterPanelId = useId()
+	// Combine the selected status with case-insensitive name or code search.
 	const filtered = experiments.filter(
 		(experiment) =>
-			experiment.name.toLowerCase().includes(query.toLowerCase()) ||
-			experiment.code.toLowerCase().includes(query.toLowerCase()),
+			(!statusFilter || experiment.status === statusFilter) &&
+			(experiment.name.toLowerCase().includes(query.toLowerCase()) ||
+			experiment.code.toLowerCase().includes(query.toLowerCase())),
 	)
 	// Track the experiment selected for export.
 	const [exporting, setExporting] = useState<Experiment | null>(null)
@@ -113,11 +121,26 @@ export function Dashboard({
 						placeholder="Search experiments"
 					/>
 				</div>
-				<button className="filter-button">
-					<SlidersHorizontal size={15} /> Filter{' '}
+				<button type="button" className="filter-button"
+					aria-expanded={filtersOpen} aria-controls={filterPanelId}
+					onClick={() => setFiltersOpen((open) => !open)}>
+					<SlidersHorizontal size={15} /> {statusFilter ? `Filter: ${statusFilter}` : 'Filter'}{' '}
 					<ChevronDown size={14} />
 				</button>
 			</div>
+			{filtersOpen && (
+				<div className="dashboard-filter-panel" id={filterPanelId}
+					onKeyDown={(event) => { if (event.key === 'Escape') setFiltersOpen(false) }}>
+					<label>
+						Status
+						<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Experiment['status'] | '')}>
+							<option value="">All statuses</option>
+							{(['Draft', 'Live', 'Closed'] as const).map((status) => <option key={status} value={status}>{status}</option>)}
+						</select>
+					</label>
+					<button type="button" className="secondary-button" disabled={!statusFilter} onClick={() => setStatusFilter('')}>Reset filters</button>
+				</div>
+			)}
 			{/* Records and row actions. */}
 			<div className="experiment-table">
 				<div className="table-head">
@@ -184,7 +207,7 @@ export function Dashboard({
 				))}
 				{filtered.length === 0 && (
 					<div className="empty-state">
-						No experiments match that search.
+						No experiments match your search or filters.
 					</div>
 				)}
 			</div>
@@ -754,6 +777,69 @@ function loadPrefs(): WorkspacePrefs {
 	return DEFAULT_PREFS
 }
 
+export function ExperimentAIKeySettings({ experiments }: { experiments: Experiment[] }) {
+	const [experimentId, setExperimentId] = useState('')
+	const [apiKey, setApiKey] = useState('')
+	const [status, setStatus] = useState<ExperimentAIKeyStatus | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [saving, setSaving] = useState(false)
+	const [message, setMessage] = useState('')
+	useEffect(() => {
+		let active = true
+		if (experimentId) void getExperimentAIKey(experimentId)
+			.then((value) => { if (active) setStatus(value) })
+			.catch(() => { if (active) setMessage('Could not load AI key settings. Select the experiment again to retry.') })
+			.finally(() => { if (active) setLoading(false) })
+		return () => { active = false }
+	}, [experimentId])
+	const updateKey = async (remove: boolean) => {
+		if (!experimentId || saving || loading || !status) return
+		setSaving(true)
+		setMessage('')
+		try {
+			const value = remove
+				? await removeExperimentAIKey(experimentId)
+				: await saveExperimentAIKey(experimentId, apiKey.trim())
+			setStatus(value)
+			setApiKey('')
+			setMessage(remove ? 'Custom key removed. This experiment now uses the server default.' : 'API key saved for this experiment.')
+		} catch {
+			setMessage('Could not save AI key settings. Check the key and try again.')
+		} finally { setSaving(false) }
+	}
+	return <section className="settings-card">
+		<h3>AI API keys</h3>
+		<p className="card-sub">Configure a separate API key for each experiment. Experiments without a custom key use the server default. The provider, model and API address follow server settings.</p>
+		<div className="settings-field">
+			<label htmlFor="ai-key-experiment">Experiment</label>
+			<select id="ai-key-experiment" value={experimentId} disabled={saving} onChange={(event) => {
+				setApiKey('')
+				setStatus(null)
+				setMessage('')
+				setLoading(Boolean(event.target.value))
+				setExperimentId(event.target.value)
+			}}>
+				<option value="">Select an experiment</option>
+				{experiments.map((experiment) => <option key={experiment.id} value={experiment.id}>{experiment.name} ({experiment.code})</option>)}
+			</select>
+		</div>
+		{loading && <p>Loading AI key settings…</p>}
+		{status && <>
+			<p>{status.hasCustomKey ? 'Custom API key configured' : 'Using server default'} · {status.provider} · {status.model}</p>
+			{!status.configured && <p>AI is not configured. Check the API key and server settings.</p>}
+			<div className="settings-field">
+				<label htmlFor="experiment-ai-key">API key</label>
+				<input id="experiment-ai-key" type="password" autoComplete="new-password" value={apiKey} disabled={saving} maxLength={4096}
+					onChange={(event) => setApiKey(event.target.value)} placeholder={status.hasCustomKey ? 'Enter a replacement key' : 'Enter API key'} />
+			</div>
+			<p className="settings-hint">Saved keys are kept on the server and are never displayed. Saving does not send a test request to the provider.</p>
+			<button type="button" className="primary-button" disabled={saving || !apiKey.trim()} onClick={() => void updateKey(false)}>{saving ? 'Saving…' : 'Save API key'}</button>
+			{status.hasCustomKey && <button type="button" className="secondary-button" disabled={saving} onClick={() => void updateKey(true)}>Use server default</button>}
+		</>}
+		<p role="status">{message}</p>
+	</section>
+}
+
 // Show profiles, members, preferences, platform settings, and local usage.
 export function WorkspaceSettingsPage({
 	experiments,
@@ -894,6 +980,7 @@ export function WorkspaceSettingsPage({
 
 			{/* Profile, members, preferences, policies, usage, and cache settings. */}
 			<div className="settings-grid">
+				<ExperimentAIKeySettings experiments={experiments} />
 				{/* Researcher profile and display name. */}
 				<section className="settings-card">
 					<h3>Profile</h3>

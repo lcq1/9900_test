@@ -169,8 +169,9 @@ def update_experiment(
     publish_request_id = fields.pop("publish_request_id", None)
     actor = fields.pop("actor", experiment.owner_id)
     if publish and publish_request_id:
-        previous = next((e for e in published_versions(db, experiment)
-                         if e.detail.get("request_id") == publish_request_id), None)
+        previous = next((e for e in experiment_history(db, experiment)
+                         if e.type in ("server.published", "server.publish_reused")
+                         and e.detail.get("request_id") == publish_request_id), None)
         if previous is not None:
             original = previous.detail["snapshot"]
             if any(value is not None and key in original and value != original[key] for key, value in fields.items()):
@@ -194,10 +195,19 @@ def update_experiment(
               "summary": "Changed: " + ", ".join(changed), "snapshot": after})
     if publish:
         versions = published_versions(db, experiment)
-        duplicate = publish_request_id and any(e.detail.get("request_id") == publish_request_id for e in versions)
-        if not duplicate:
-            audit(db, experiment, "server.published", {"version": len(versions) + 1,
+        latest = versions[-1] if versions else None
+        # Only published content creates versions; draft/status changes do not.
+        new_version = latest is None or any(
+            after[key] != latest.detail["snapshot"][key] for key in ("name", "stages", "full_screen")
+        )
+        if new_version:
+            audit(db, experiment, "server.published", {"version": max((e.detail["version"] for e in versions), default=0) + 1,
                   "snapshot": after, "actor": actor, "request_id": publish_request_id, "baseline": False})
+        elif publish_request_id:
+            # Track retries without creating another published snapshot or sheet.
+            audit(db, experiment, "server.publish_reused", {"version": latest.detail["version"],
+                  "snapshot": after, "actor": actor, "request_id": publish_request_id,
+                  "summary": "Published content unchanged; existing version reused."})
     db.commit()
     db.refresh(experiment)
     return experiment
@@ -209,6 +219,8 @@ def delete_experiment(db: Session, experiment_id: str) -> bool:
         return False
     from app.participant.models import ParticipantEvent
     db.query(ParticipantEvent).filter_by(session_id=audit_key(experiment.id)).delete()
+    from app.researcher.ai_config import credential_id
+    db.query(ParticipantEvent).filter_by(id=credential_id(experiment.id), type="server.ai_key").delete()
     db.delete(experiment)
     db.commit()
     return True

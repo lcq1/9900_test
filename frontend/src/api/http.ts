@@ -39,7 +39,10 @@ apiClient.interceptors.response.use(
 					data = null
 				}
 			}
-			const detail = data?.error?.message ?? data?.detail
+			const rawDetail = data?.error?.message ?? data?.detail
+			const detail = Array.isArray(rawDetail)
+				? [...new Set(rawDetail.map((item: { msg?: string }) => item.msg).filter(Boolean))].slice(0, 3).join('; ')
+				: rawDetail
 			return Promise.reject(
 				new HttpError(
 					typeof detail === 'string'

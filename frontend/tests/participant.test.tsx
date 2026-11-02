@@ -44,6 +44,22 @@ describe('participant runtime', () => {
 
 	afterEach(cleanup)
 
+	it('renders true/false components as mutually exclusive choices', () => {
+		const experiment = study()
+		const stage = createStage('true_false')
+		stage.features.screenRecording = false
+		stage.features.timer = false
+		experiment.stages = [stage]
+		render(<ParticipantPreview experiment={experiment} participantCode="PREVIEW-TF" previewOnly onBack={() => {}} />)
+		const trueOption = screen.getByRole('button', { name: 'True', exact: true })
+		const falseOption = screen.getByRole('button', { name: 'False', exact: true })
+		fireEvent.click(trueOption)
+		expect(trueOption.classList.contains('is-selected')).toBe(true)
+		fireEvent.click(falseOption)
+		expect(falseOption.classList.contains('is-selected')).toBe(true)
+		expect(trueOption.classList.contains('is-selected')).toBe(false)
+	})
+
 	it.each([false, true])(
 		'requests enabled recordings in auto mode with gate=%s',
 		async (required) => {
@@ -513,7 +529,7 @@ describe('participant runtime', () => {
 			sign()
 			expect(next.disabled).toBe(false)
 			expect(
-				screen.getByRole('heading', { name: 'Consent' }),
+				screen.getByRole('heading', { name: 'Stage name' }),
 			).toBeDefined()
 			fireEvent.click(consent)
 			expect(next.disabled).toBe(true)
@@ -650,6 +666,16 @@ describe('participant runtime', () => {
 		expect(uploadRecording).not.toHaveBeenCalled()
 	})
 
+
+	it('leaves a participant session immediately without waiting for an unavailable save', () => {
+		const done = vi.fn()
+		vi.mocked(submitSession).mockRejectedValue(new Error('offline'))
+		render(<ParticipantPreview initialSessionId="test-session" experiment={study()} participantCode="P001" onBack={done} />)
+		fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }))
+		expect(done).toHaveBeenCalledOnce()
+		expect(submitSession).not.toHaveBeenCalled()
+	})
+
 	it('leaves researcher preview immediately without waiting for a session save', () => {
 		const done = vi.fn()
 		render(
@@ -736,9 +762,7 @@ describe('participant runtime', () => {
 		fireEvent.click(
 			screen.getByRole('button', { name: 'Finish', exact: true }),
 		)
-		const failure = await screen.findByText(
-			'Session could not be saved. Keep this page open and retry.',
-		)
+		const failure = await screen.findByText(/Session could not be saved.*offline/)
 		expect(failure.closest('.ant-alert-error')).toBeTruthy()
 		expect(completed).not.toHaveBeenCalled()
 		expect(back).not.toHaveBeenCalled()
@@ -1268,4 +1292,19 @@ describe('temporary operation notices', () => {
 		act(() => vi.advanceTimersByTime(600))
 		expect(result.current[2]).toBe(false)
 	})
+})
+
+
+it('records integer event times when clock synchronization has a half-millisecond offset', async () => {
+	const { EventQueue } = await import('../src/participant/EventQueue')
+	const now = vi.spyOn(Date, 'now').mockReturnValue(1000000)
+	try {
+		const queue = new EventQueue('fractional-clock-regression')
+		queue.clear()
+		queue.setClock(1000000, 999999, 1000000)
+		const event = queue.record('answer', { componentId: 'question', value: 'answer' })
+		expect(event.epochMs).toBe(1000001)
+		expect(new Date(event.timestamp).getTime()).toBe(event.epochMs)
+		expect(queue.all().every(item => Number.isInteger(item.epochMs))).toBe(true)
+	} finally { now.mockRestore() }
 })

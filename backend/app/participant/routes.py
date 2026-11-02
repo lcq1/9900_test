@@ -76,11 +76,17 @@ ai_router = APIRouter(prefix="/ai", tags=["ai"])
 
 
 @ai_router.get("/config")
-def ai_config(_: Researcher = Depends(get_study_actor)):
+def ai_config(stage_id: str | None = Query(default=None, alias="stageId"),
+              db: Session = Depends(get_db), actor: Researcher = Depends(get_study_actor)):
     from app.core.config import settings
+    from app.researcher.ai_config import get_experiment_key
 
+    experiment_id = actor.experiment_id if isinstance(actor, ParticipantAccess) else None
+    if experiment_id is None and stage_id:
+        experiment_id = require_ai_stage(db, stage_id, actor).id
+    key = get_experiment_key(db, experiment_id) if experiment_id else None
     try:
-        ai_proxy.validate_configuration()
+        ai_proxy.validate_configuration(key) if key is not None else ai_proxy.validate_configuration()
         configured = True
     except HTTPException:
         configured = False
@@ -290,6 +296,8 @@ def stage_chat_stream(
     researcher: Researcher = Depends(get_study_actor),
 ):
     experiment, conversation_id = chat_context(db, stage_id, payload, researcher)
+    from app.researcher.ai_config import get_experiment_key
+    api_key = get_experiment_key(db, experiment.id)
     ai_proxy.make_payload(payload.content)
     prepared = repo.prepare_ai_turn(
         db,
@@ -306,11 +314,11 @@ def stage_chat_stream(
         if not any(e.detail.get("conversation_id") == conversation_id for e in link):
             versions.server_event(db, str(payload.session_id), "server.ai", {"conversation_id": conversation_id})
     if prepared.cached is None:
-        ai_proxy.validate_configuration()
+        ai_proxy.validate_configuration(api_key) if api_key is not None else ai_proxy.validate_configuration()
 
     async def events():
         try:
-            async with aclosing(svc.generate_ai_turn(db, prepared)) as source:
+            async with aclosing(svc.generate_ai_turn(db, prepared, api_key=api_key) if api_key is not None else svc.generate_ai_turn(db, prepared)) as source:
                 async for event in source:
                     yield json.dumps(
                         {**event, "server_time": now_iso()}, ensure_ascii=False
@@ -357,6 +365,8 @@ async def stage_chat(
     researcher: Researcher = Depends(get_study_actor),
 ):
     experiment, conversation_id = chat_context(db, stage_id, payload, researcher)
+    from app.researcher.ai_config import get_experiment_key
+    api_key = get_experiment_key(db, experiment.id)
     ai_proxy.make_payload(payload.content)
     prepared = repo.prepare_ai_turn(
         db,
@@ -373,10 +383,10 @@ async def stage_chat(
         if not any(e.detail.get("conversation_id") == conversation_id for e in link):
             versions.server_event(db, str(payload.session_id), "server.ai", {"conversation_id": conversation_id})
     if prepared.cached is None:
-        ai_proxy.validate_configuration()
+        ai_proxy.validate_configuration(api_key) if api_key is not None else ai_proxy.validate_configuration()
     sent = now_iso()
     parts, model = [], ""
-    async with aclosing(svc.generate_ai_turn(db, prepared)) as source:
+    async with aclosing(svc.generate_ai_turn(db, prepared, api_key=api_key) if api_key is not None else svc.generate_ai_turn(db, prepared)) as source:
         async for event in source:
             if event["type"] == "delta":
                 parts.append(event["text"])

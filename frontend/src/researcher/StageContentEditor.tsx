@@ -1,7 +1,7 @@
 import { useTransientNotice } from '../participant/TimerController'
 import { useState } from 'react'
 import { http, downloadFile } from '../api/http'
-import { type Stage, type ComponentType, type StageComponent, STAGE_TYPES } from '../types'
+import { type Stage, type ComponentType, type StageComponent, STAGE_TYPES, stageTypeLabel } from '../types'
 import {
 	Type,
 	TextCursorInput,
@@ -20,6 +20,7 @@ const QUICK_ADD: { type: ComponentType; label: string; icon: typeof Plus }[] = [
 	{ type: 'textbox', label: 'Text box', icon: TextCursorInput },
 	{ type: 'choice', label: 'Choice', icon: CircleDot },
 	{ type: 'checkbox', label: 'Checkbox', icon: CheckSquare },
+	{ type: 'true_false', label: 'True / False', icon: CircleDot },
 	{ type: 'rating', label: 'Rating', icon: Star },
 	{ type: 'signature', label: 'Signature', icon: PenLine },
 	{ type: 'attachment', label: 'Attachment', icon: Paperclip },
@@ -35,6 +36,9 @@ export function StageContentEditor({
 	experimentId?: string
 	onUpdateStage: (update: (s: Stage) => Stage) => void
 }) {
+	const isConsent = stage.type.toLowerCase() === 'consent'
+	const question = stage.components[0]?.type === 'text' ? stage.components[0] : undefined
+	const editableComponents = stage.components.filter((component) => component.id !== question?.id)
 	const [
 		materialError,
 		setMaterialError,
@@ -150,11 +154,15 @@ export function StageContentEditor({
 			let comps = current.components
 			if (type === 'true_false') {
 				// Use True and False options for true/false stages.
-				comps = ensureChoice(comps, ['True', 'False'])
+				comps = ensureChoice(comps, ['True', 'False']).map((c) =>
+					c.type === 'choice' || c.type === 'checkbox' || c.type === 'true_false'
+						? { ...c, type: 'true_false', options: ['True', 'False'] }
+						: c,
+				)
 			} else if (type === 'single_choice' || type === 'multiple_choice') {
 				// Keep valid options or create two empty choices.
 				comps = ensureChoice(comps, ['', '']).map((c) =>
-					c.type === 'choice' || c.type === 'checkbox'
+					c.type === 'choice' || c.type === 'checkbox' || c.type === 'true_false'
 						? {
 								...c,
 								type:
@@ -167,12 +175,19 @@ export function StageContentEditor({
 			} else if (type === 'fill_blank' || type === 'short_answer') {
 				// Remove choice options for fill-in and short-answer stages.
 				comps = comps.map((c) =>
-					c.type === 'choice' || c.type === 'checkbox'
-						? { ...c, options: undefined }
+					c.type === 'choice' || c.type === 'checkbox' || c.type === 'true_false'
+						? { ...c, type: 'textbox', options: undefined }
 						: c,
 				)
 			}
-			return { ...current, type, components: comps }
+			return {
+				...current,
+				type,
+				name: current.name === stageTypeLabel(current.type)
+					? 'Stage name'
+					: current.name,
+				components: comps,
+			}
 		})
 	}
 
@@ -285,17 +300,18 @@ export function StageContentEditor({
 					<span className="live-dot" /> Stage content
 				</span>
 				<span className="canvas-hint">
-					Edit the stage name, type and components
+					{isConsent ? 'Edit the stage name and consent text' : 'Edit the stage name, type and components'}
 				</span>
 			</div>
 			<div className="builder-canvas">
 				<div className="canvas-paper">
-					{/* Stage type and editable name. */}
+					{/* Clearly label the editable stage name. */}
 					<div className="paper-header">
-						<span className="section-tag">
-							{stage.type.toUpperCase()}
-						</span>
+						<label className="content-label" htmlFor={`stage-name-${stage.id}`}>
+							Stage name
+						</label>
 						<input
+							id={`stage-name-${stage.id}`}
 							className="stage-name"
 							value={stage.name}
 							onChange={(event) =>
@@ -304,7 +320,7 @@ export function StageContentEditor({
 									name: event.target.value,
 								}))
 							}
-							placeholder="Untitled stage"
+							placeholder="Enter stage name"
 							aria-label="Stage name"
 						/>
 					</div>
@@ -331,22 +347,41 @@ export function StageContentEditor({
 						</div>
 					)}
 
+					{/* Keep the leading question separate from removable components. */}
+					{question && (
+						<div className="content-field">
+							<label className="content-label" htmlFor={`stage-question-${stage.id}`}>
+								{isConsent ? 'Consent text' : 'Question stem'}
+							</label>
+							<textarea
+								id={`stage-question-${stage.id}`}
+								className="component-label"
+								rows={4}
+								value={question.label}
+								onChange={(event) => setLabel(question.id, event.target.value)}
+								placeholder={isConsent ? 'Enter consent text' : 'Enter the question stem'}
+								aria-label={isConsent ? 'Consent text' : 'Question stem'}
+							/>
+						</div>
+					)}
+
 					{/* Stage components and choice options. */}
+					{!isConsent && (
 					<div className="components-editor">
 						<div className="panel-heading">
 							<span>COMPONENTS</span>
-							<b>{stage.components.length}</b>
+							<b>{editableComponents.length}</b>
 						</div>
-						{stage.components.length === 0 && (
+						{editableComponents.length === 0 && (
 							<div className="empty-components">
 								No components yet. Add one below.
 							</div>
 						)}
-						{stage.components.map((component) => (
+						{editableComponents.map((component) => (
 							<div className="builder-block" key={component.id}>
 								<div className="block-top">
 									<span className="block-type">
-										{component.type}
+										{component.type === 'true_false' ? 'True / False' : component.type}
 									</span>
 									<button
 										className="block-delete"
@@ -386,6 +421,7 @@ export function StageContentEditor({
 									/>
 								)}
 								{/* Add, edit, and remove choice options. */}
+								{component.type === 'true_false' && <p>True / False</p>}
 								{(component.type === 'choice' ||
 									component.type === 'checkbox') && (
 									<div className="options-editor">
@@ -451,6 +487,7 @@ export function StageContentEditor({
 							))}
 						</div>
 					</div>
+					)}
 				</div>
 			</div>
 		</div>
@@ -459,7 +496,7 @@ export function StageContentEditor({
 
 // Create a choice component if missing; otherwise update the first match.
 function ensureChoice(comps: StageComponent[], opts: string[]): StageComponent[] {
-	const index = comps.findIndex((c) => c.type === 'choice' || c.type === 'checkbox')
+	const index = comps.findIndex((c) => ['choice', 'checkbox', 'textbox', 'true_false'].includes(c.type))
 	if (index === -1) {
 		// Create a choice component with default options.
 		const created = makeComponent('choice')
@@ -482,9 +519,9 @@ function makeComponent(type: ComponentType): StageComponent {
 	return {
 		id: crypto.randomUUID(),
 		type,
-		label: type === 'text' ? 'New instruction' : 'Your response',
-		required: ['textbox', 'signature'].includes(type),
-		options: ['choice', 'checkbox'].includes(type)
+		label: type === 'text' ? 'New instruction' : 'Question',
+		required: ['textbox', 'signature', 'true_false'].includes(type),
+		options: type === 'true_false' ? ['True', 'False'] : ['choice', 'checkbox'].includes(type)
 			? ['Option A', 'Option B']
 			: type === 'rating'
 				? ['1', '2', '3', '4', '5']

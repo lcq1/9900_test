@@ -24,6 +24,67 @@ def chat_input(content="hello", conversation_id=None, request_id=None):
     }
 
 
+@pytest.mark.parametrize("streaming", [False, True])
+def test_experiment_api_keys_are_private_and_used_by_chat(client, auth_headers, monkeypatch, ai_transport, streaming):
+    from app.core import database
+    from app.researcher.ai_config import get_experiment_key
+    from app.participant.export_csv import export_experiment_xlsx
+    from app.researcher.models import Experiment
+    from tests.conftest import register_and_login
+    monkeypatch.setattr(settings, "ai_api_key", None)
+    monkeypatch.setattr(settings, "ai_stream", streaming)
+    experiments = []
+    for index in range(2):
+        response = client.post("/api/experiments", headers=auth_headers, json={
+            "name": f"Key study {index}", "stages": [{"id": f"key-stage-{index}",
+            "name": "Question", "type": "short_answer", "features": {"ai": True}}]})
+        assert response.status_code == 201
+        experiments.append(response.json())
+    keys = ["experiment-key-one", "experiment-key-two"]
+    for experiment, key in zip(experiments, keys):
+        path = f"/api/experiments/{experiment['id']}/ai-key"
+        saved = client.patch(path, headers=auth_headers, json={"apiKey": key})
+        assert saved.status_code == 200 and saved.json()["hasCustomKey"] is True
+        assert key not in saved.text and key not in client.get(path, headers=auth_headers).text
+        assert client.patch(path, headers=auth_headers, json={"apiKey": " "}).status_code == 422
+    requests = []
+    def upstream(request):
+        requests.append(request.headers["Authorization"])
+        if streaming:
+            return stream_response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n')
+        return httpx.Response(200, json={"model": "test-model", "choices": [{"message": {"content": "ok"}}]})
+    ai_transport(upstream)
+    for index in range(2):
+        config = client.get(f"/api/ai/config?stageId=key-stage-{index}", headers=auth_headers)
+        assert config.status_code == 200 and config.json()["configured"] is True
+        path = f"/api/participant/stages/key-stage-{index}/ai-stream"
+        response = client.post(path, headers=auth_headers, json=chat_input())
+        assert response.status_code == 200 and '"type": "done"' in response.text
+    assert requests == [f"Bearer {key}" for key in keys]
+    assert settings.ai_api_key is None
+    other = {"Authorization": "Bearer " + register_and_login(client, email="key-other@example.com")}
+    path = f"/api/experiments/{experiments[0]['id']}/ai-key"
+    for method in (client.get, client.delete):
+        assert method(path, headers=other).status_code == 404
+    assert client.patch(path, headers=other, json={"apiKey": "foreign-key"}).status_code == 404
+    with database.SessionLocal() as db:
+        for experiment, key in zip(experiments, keys):
+            assert get_experiment_key(db, experiment["id"]) == key
+            import io
+            from openpyxl import load_workbook
+            book = load_workbook(io.BytesIO(export_experiment_xlsx(db, db.get(Experiment, experiment["id"]))))
+            text = str([[cell.value for row in sheet for cell in row] for sheet in book])
+            assert key not in text
+    monkeypatch.setattr(settings, "ai_api_key", "server-default-key")
+    removed = client.delete(path, headers=auth_headers)
+    assert removed.status_code == 200 and removed.json()["hasCustomKey"] is False
+    response = client.post('/api/participant/stages/key-stage-0/ai-stream', headers=auth_headers, json=chat_input())
+    assert response.status_code == 200 and requests[-1] == "Bearer server-default-key"
+    assert client.delete(f"/api/experiments/{experiments[1]['id']}", headers=auth_headers).status_code == 204
+    with database.SessionLocal() as db:
+        assert get_experiment_key(db, experiments[1]["id"]) is None
+
+
 def seed_ai_context(client, headers, stage_id, experiment_id, prompt, reply):
     from app.core import database
     from app.core.clock import now_iso
@@ -1318,3 +1379,31 @@ def test_consent_has_no_study_materials(client, auth_headers):
         exp.stages = stages
         db.commit()
     assert client.get(path + "/legacy", headers=auth_headers).status_code == 404
+
+
+
+@pytest.mark.parametrize("invalid", [-0.5, float("nan"), float("inf"), "invalid"])
+def test_event_rejects_invalid_epoch_times(invalid):
+    from app.participant.schemas import ParticipantEvent
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ParticipantEvent(seq=0, type="pause", timestamp="2026-11-03T00:00:00Z", epochMs=invalid, perfMs=1)
+
+
+def test_finish_accepts_fractional_synchronized_event_times(client, auth_headers):
+    from tests.test_admin_export import published_stages
+    study = client.post("/api/experiments", headers=auth_headers, json={"name": "Fractional clock", "stages": published_stages()}).json()
+    assert client.patch(f"/api/experiments/{study['id']}", headers=auth_headers,
+                        json={"publish": True, "publishRequestId": str(uuid4())}).status_code == 200
+    codes = {"experimentCode": study["code"], "participantCode": "P001"}
+    access = client.post("/api/participant/access", json=codes).json()
+    actor = {"X-Participant-Token": access["token"]}
+    sid = str(uuid4())
+    assert client.post("/api/participant/sessions/start", headers=actor, json={**codes, "sessionId": sid}).status_code == 200
+    response = client.post("/api/participant/sessions", headers=actor, json={**codes, "sessionId": sid,
+        "finishedAt": "2026-11-03T00:00:01Z", "events": [{"seq": 0, "type": "consent", "stageId": "consent",
+        "timestamp": "2026-11-03T00:00:00Z", "epochMs": 1793664000000.5, "perfMs": 100.25,
+        "detail": {"accepted": True}}]})
+    assert response.status_code == 201, response.text
+    assert response.json()["finishedAt"] is not None
+    assert response.json()["events"][0]["epochMs"] == 1793664000001

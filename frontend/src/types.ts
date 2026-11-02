@@ -1,6 +1,6 @@
 // Shared experiment, stage, component, and feature types.
 export type ComponentType =
-	'text' | 'textbox' | 'choice' | 'checkbox' | 'rating' | 'signature' | 'attachment' | 'button'
+	'text' | 'textbox' | 'choice' | 'checkbox' | 'true_false' | 'rating' | 'signature' | 'attachment' | 'button'
 // Feature keys shared by configuration and rendering.
 export type FeatureKey =
 	| 'ai'
@@ -61,7 +61,7 @@ export const STAGE_TYPES = [
 export const stageTypeLabel = (type: string): string =>
 	STAGE_TYPES.find((i) => i.type === type)?.label ?? type;
 
-export function createStage(type: string = "short_answer"): Stage {
+export function createStage(type: string = "single_choice"): Stage {
 	const consent = type === "consent",
 		id = crypto.randomUUID();
 	const components: Stage["components"] = [
@@ -79,10 +79,12 @@ export function createStage(type: string = "short_answer"): Stage {
 			type:
 				type === "multiple_choice"
 					? "checkbox"
-					: ["single_choice", "true_false"].includes(type)
+					: type === "true_false"
+						? "true_false"
+					: type === "single_choice"
 						? "choice"
 						: "textbox",
-			label: "Your response",
+			label: "Question",
 			required: true,
 			options:
 				type === "true_false"
@@ -93,7 +95,7 @@ export function createStage(type: string = "short_answer"): Stage {
 		});
 	return {
 		id,
-		name: stageTypeLabel(type),
+		name: 'Stage name',
 		type,
 		duration: 0,
 		components,
@@ -170,7 +172,8 @@ export function getPublishErrors(experiment: Experiment): string[] {
 					: ["fill_blank", "short_answer"].includes(stage.type)
 						? "textbox"
 						: null;
-		if (responseType && !stage.components.some((c) => c.type === responseType))
+		if (responseType && !stage.components.some((c) => c.type === responseType ||
+			(stage.type === 'true_false' && c.type === 'true_false')))
 			errors.push(
 				`${prefix}: add a ${responseType === "textbox" ? "text box" : responseType} response component.`,
 			);
@@ -179,7 +182,7 @@ export function getPublishErrors(experiment: Experiment): string[] {
 				errors.push(
 					`${prefix}, component ${componentIndex + 1}: enter content or a label.`,
 				);
-			if (component.type === "choice" || component.type === "checkbox") {
+			if (component.type === "choice" || component.type === "checkbox" || component.type === 'true_false') {
 				const options = (component.options ?? []).map((option) =>
 					option.trim(),
 				);

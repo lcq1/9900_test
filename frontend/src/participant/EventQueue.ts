@@ -118,7 +118,7 @@ export class EventQueue {
 		stageId?: string,
 	): ParticipantEvent {
 		const now = preciseNow()
-		const epochMs = now.epochMs + this.offsetMs
+		const epochMs = Math.round(now.epochMs + this.offsetMs)
 		const timestamp = new Date(epochMs).toISOString()
 		const perfMs = now.perfMs
 		const event: ParticipantEvent = {

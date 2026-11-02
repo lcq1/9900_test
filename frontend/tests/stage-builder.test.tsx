@@ -8,6 +8,8 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { StageContentEditor } from "../src/researcher/StageContentEditor";
+import { StageFeatureEditor } from '../src/researcher/StageFeatureEditor'
+import { Dashboard, ExperimentAIKeySettings } from '../src/pages/ResearcherDashboardPage'
 import { createStage, type Experiment, getPublishErrors } from "../src/types";
 
 import { MemoryRouter } from "react-router-dom";
@@ -18,9 +20,30 @@ import { http } from '../src/api/http'
 
 describe('stage content', () => {
 	afterEach(cleanup)
+	it.each(['consent', 'single_choice', 'short_answer'])(
+		'hides unavailable features for %s', (type) => {
+			const { container } = render(
+				<StageFeatureEditor stage={createStage(type)} onUpdateStage={() => {}} />,
+			)
+			if (type === 'consent') {
+				expect(container.querySelector('.right-panel')?.childElementCount).toBe(0)
+				return
+			}
+			expect(Boolean(screen.queryByLabelText('Copy-paste logging'))).toBe(type === 'short_answer')
+			expect(Boolean(screen.queryByLabelText('AI chat'))).toBe(type !== 'consent')
+			expect(Boolean(screen.queryByLabelText('Countdown timer'))).toBe(type !== 'consent')
+			expect(Boolean(screen.queryByLabelText('Screen recording'))).toBe(type !== 'consent')
+			expect(Boolean(screen.queryByLabelText('Require screen and camera recording'))).toBe(type !== 'consent')
+			expect(Boolean(screen.queryByLabelText('Start recording after permission'))).toBe(type !== 'consent')
+			expect(screen.getByLabelText('Signature box')).toBeTruthy()
+			expect(container.querySelector('.feature-count')?.textContent).toContain(
+				type === 'short_answer' ? '/5' : '/4',
+			)
+		},
+	)
 
-	function Harness() {
-		const [stage, setStage] = useState(() => createStage('single_choice'))
+	function Harness({ initialType = 'single_choice' }: { initialType?: string }) {
+		const [stage, setStage] = useState(() => createStage(initialType))
 		return (
 			<>
 				<StageContentEditor stage={stage} onUpdateStage={setStage} />
@@ -29,18 +52,88 @@ describe('stage content', () => {
 		)
 	}
 
+	it('only allows editing the consent name and text', () => {
+		const { container } = render(<Harness initialType="consent" />)
+		expect(container.querySelector('.components-editor')).toBeNull()
+		expect(screen.queryByRole('button')).toBeNull()
+		expect(screen.queryByRole('combobox')).toBeNull()
+		expect(screen.getAllByRole('textbox')).toHaveLength(2)
+		fireEvent.change(screen.getByLabelText('Stage name'), { target: { value: 'Study consent' } })
+		fireEvent.change(screen.getByLabelText('Consent text'), { target: { value: 'Please agree to participate.' } })
+		const stage = JSON.parse(screen.getByTestId('stage').textContent!)
+		expect(stage.name).toBe('Study consent')
+		expect(stage.components).toHaveLength(1)
+		expect(stage.components[0].label).toBe('Please agree to participate.')
+	})
+
 	it('changes single choice to multiple choice without losing options', () => {
 		render(<Harness />)
+		expect(screen.getByRole<HTMLSelectElement>('combobox').value).toBe('single_choice')
+		expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Stage name' }).value).toBe('Stage name')
 		fireEvent.change(screen.getByRole('combobox'), {
 			target: { value: 'multiple_choice' },
 		})
 		const stage = JSON.parse(screen.getByTestId('stage').textContent!)
 		expect(stage.type).toBe('multiple_choice')
+		expect(stage.name).toBe('Stage name')
 		expect(
 			stage.components.find(
 				(c: { type: string }) => c.type === 'checkbox',
 			).options,
 		).toEqual(['Option A', 'Option B'])
+		fireEvent.change(screen.getByRole('textbox', { name: 'Stage name' }), {
+			target: { value: 'My custom stage' },
+		})
+		fireEvent.change(screen.getByRole('combobox'), {
+			target: { value: 'short_answer' },
+		})
+		const updated = JSON.parse(screen.getByTestId('stage').textContent!)
+		expect(updated.type).toBe('short_answer')
+		expect(updated.name).toBe('My custom stage')
+	})
+
+	it.each(['single_choice', 'multiple_choice', 'true_false'])(
+		'replaces the default textbox when switching to %s', (type) => {
+			render(<Harness initialType="short_answer" />)
+			const original = JSON.parse(screen.getByTestId('stage').textContent!)
+			fireEvent.change(screen.getByRole('combobox'), { target: { value: type } })
+			const stage = JSON.parse(screen.getByTestId('stage').textContent!)
+			expect(stage.components).toHaveLength(2)
+			expect(stage.components[1].id).toBe(original.components[1].id)
+			expect(stage.components[1].required).toBe(true)
+			expect(stage.components[1].type).toBe(type === 'multiple_choice' ? 'checkbox' : type === 'true_false' ? 'true_false' : 'choice')
+			if (type === 'true_false') expect(stage.components[1].options).toEqual(['True', 'False'])
+			fireEvent.change(screen.getByRole('combobox'), { target: { value: 'short_answer' } })
+			const reverted = JSON.parse(screen.getByTestId('stage').textContent!)
+			expect(reverted.components[1].type).toBe('textbox')
+		},
+	)
+
+	it('keeps the leading question separate and non-removable', () => {
+		const { container } = render(<Harness />)
+		const question = screen.getByRole('textbox', { name: 'Question stem' })
+		expect(question.closest('.components-editor')).toBeNull()
+		expect(question.parentElement?.querySelector('button')).toBeNull()
+		fireEvent.change(question, { target: { value: 'Updated question' } })
+		fireEvent.click(screen.getByRole('button', { name: 'Text', exact: true }))
+		const stage = JSON.parse(screen.getByTestId('stage').textContent!)
+		expect(stage.components[0].label).toBe('Updated question')
+		expect(stage.components.filter((c: { type: string }) => c.type === 'text')).toHaveLength(2)
+		expect(container.querySelectorAll('.components-editor .builder-block')).toHaveLength(2)
+		expect(container.querySelectorAll('.components-editor .block-delete')).toHaveLength(2)
+	})
+
+	it('adds a true/false component and uses it by default for true/false stages', () => {
+		render(<Harness />)
+		fireEvent.click(screen.getByRole('button', { name: 'True / False', exact: true }))
+		const stage = JSON.parse(screen.getByTestId('stage').textContent!)
+		expect(stage.components.at(-1)).toMatchObject({ type: 'true_false', options: ['True', 'False'] })
+		const draft = experiment()
+		draft.stages[1] = createStage('true_false')
+		expect(draft.stages[1].components[1].type).toBe('true_false')
+		expect(getPublishErrors(draft)).toEqual([])
+		draft.stages[1].components[1].type = 'choice'
+		expect(getPublishErrors(draft)).toEqual([])
 	})
 
 	it('retains rating, signature and attachment authoring controls', () => {
@@ -60,6 +153,65 @@ const api = vi.hoisted(() => ({
   experiments: [] as Experiment[],
   save: vi.fn(),
 }));
+
+it('combines dashboard status filters with search and resets only filters', () => {
+	const studies = (['Draft', 'Live', 'Closed'] as const).map((status) => ({
+		...experiment(), id: status, code: `CODE-${status}`, name: `${status} study`, status,
+	}))
+	function DashboardHarness() {
+		const [query, setQuery] = useState('')
+		return <Dashboard experiments={studies} query={query} setQuery={setQuery} onCreate={() => {}} onEdit={() => {}} onDelete={() => {}} />
+	}
+	const { container } = render(<DashboardHarness />)
+	const rows = () => container.querySelectorAll('.experiment-row')
+	expect(rows()).toHaveLength(3)
+	fireEvent.click(screen.getByRole('button', { name: 'Filter', exact: true }))
+	const status = screen.getByRole('combobox', { name: 'Status' })
+	for (const value of ['Draft', 'Live', 'Closed']) {
+		fireEvent.change(status, { target: { value } })
+		expect(rows()).toHaveLength(1)
+		expect(rows()[0].textContent).toContain(`${value} study`)
+	}
+	fireEvent.change(screen.getByPlaceholderText('Search experiments'), { target: { value: 'code-live' } })
+	expect(rows()).toHaveLength(0)
+	expect(screen.getByText('No experiments match your search or filters.')).toBeTruthy()
+	fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
+	expect(rows()).toHaveLength(1)
+	expect(rows()[0].textContent).toContain('Live study')
+	fireEvent.change(screen.getByPlaceholderText('Search experiments'), { target: { value: '' } })
+	expect(rows()).toHaveLength(3)
+	fireEvent.keyDown(status, { key: 'Escape' })
+	expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull()
+	expect(screen.getByRole('button', { name: 'Filter', exact: true }).getAttribute('aria-expanded')).toBe('false')
+})
+
+it('saves experiment keys privately and clears inputs when switching experiments', async () => {
+	const status = { hasCustomKey: false, configured: true, provider: 'openai_compatible', model: 'test-model' }
+	const get = vi.spyOn(http, 'get').mockResolvedValue(status)
+	const save = vi.spyOn(http, 'patch').mockResolvedValue({ ...status, hasCustomKey: true })
+	const remove = vi.spyOn(http, 'del').mockResolvedValue(status)
+	try {
+		const first = experiment()
+		const second = { ...first, id: 'second-study', code: 'SECOND', name: 'Second study' }
+		render(<ExperimentAIKeySettings experiments={[first, second]} />)
+		fireEvent.change(screen.getByLabelText('Experiment'), { target: { value: first.id } })
+		const input = await screen.findByLabelText('API key') as HTMLInputElement
+		expect(input.type).toBe('password')
+		fireEvent.change(input, { target: { value: 'private-test-key' } })
+		fireEvent.click(screen.getByRole('button', { name: 'Save API key' }))
+		await screen.findByText('API key saved for this experiment.')
+		expect(save).toHaveBeenCalledWith('/experiments/' + first.id + '/ai-key', { apiKey: 'private-test-key' })
+		expect(input.value).toBe('')
+		expect(JSON.stringify(localStorage)).not.toContain('private-test-key')
+		fireEvent.click(screen.getByRole('button', { name: 'Use server default' }))
+		await screen.findByText('Custom key removed. This experiment now uses the server default.')
+		expect(remove).toHaveBeenCalledWith('/experiments/' + first.id + '/ai-key')
+		fireEvent.change(input, { target: { value: 'unsaved-key' } })
+		fireEvent.change(screen.getByLabelText('Experiment'), { target: { value: second.id } })
+		expect((await screen.findByLabelText('API key') as HTMLInputElement).value).toBe('')
+		expect(get).toHaveBeenCalledWith('/experiments/second-study/ai-key')
+	} finally { get.mockRestore(); save.mockRestore(); remove.mockRestore() }
+})
 
 vi.mock('antd', () => ({
 	Alert: ({

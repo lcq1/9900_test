@@ -73,7 +73,7 @@ export function AIChat({
 
 	useEffect(() => {
 		let active = true
-		getAIConfig()
+		getAIConfig(stageId)
 			.then((config) => {
 				if (!active) return
 				setModelLabel(config.model)
@@ -91,7 +91,7 @@ export function AIChat({
 		return () => {
 			active = false
 		}
-	}, [setError])
+	}, [setError, stageId])
 
 	useEffect(() => {
 		if (scrollRef.current) {

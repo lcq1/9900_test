@@ -249,9 +249,11 @@ export function ParticipantPreview({
 					answers,
 					events,
 				})
-			} catch {
+			} catch (error) {
 				setRecordingError(
-					'Session could not be saved. Keep this page open and retry.',
+					error instanceof Error
+						? `Session could not be saved. ${error.message} Keep this page open and retry.`
+						: 'Session could not be saved. Keep this page open and retry.',
 				)
 				return
 			}
@@ -765,14 +767,6 @@ export function ParticipantPreview({
 					</button>
 				))}
 			{saving && <p role="status">Saving recording…</p>}
-			{screenLocked && (
-				<p role="status">
-					This stage requires recording your entire screen. Select
-					Entire screen in the sharing prompt; tabs and individual
-					windows are not accepted. If permission is blocked or
-					recording stops, use Enable screen recording to try again.
-				</p>
-			)}
 			{stage.recordingMode === 'auto' &&
 				(wantsScreen || wantsSelfVideo) && (
 					<p>
@@ -890,9 +884,9 @@ export function ParticipantPreview({
 								)}
 
 								{(component.type === 'choice' ||
-									component.type === 'checkbox') && (
+									component.type === 'checkbox' || component.type === 'true_false') && (
 									<div className="ms-options">
-										{component.options?.map((option) => {
+										{(component.type === 'true_false' ? ['True', 'False'] : component.options)?.map((option) => {
 											const isChecked =
 												component.type === 'checkbox'
 													? Array.isArray(selected) &&
@@ -1176,10 +1170,10 @@ export function ParticipantPreview({
 				<div className="participant-top">
 					<button
 						className="back-link"
-						onClick={() => void finishSession('abort')}
+						onClick={onBack}
 					>
 						<ArrowLeft size={16} />{' '}
-						{previewOnly ? 'Back to experiment' : 'Exit preview'}
+						{previewOnly ? 'Back to experiment' : 'Back to sign in'}
 					</button>
 					<span className="preview-label">
 						<span className="live-dot"></span>{' '}

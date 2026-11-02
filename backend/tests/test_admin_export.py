@@ -393,7 +393,7 @@ def test_workbook_versions_unknown_history_and_long_cells():
                              turns, [SimpleNamespace(id="chat", stage_id="stage")])
     assert content.startswith(b"PK")
     book = load_workbook(io.BytesIO(content))
-    assert book.sheetnames == ["实验信息", "V1", "V2", "历史版本未知"]
+    assert book.sheetnames == ["Study information", "V1", "V2", "Unknown legacy version"]
     assert book["V2"].max_row == 1
     sheet = book["V1"]
     assert sheet.freeze_panes == "A2" and sheet.auto_filter.ref
@@ -402,13 +402,13 @@ def test_workbook_versions_unknown_history_and_long_cells():
     assert row[0] == "P001" and row[2] == "V1"
     assert row[4] == "2026-04-05 02:59:59+11:00"
     assert row[5] == "2026-04-05 02:00:00+10:00"
-    assert row[headers.index("AI 成功对话轮数")] == "1"
-    ai_text = "".join(str(row[i]) for i, h in enumerate(headers) if h.startswith("AI 历史"))
+    assert row[headers.index("Successful AI turns")] == "1"
+    ai_text = "".join(str(row[i]) for i, h in enumerate(headers) if h.startswith("AI history"))
     assert prompt in ai_text and "=SUM(A1)" in ai_text
-    assert any(h.startswith("AI 历史 2 /") for h in headers)
-    unknown = book["历史版本未知"]
+    assert any(h.startswith("AI history 2 /") for h in headers)
+    unknown = book["Unknown legacy version"]
     assert "How do you feel" not in str([c.value for c in unknown[1]])
-    assert unknown.cell(2, 3).value == "历史版本未知"
+    assert unknown.cell(2, 3).value == "Unknown legacy version"
     assert unknown.cell(2, 6).value is None
     text = "\n".join(str(cell.value or "") for ws in book for row in ws for cell in row)
     assert "base64" not in text and "/private" not in text
@@ -510,10 +510,10 @@ def test_versioned_export_and_session_snapshot(client, auth_headers, monkeypatch
     assert code + ".xlsx" in exported.headers["content-disposition"]
     assert "spreadsheetml" in exported.headers["content-type"]
     book = load_workbook(io.BytesIO(exported.content))
-    assert book.sheetnames == ["实验信息", "V1", "V2", "历史版本未知"]
+    assert book.sheetnames == ["Study information", "V1", "V2", "Unknown legacy version"]
     assert book["V1"].max_row == 2 and book["V2"].max_row == 2
     head = [c.value for c in book["V1"][1]]
-    assert book["V1"].cell(2, head.index("AI 成功对话轮数") + 1).value == "1"
+    assert book["V1"].cell(2, head.index("Successful AI turns") + 1).value == "1"
     assert "Saved reply" in str([c.value for c in book["V1"][2]])
     assert "Original question" in str(head) and "New question" not in str(head)
     assert client.get(f"/api/participant/sessions/{sid}/xlsx", headers=auth_headers).status_code == 200
@@ -561,10 +561,59 @@ def test_publication_concurrency_and_idempotency(client, auth_headers):
     with database.SessionLocal() as db:
         exp = db.get(Experiment, experiment["id"])
         history = versions.published_versions(db, exp)
-        assert [e.detail["version"] for e in history] == [1, 2, 3]
+        assert [e.detail["version"] for e in history] == [1, 2]
         assert {e.detail["snapshot"]["stages"][1]["components"][0]["label"] for e in history[:2]} == {"A", "B"}
         assert history[-1].detail["snapshot"]["stages"] == exp.stages
     assert client.patch(path, headers=auth_headers, json={**same, "name": "Conflicting reuse"}).status_code == 409
+
+
+def test_only_changed_publications_create_version_sheets(client, auth_headers):
+    from uuid import uuid4
+    from openpyxl import load_workbook
+    from app.core import database
+    from app.researcher import repository as versions
+    from app.researcher.models import Experiment
+    response = client.post('/api/experiments', headers=auth_headers,
+                           json={"name": "Publication versions", "stages": published_stages()})
+    assert response.status_code == 201
+    experiment = response.json()
+    path = f"/api/experiments/{experiment['id']}"
+    def patch(body):
+        response = client.patch(path, headers=auth_headers, json=body)
+        assert response.status_code == 200, response.text
+        return response.json()
+    def publish():
+        return patch({"publish": True, "publishRequestId": str(uuid4())})
+    def sheets():
+        response = client.get(path + '/results.xlsx', headers=auth_headers)
+        assert response.status_code == 200
+        return load_workbook(io.BytesIO(response.content)).sheetnames
+    for text in ['Draft A', 'Draft B', 'Published question']:
+        patch({"stages": published_stages(text)})
+    assert sheets() == ['Study information']
+    publish()
+    assert sheets() == ['Study information', 'V1']
+    publish()
+    assert sheets() == ['Study information', 'V1']
+    patch({"status": "Draft"})
+    publish()
+    assert sheets() == ['Study information', 'V1']
+    patch({"stages": published_stages('Temporary draft')})
+    patch({"stages": published_stages('Published question')})
+    publish()
+    assert sheets() == ['Study information', 'V1']
+    patch({"stages": published_stages('New published question')})
+    patch({"stages": published_stages('Final published question')})
+    assert sheets() == ['Study information', 'V1']
+    publish()
+    assert sheets() == ['Study information', 'V1', 'V2']
+    patch({"stages": published_stages('Published question')})
+    publish()
+    assert sheets() == ['Study information', 'V1', 'V2', 'V3']
+    with database.SessionLocal() as db:
+        exp = db.get(Experiment, experiment['id'])
+        history = versions.published_versions(db, exp)
+        assert [e.detail['version'] for e in history] == [1, 2, 3]
 
 
 def test_existing_live_baseline_preserves_unknown_sessions(client, auth_headers):
@@ -593,9 +642,9 @@ def test_existing_live_baseline_preserves_unknown_sessions(client, auth_headers)
         assert db.query(ParticipantEvent).filter_by(session_id=sid, type="server.version").one().detail["version"] is None
     from openpyxl import load_workbook
     book = load_workbook(io.BytesIO(client.get(f"/api/experiments/{eid}/results.xlsx", headers=auth_headers).content))
-    assert book.sheetnames == ["实验信息", "V1", "历史版本未知"]
+    assert book.sheetnames == ["Study information", "V1", "Unknown legacy version"]
     assert book["V1"].max_row == 1
-    assert "具体时间未知" in str([c.value for c in book["实验信息"][5]])
+    assert "precise time unknown" in str([c.value for c in book["Study information"][5]])
 
 
 def test_excel_emoji_chunks_preserve_all_text():

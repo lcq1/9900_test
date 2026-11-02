@@ -28,6 +28,15 @@ class ParticipantEvent(CamelModel):
             raise ValueError("Server event types are reserved")
         return value
 
+    @field_validator("epoch_ms", mode="before")
+    @classmethod
+    def rounded_epoch_time(cls, value):
+        import math
+        if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise ValueError("Event time must be finite and non-negative")
+        # Clock synchronization can introduce a half-millisecond offset.
+        return math.floor(value + 0.5)
+
     @field_validator("perf_ms", mode="before")
     @classmethod
     def rounded_performance_time(cls, value):

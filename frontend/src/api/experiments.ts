@@ -30,6 +30,19 @@ export const getResultsSummary = (id: string) =>
 	http.get<{ completed_count: number; incomplete_count: number }>(PATH + '/' + id + '/results/summary')
 export const downloadResults = (id: string) =>
 	downloadFile(PATH + '/' + id + '/results.xlsx', 'experiment.xlsx')
+
+export interface ExperimentAIKeyStatus {
+	hasCustomKey: boolean
+	configured: boolean
+	provider: string
+	model: string
+}
+export const getExperimentAIKey = (id: string) =>
+	http.get<ExperimentAIKeyStatus>(PATH + '/' + encodeURIComponent(id) + '/ai-key')
+export const saveExperimentAIKey = (id: string, apiKey: string) =>
+	http.patch<ExperimentAIKeyStatus>(PATH + '/' + encodeURIComponent(id) + '/ai-key', { apiKey })
+export const removeExperimentAIKey = (id: string) =>
+	http.del<ExperimentAIKeyStatus>(PATH + '/' + encodeURIComponent(id) + '/ai-key')
 export function useExperiments() {
 	const session = useSessionStore((s) => s.session),
 		client = useQueryClient(),

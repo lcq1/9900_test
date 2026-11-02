@@ -347,26 +347,26 @@ def build_workbook(experiment, sessions, answers=(), events=(), consents=(), rec
     versions = sorted([e for e in history if e.type == "server.published"], key=lambda e: e.detail["version"])
     created = next((e for e in history if e.type == "server.created"), None)
     info = [
-        ["实验代码", "", "", experiment.code, ""],
-        ["实验名称", "", "", experiment.name, ""],
-        ["状态", "", "", experiment.status, ""],
-        ["创建时间", "", second_time(created.timestamp) if created else "", "" if created else f"{experiment.created} (原始日期；具体时间未知)", ""],
-        ["导出时间", "", second_time(now_iso()), "Australia/Sydney；展示精确到秒，流水保留原始毫秒时间", ""],
-        ["说明", "", "", "每次参与一行；旧记录版本未知，题目只按原始组件 ID 标识。旧 AI 对话仅导出可明确关联的记录。", ""],
+        ["Study code", "", "", experiment.code, ""],
+        ["Study name", "", "", experiment.name, ""],
+        ["Status", "", "", experiment.status, ""],
+        ["Created at", "", second_time(created.timestamp) if created else "", "" if created else f"{experiment.created} (original date; precise time unknown)", ""],
+        ["Exported at", "", second_time(now_iso()), "Australia/Sydney; displayed to the second; activity retains original millisecond timestamps", ""],
+        ["Notes", "", "", "One row per session. Legacy records have unknown versions and questions are identified by original component IDs. Only explicitly linked legacy AI conversations are exported.", ""],
     ]
     for event in history:
         payload = event.detail or {}
-        category = {"server.created": "实验创建", "server.changed": "配置修改", "server.published": "版本发布"}.get(event.type, event.type)
+        category = {"server.created": "Study created", "server.changed": "Configuration changed", "server.published": "Version published", "server.publish_reused": "Existing version republished"}.get(event.type, event.type)
         if payload.get("baseline"):
-            category = "上线时配置基线（非原始发布时间）"
+            category = "Configuration baseline at deployment (not the original publication time)"
         info.append([category, payload.get("version", ""), second_time(event.timestamp),
                      dumps(payload), payload.get("actor", "")])
         if event.type == "server.published":
             for position, stage in enumerate(payload["snapshot"].get("stages", []), 1):
-                info.append([f"阶段 {position}：{stage.get('name', '')}", payload["version"], "", dumps(stage), ""])
+                info.append([f"Stage {position}: {stage.get('name', '')}", payload["version"], "", dumps(stage), ""])
                 for number, component in enumerate(stage.get("components", []), 1):
-                    info.append([f"阶段 {position} / 内容 {number}：{component.get('label', '')}", payload["version"], "", dumps(component), ""])
-    workbook_table(workbook, "实验信息", ["类别", "版本", "时间 (Australia/Sydney)", "内容 / 完整配置", "操作者 ID"], info)
+                    info.append([f"Stage {position} / Component {number}: {component.get('label', '')}", payload["version"], "", dumps(component), ""])
+    workbook_table(workbook, "Study information", ["Category", "Version", "Time (Australia/Sydney)", "Content / Full configuration", "Actor ID"], info)
     bindings = {e.session_id: e.detail for e in events if e.type == "server.version"}
     links = {}
     for event in events:
@@ -376,17 +376,17 @@ def build_workbook(experiment, sessions, answers=(), events=(), consents=(), rec
     groups = [(f"V{e.detail['version']}", e.detail["version"], SimpleNamespace(**e.detail["snapshot"])) for e in versions]
     known = {version for _, version, _ in groups}
     if any(bindings.get(s.id, {}).get("version") not in known for s in sessions):
-        groups.append(("历史版本未知", None, SimpleNamespace(name=experiment.name, code=experiment.code, stages=[])))
+        groups.append(("Unknown legacy version", None, SimpleNamespace(name=experiment.name, code=experiment.code, stages=[])))
     for title, version, config in groups:
         selected = sorted([s for s in sessions if (bindings.get(s.id, {}).get("version") == version if version is not None
                           else bindings.get(s.id, {}).get("version") not in known)], key=lambda s: (time_key(s.started_at), s.id))
         questions, stage_names = question_map(config)
         missing = sorted({a.component_id for a in answers if a.session_id in {s.id for s in selected}} - questions.keys())
         for component_id in missing:
-            questions[component_id] = (f"原始题目 ID（历史题目未知）: {component_id}", "", None)
-        headers = ["参与者代码", "会话 ID", "版本", "完成状态", "开始时间 (Australia/Sydney)", "结束时间 (Australia/Sydney)"]
+            questions[component_id] = (f"Original question ID (legacy question unknown): {component_id}", "", None)
+        headers = ["Participant code", "Session ID", "Version", "Completion status", "Started at (Australia/Sydney)", "Completed at (Australia/Sydney)"]
         headers += [f"{q[0]} [{key}]" for key, q in questions.items()]
-        headers += ["AI 成功对话轮数", "AI 历史", "操作流水"]
+        headers += ["Successful AI turns", "AI history", "Activity timeline"]
         rows = []
         for session in selected:
             session_events = sorted([e for e in events if e.session_id == session.id and not e.type.startswith("server.")],
@@ -410,18 +410,18 @@ def build_workbook(experiment, sessions, answers=(), events=(), consents=(), rec
             for turn in session_turns:
                 conversation = conversation_map.get(turn.conversation_id)
                 stage_id = conversation.stage_id if conversation else ""
-                ai_lines.append(f"{second_time(turn.created_at)} | {stage_names.get(stage_id, stage_id)} | {turn.provider} / {turn.model} | request={turn.request_id}\n用户: {turn.prompt}\nAI: {turn.reply}")
+                ai_lines.append(f"{second_time(turn.created_at)} | {stage_names.get(stage_id, stage_id)} | {turn.provider} / {turn.model} | request={turn.request_id}\nUser: {turn.prompt}\nAI: {turn.reply}")
             if not linked and any(e.type in ("ai_prompt", "ai_reply") for e in session_events):
-                ai_lines.append("历史 AI 关联未知；以下为可明确关联至本会话的浏览器事件，不计为已确认成功轮数。")
+                ai_lines.append("Legacy AI links are unknown. The following browser events are explicitly linked to this session and are not counted as confirmed successful turns.")
                 ai_lines.extend(f"{second_time(e.timestamp)} | {e.stage_id or ''} | {e.type}\n{readable((e.detail or {}).get('text', ''))}"
                                 for e in session_events if e.type in ("ai_prompt", "ai_reply"))
             _, activity = build_csv(config, [session], answers, session_events, consents, recordings, view="activity", _raw=True)
             for item in activity:
                 item["Time (Australia/Sydney)"] = second_time(item.get("Original timestamp"))
             timeline = "\n\n".join(dumps(item) for item in activity)
-            rows.append([session.participant_code, session.id, f"V{version}" if version is not None else "历史版本未知",
+            rows.append([session.participant_code, session.id, f"V{version}" if version is not None else "Unknown legacy version",
                          "Completed" if session.finished_at else "In progress", second_time(session.started_at), second_time(session.finished_at),
-                         *answer_cells, len(session_turns) if linked or version is not None else "未知（旧记录）", "\n\n".join(ai_lines), timeline])
+                         *answer_cells, len(session_turns) if linked or version is not None else "Unknown (legacy record)", "\n\n".join(ai_lines), timeline])
         workbook_table(workbook, title, headers, rows)
     result = io.BytesIO()
     workbook.save(result)

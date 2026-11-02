@@ -243,9 +243,25 @@ def test_unpublish_pauses_participation_and_republish_keeps_history(client, auth
     assert client.patch(path, headers=auth_headers, json={"publish": True, "publishRequestId": str(uuid4())}).json()["status"] == "Live"
     assert client.post("/api/participant/access", json=login).status_code == 200
     with database.SessionLocal() as db:
-        assert [e.detail["version"] for e in versions.published_versions(db, db.get(Experiment, experiment["id"]))] == [1, 2]
+        assert [e.detail["version"] for e in versions.published_versions(db, db.get(Experiment, experiment["id"]))] == [1]
         from app.participant.models import ParticipantSession
         assert db.get(ParticipantSession, sid) is not None
+
+    stages[1]["components"][0]["label"] = "Updated answer"
+    changed = client.patch(path, headers=auth_headers, json={"stages": stages})
+    assert changed.status_code == 200 and changed.json()["status"] == "Draft"
+    with database.SessionLocal() as db:
+        assert len(versions.published_versions(db, db.get(Experiment, experiment["id"]))) == 1
+    published = client.patch(path, headers=auth_headers, json={"publish": True, "publishRequestId": str(uuid4())})
+    assert published.status_code == 200 and published.json()["status"] == "Live"
+    with database.SessionLocal() as db:
+        history = versions.published_versions(db, db.get(Experiment, experiment["id"]))
+        assert [event.detail["version"] for event in history] == [1, 2]
+        assert history[0].detail["snapshot"]["stages"][1]["components"][0]["label"] == "Answer"
+        assert history[1].detail["snapshot"]["stages"][1]["components"][0]["label"] == "Updated answer"
+        from app.participant.models import ParticipantEvent
+        binding = db.query(ParticipantEvent).filter_by(session_id=sid, type="server.version").one()
+        assert binding.detail["version"] == 1
 
 
 

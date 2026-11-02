@@ -78,7 +78,6 @@ ai_router = APIRouter(prefix="/ai", tags=["ai"])
 @ai_router.get("/config")
 def ai_config(stage_id: str | None = Query(default=None, alias="stageId"),
               db: Session = Depends(get_db), actor: Researcher = Depends(get_study_actor)):
-    from app.core.config import settings
     from app.researcher.ai_config import resolve_experiment_config, resolve_common_config
 
     experiment_id = actor.experiment_id if isinstance(actor, ParticipantAccess) else None

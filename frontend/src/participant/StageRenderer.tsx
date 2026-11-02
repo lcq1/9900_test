@@ -466,7 +466,8 @@ export function ParticipantPreview({
 						screen:
 							controllersRef.current.screen?.status === 'active',
 					}
-		if (stage.recordingRequired && !recording.self)
+		const missingRequiredRecording = stage.recordingRequired && !recording.self
+		if (missingRequiredRecording)
 			missing.push('Camera and microphone recording')
 		if (!choosingStage && allowFreeOrder && stageIndex === experiment.stages.length - 1) {
 			for (const other of experiment.stages) {
@@ -480,7 +481,7 @@ export function ParticipantPreview({
 				}
 			}
 		}
-		if ((!choosingStage && missing.length) || (stage.recordingRequired && !recording.self)) {
+		if ((!choosingStage && missing.length) || missingRequiredRecording) {
 			setValidationError('Required: ' + missing.join(', '))
 			return
 		}

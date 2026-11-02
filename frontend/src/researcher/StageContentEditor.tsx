@@ -404,34 +404,12 @@ export function StageContentEditor({
 										<X size={14} />
 									</button>
 								</div>
-								{stage.type === 'consent' &&
-								component.type === 'text' ? (
-									<textarea
-										className="component-label"
-										rows={4}
-										value={component.label}
-										onChange={(event) =>
-											setLabel(
-												component.id,
-												event.target.value,
-											)
-										}
-										placeholder="Consent text"
-										aria-label="Consent text"
-									/>
-								) : (
-									<input
-										className="component-label"
-										value={component.label}
-										onChange={(event) =>
-											setLabel(
-												component.id,
-												event.target.value,
-											)
-										}
-										placeholder="Label"
-									/>
-								)}
+								<input
+									className="component-label"
+									value={component.label}
+									onChange={(event) => setLabel(component.id, event.target.value)}
+									placeholder="Label"
+								/>
 								{/* Add, edit, and remove choice options. */}
 								{component.type === 'true_false' && <p>True / False</p>}
 								{(component.type === 'choice' ||

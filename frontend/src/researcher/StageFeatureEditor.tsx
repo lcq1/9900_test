@@ -29,9 +29,7 @@ export function StageFeatureEditor({
 	const copyPasteEnabled =
 		stage.type === 'fill_blank' || stage.type === 'short_answer'
 	const availableFeatures = Object.entries(featureLabels).filter(([key]) =>
-		stage.type === 'consent'
-			? key === 'signatureBox'
-			: key !== 'copyPaste' || copyPasteEnabled,
+		key !== 'copyPaste' || copyPasteEnabled,
 	)
 
 	const questionnaireRequired = stage.requiredFeatures?.questionnaire ??
@@ -48,8 +46,8 @@ export function StageFeatureEditor({
 					<span>STAGE FEATURES</span>
 					<span className="feature-count">
 						{
-							availableFeatures.map(([key]) => key).filter(
-								(k) => stage.features[k as FeatureKey],
+							availableFeatures.filter(
+								([key]) => stage.features[key as FeatureKey],
 							).length
 						}
 						/{availableFeatures.length}
@@ -77,7 +75,6 @@ export function StageFeatureEditor({
 							}))}>Restore component settings</button>}
 					</small>
 				</div>
-				{stage.type !== 'consent' && <>
 				<div className="feature-row">
 					<span className="feature-label">Request camera and microphone</span>
 					<button
@@ -86,7 +83,6 @@ export function StageFeatureEditor({
 						aria-label="Request camera and microphone"
 						aria-checked={stage.recordingRequired ?? false}
 						className={stage.recordingRequired ? 'switch on' : 'switch'}
-						disabled={stage.type === 'consent'}
 						onClick={() => onUpdateStage((current) => ({
 							...current,
 							recordingRequired: !current.recordingRequired,
@@ -101,7 +97,6 @@ export function StageFeatureEditor({
 						aria-label="Start recording after permission"
 						aria-checked={stage.recordingMode === 'auto'}
 						className={stage.recordingMode === 'auto' ? 'switch on' : 'switch'}
-						disabled={stage.type === 'consent'}
 						onClick={() => onUpdateStage((current) => ({
 							...current,
 							recordingMode: current.recordingMode === 'auto' ? 'manual' : 'auto',
@@ -113,7 +108,6 @@ export function StageFeatureEditor({
 					mode starts recording immediately after permission is
 					granted.
 				</p>
-				</>}
 				{availableFeatures.map(([key, item]) => {
 					// Check the feature state and stage compatibility.
 					const feature = key as FeatureKey

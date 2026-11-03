@@ -8,80 +8,113 @@
 export type AnswerValue = string | string[]
 
 export interface CollectedAnswers {
-  [componentId: string]: AnswerValue
+	[componentId: string]: AnswerValue
 }
 
 export interface ProgressSnapshot {
-  sessionId: string
-  stageIndex: number
-  answers: CollectedAnswers
+	sessionId: string
+	stageIndex: number
+	answers: CollectedAnswers
 }
 
 /** Tracks the current stage index and the answers collected so far. */
 export class ProgressStore {
-  private readonly sessionId: string
-  private stageIndexValue = 0
-  private answersValue: CollectedAnswers = {}
+	private readonly sessionId: string
+	private stageIndexValue = 0
+	private answersValue: CollectedAnswers = {}
 
-  constructor(sessionId: string) {
-    this.sessionId = sessionId
-    this.load()
-  }
+	constructor(sessionId: string) {
+		this.sessionId = sessionId
+		this.load()
+	}
 
-  private storageKey(): string {
-    return `p13-progress:${this.sessionId}`
-  }
+	private storageKey(): string {
+		return `p13-progress:${this.sessionId}`
+	}
 
-  private load(): void {
-    const raw = localStorage.getItem(this.storageKey())
-    if (!raw) return
-    try {
-      const parsed = JSON.parse(raw) as ProgressSnapshot
-      this.stageIndexValue = parsed.stageIndex ?? 0
-      this.answersValue = parsed.answers ?? {}
-    } catch {
-      this.stageIndexValue = 0
-      this.answersValue = {}
-    }
-  }
+	private load(): void {
+		const raw = localStorage.getItem(this.storageKey())
+		if (!raw) return
+		try {
+			const parsed = JSON.parse(raw) as ProgressSnapshot
+			this.stageIndexValue = parsed.stageIndex ?? 0
+			this.answersValue = parsed.answers ?? {}
+		} catch {
+			this.stageIndexValue = 0
+			this.answersValue = {}
+		}
+	}
 
-  private save(): void {
-    const snapshot: ProgressSnapshot = {
-      sessionId: this.sessionId,
-      stageIndex: this.stageIndexValue,
-      answers: this.answersValue,
-    }
-    localStorage.setItem(this.storageKey(), JSON.stringify(snapshot))
-  }
+	private save(): void {
+		const snapshot: ProgressSnapshot = {
+			sessionId: this.sessionId,
+			stageIndex: this.stageIndexValue,
+			answers: this.answersValue,
+		}
+		localStorage.setItem(this.storageKey(), JSON.stringify(snapshot))
+	}
 
-  /** The current 0-based stage index. */
-  get stageIndex(): number {
-    return this.stageIndexValue
-  }
+	/** The current 0-based stage index. */
+	get stageIndex(): number {
+		return this.stageIndexValue
+	}
 
-  setStageIndex(index: number): void {
-    this.stageIndexValue = index
-    this.save()
-  }
+	setStageIndex(index: number): void {
+		this.stageIndexValue = index
+		this.save()
+	}
 
-  /** All collected answers (defensive copy). */
-  get answers(): CollectedAnswers {
-    return { ...this.answersValue }
-  }
+	/** All collected answers (defensive copy). */
+	get answers(): CollectedAnswers {
+		return { ...this.answersValue }
+	}
 
-  getAnswer(componentId: string): AnswerValue | undefined {
-    return this.answersValue[componentId]
-  }
+	getAnswer(componentId: string): AnswerValue | undefined {
+		return this.answersValue[componentId]
+	}
 
-  setAnswer(componentId: string, value: AnswerValue): void {
-    this.answersValue = { ...this.answersValue, [componentId]: value }
-    this.save()
-  }
+	setAnswer(componentId: string, value: AnswerValue): void {
+		this.answersValue = { ...this.answersValue, [componentId]: value }
+		this.save()
+	}
 
-  /** Reset progress (used when a session is abandoned). */
-  clear(): void {
-    this.stageIndexValue = 0
-    this.answersValue = {}
-    this.save()
-  }
+	/** Reset progress (used when a session is abandoned). */
+	clear(): void {
+		this.stageIndexValue = 0
+		this.answersValue = {}
+		this.save()
+	}
+}
+
+/** A resumable runtime checkpoint, stored in existing browser and event storage. */
+export interface RuntimeProgress {
+	sessionId: string
+	updatedAt: number
+	stageIndex: number
+	answers: CollectedAnswers
+	consentedStageId: string | null
+	attachments: Record<string, string>
+	extended: Record<string, boolean>
+	oralIndex: number
+	oralStarted: boolean
+	conversations?: Record<string, string>
+	deadlines: Record<string, number>
+}
+export function readRuntimeProgress(
+	sessionId: string,
+): RuntimeProgress | undefined {
+	try {
+		return (
+			JSON.parse(localStorage.getItem('p13-runtime:' + sessionId) ?? 'null') ??
+			undefined
+		)
+	} catch {
+		return undefined
+	}
+}
+export function saveRuntimeProgress(progress: RuntimeProgress): void {
+	localStorage.setItem(
+		'p13-runtime:' + progress.sessionId,
+		JSON.stringify(progress),
+	)
 }

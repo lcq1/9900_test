@@ -1,3 +1,5 @@
+import type { RuntimeProgress } from '../participant/ProgressStore'
+import type { ParticipantEvent } from '../participant/EventQueue'
 import { useTransientNotice } from '../participant/TimerController'
 import { http } from '../api/http'
 import {
@@ -185,6 +187,7 @@ export function ParticipantAccessPage({
 	)
 	const startId = useRef(crypto.randomUUID())
 	const [sessionId, setSessionId] = useState<string>()
+	const [resume, setResume] = useState<{ progress?: RuntimeProgress; events?: ParticipantEvent[] }>({})
 	const fullscreenOwned = useRef(false)
 	const mounted = useRef(true)
 	const releaseFullscreen = () => {
@@ -265,6 +268,8 @@ export function ParticipantAccessPage({
 		try {
 			const result = await http.post<{
 				sessionId: string
+				progress?: RuntimeProgress
+				events?: ParticipantEvent[]
 				experiment: Experiment
 			}>('/participant/sessions/start', {
 				sessionId: startId.current,
@@ -274,6 +279,7 @@ export function ParticipantAccessPage({
 			if (!mounted.current) return
 			setActive({ ...active, experiment: result.experiment })
 			setSessionId(result.sessionId)
+			setResume({ progress: result.progress, events: result.events })
 			if (result.experiment.fullScreen) {
 				if (!document.documentElement.requestFullscreen)
 					throw new Error(
@@ -306,6 +312,8 @@ export function ParticipantAccessPage({
 		return (
 			<ParticipantPreview
 				initialSessionId={sessionId}
+				initialProgress={resume.progress}
+				initialEvents={resume.events}
 				experiment={active.experiment}
 				participantCode={active.participant}
 				onBack={exit}

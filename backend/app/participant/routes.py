@@ -136,6 +136,9 @@ def start_session(payload: SessionStart, db: Session = Depends(get_db),
     if isinstance(actor, ParticipantAccess) and experiment.status != "Live":
         raise HTTPException(status_code=403, detail="Experiment is not open for participation")
     session = db.get(ParticipantSession, str(payload.session_id))
+    if session is None:
+        session = db.query(ParticipantSession).filter_by(experiment_code=experiment.code,
+            participant_code=payload.participant_code, finished_at=None).order_by(ParticipantSession.started_at.desc()).first()
     if session is not None:
         visible = versions.session_experiment(db, session.id, experiment, payload.participant_code)
         if session.finished_at:
@@ -147,7 +150,10 @@ def start_session(payload: SessionStart, db: Session = Depends(get_db),
         db.flush()
         visible = versions.bind_version(db, session, experiment)
     db.commit()
-    return {"sessionId": session.id, "experiment": Experiment.model_validate(visible).model_dump(by_alias=True)}
+    result = svc.get_session_result(db, session.id)
+    progress = next(((e.detail or {}).get("progress") for e in reversed(result.events) if e.type == "progress_checkpoint"), None)
+    return {"sessionId": session.id, "experiment": Experiment.model_validate(visible).model_dump(by_alias=True),
+            "progress": progress, "events": [e.model_dump(by_alias=True) for e in result.events if not e.type.startswith("server.")]}
 
 
 @router.get("/lookup", response_model=Experiment)
@@ -254,7 +260,7 @@ def require_ai_stage(
             continue
         for stage in experiment.stages:
             if stage.get("id") == stage_id:
-                if stage.get("type", "").lower() == "consent" or not stage.get(
+                if stage.get("type", "").lower() in ("consent", "video_oral_answer") or not stage.get(
                     "features", {}
                 ).get("ai"):
                     raise HTTPException(
@@ -280,7 +286,7 @@ def chat_context(db, stage_id, payload, actor):
     experiment = repo.find_experiment_by_code(db, session.experiment_code)
     experiment = versions.session_experiment(db, session.id, experiment, session.participant_code)
     stage = next((s for s in experiment.stages if s["id"] == stage_id), None)
-    if stage is None or stage.get("type", "").lower() == "consent" or not stage.get("features", {}).get("ai"):
+    if stage is None or stage.get("type", "").lower() in ("consent", "video_oral_answer") or not stage.get("features", {}).get("ai"):
         raise HTTPException(status_code=403, detail="AI is not enabled for this stage")
     conversation_id = str(uuid5(NAMESPACE_URL, f"session:{session.id}:{payload.conversation_id}"))
     # Release the session row before model generation so recordings can continue.

@@ -289,3 +289,53 @@ def test_editing_live_experiment_requires_manual_republication(client, auth_head
     assert client.patch(path, headers=auth_headers, json={"stages": published_stages("Changed question")}).json()["status"] == "Draft"
     with database.SessionLocal() as db:
         assert len(versions.published_versions(db, db.get(Experiment, experiment["id"]))) == 3
+
+
+def test_client_extension_configuration_roundtrip():
+    from app.researcher.schemas import Stage
+    data = {"id": "client", "name": "Consent", "type": "consent", "signingMethod": "name", "consentClauses": ["Approved clause"], "allowExtension": True, "sequentialQuestions": True, "components": [{"id": "q", "type": "choice", "label": "Question", "options": ["Yes", "Other"], "otherOption": "Other"}]}
+    saved = Stage.model_validate(data).model_dump(by_alias=True)
+    restored = Stage.model_validate(saved).model_dump(by_alias=True)
+    for key in ("signingMethod", "consentClauses", "allowExtension", "sequentialQuestions"):
+        assert restored[key] == data[key]
+    assert restored["components"][0]["otherOption"] == "Other"
+    assert Stage.model_validate({"id": "old", "name": "Old", "type": "consent"}).signing_method == "handwritten"
+
+
+def test_client_choice_limit_and_required_explanation():
+    import pytest
+    from fastapi import HTTPException
+    from app.researcher.service import validate_publication
+    from app.participant.service import validate_stage
+    from app.participant.schemas import ParticipantAnswer
+    consent = {"id": "c", "name": "Consent", "type": "consent", "components": [{"id": "t", "type": "text", "label": "Consent"}]}
+    question = {"id": "q", "name": "Questions", "type": "single_choice", "components": [{"id": "a", "type": "choice", "label": "Question", "required": True, "options": [str(i) for i in range(12)], "otherOption": "11"}]}
+    validate_publication([consent, question])
+    with pytest.raises(HTTPException):
+        validate_stage(question, [ParticipantAnswer(component_id="a", value="11")], {})
+    validate_stage(question, [ParticipantAnswer(component_id="a", value="11"), ParticipantAnswer(component_id="a:other", value="Explanation")], {})
+    question["components"][0]["options"].append("12")
+    with pytest.raises(HTTPException):
+        validate_publication([consent, question])
+
+
+def test_client_name_consent_and_export_columns():
+    import json
+    import pytest
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from app.participant.schemas import ParticipantAnswer
+    from app.participant.service import validate_stage
+    from app.participant.export_csv import question_map
+    stage = {"id": "c", "name": "Consent", "type": "consent", "signingMethod": "name", "consentClauses": ["Approved clause"], "components": [{"id": "text", "type": "text", "label": "Approved information"}]}
+    record = {"method": "name", "name": "Participant", "readToEnd": True, "signedAt": "2026-11-03T01:00:00Z", "document": ["Approved information"], "clauses": [{"text": "Approved clause", "accepted": True}]}
+    def answers():
+        return [ParticipantAnswer(component_id="consent", value=json.dumps(record))]
+    validate_stage(stage, answers(), {})
+    record["document"] = ["Different consent"]
+    with pytest.raises(HTTPException):
+        validate_stage(stage, answers(), {})
+    question = {"id": "q", "name": "Question", "components": [{"id": "other", "type": "choice", "label": "Question", "otherOption": "Other"}]}
+    columns, _ = question_map(SimpleNamespace(stages=[stage, question]))
+    assert "consent" in columns
+    assert columns["other:other"][0].endswith("Please specify")

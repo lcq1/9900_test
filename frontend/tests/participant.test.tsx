@@ -1441,6 +1441,38 @@ describe('researcher results', () => {
 		})
 		await waitFor(() => expect(listSessions).toHaveBeenLastCalledWith('E1'))
 	})
+	it('scopes the charts to one experiment by default', async () => {
+		const { ResultsPage } = await import('../src/pages/ResearcherDashboardPage')
+		vi.mocked(listSessions).mockResolvedValue([])
+		render(
+			<ResultsPage
+				experiments={
+					[
+						{ id: 'e1', code: 'E1', name: 'Study' },
+						{ id: 'e2', code: 'E2', name: 'Second study' },
+					] as Experiment[]
+				}
+			/>,
+		)
+
+		// Mixing two studies in one chart is never what a researcher wants, so the
+		// page starts on a concrete experiment instead of "All my experiments".
+		await waitFor(() => expect(listSessions).toHaveBeenLastCalledWith('E1'))
+		expect(
+			(screen.getByLabelText('Results experiment') as HTMLSelectElement)
+				.value,
+		).toBe('E1')
+
+		// The combined view stays reachable, and is not overridden afterwards.
+		fireEvent.change(screen.getByLabelText('Results experiment'), {
+			target: { value: '' },
+		})
+		await waitFor(() => expect(listSessions).toHaveBeenLastCalledWith(''))
+		expect(
+			(screen.getByLabelText('Results experiment') as HTMLSelectElement)
+				.value,
+		).toBe('')
+	})
 	it('records clock offset and round-trip uncertainty', async () => {
 		const { EventQueue } = await import('../src/participant/EventQueue')
 		const queue = new EventQueue('clock-test')

@@ -248,7 +248,10 @@ interface SessionData {
 }
 
 export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
-	const [experimentCode, setExperimentCode] = useState('')
+	// `null` means the researcher has not picked a scope yet: charts then default
+	// to the first experiment so the counts never mix sessions from two studies.
+	const [chosenExperiment, setChosenExperiment] = useState<string | null>(null)
+	const experimentCode = chosenExperiment ?? experiments[0]?.code ?? ''
 	const [chart, setChart] = useState('bar')
 	const [openId, setOpenId] = useState<string | null>(null)
 	const [sessions, setSessions] = useState<SessionData[]>([])
@@ -360,7 +363,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 					<select
 						aria-label="Results experiment"
 						value={experimentCode}
-						onChange={(e) => setExperimentCode(e.target.value)}
+						onChange={(e) => setChosenExperiment(e.target.value)}
 					>
 						<option value="">All my experiments</option>
 						{experiments.map((e) => (

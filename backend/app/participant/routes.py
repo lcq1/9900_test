@@ -123,6 +123,8 @@ def participant_access(payload: ParticipantLogin, db: Session = Depends(get_db))
 
 class SessionStart(ParticipantLogin):
     session_id: UUID
+    # Stable per browser tab (sessionStorage). Opts into the occupancy lease.
+    client_id: str | None = None
 
 
 @router.post("/sessions/start")
@@ -143,9 +145,20 @@ def start_session(payload: SessionStart, db: Session = Depends(get_db),
         visible = versions.session_experiment(db, session.id, experiment, payload.participant_code)
         if session.finished_at:
             raise HTTPException(status_code=409, detail="Session is already complete")
+        # Two tabs otherwise fold onto one unfinished session and number events
+        # from separate queues, so autosaves silently overwrite each other (B3).
+        # Reject a second live client; an expired lease allows a takeover.
+        if payload.client_id and session.active_client_id != payload.client_id and svc.lease_is_live(session):
+            raise HTTPException(status_code=409,
+                detail="This study is already open in another browser tab. Close that tab or wait a moment and try again.")
+        if payload.client_id:
+            session.active_client_id = payload.client_id
+            session.lease_expires_at = svc.lease_expiry()
     else:
         session = ParticipantSession(id=str(payload.session_id), experiment_code=experiment.code,
-            participant_code=payload.participant_code, started_at=now_iso())
+            participant_code=payload.participant_code, started_at=now_iso(),
+            active_client_id=payload.client_id,
+            lease_expires_at=svc.lease_expiry() if payload.client_id else None)
         db.add(session)
         db.flush()
         visible = versions.bind_version(db, session, experiment)

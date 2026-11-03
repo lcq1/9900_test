@@ -41,7 +41,7 @@ def test_database_uses_postgresql_and_real_migrations(client):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "6a6a6a6a6a6a"
+            == "7c7c7c7c7c7c"
         )
         inspector = inspect(connection)
         columns = {
@@ -161,6 +161,12 @@ def test_upgrade_from_original_head_preserves_existing_experiments(
         connection.exec_driver_sql(
             "ALTER TABLE participant_events ALTER COLUMN epoch_ms TYPE INTEGER"
         )
+        # 0007 added the per-tab lease columns; they are not part of the
+        # simulated 0003 schema being upgraded from.
+        connection.exec_driver_sql(
+            "ALTER TABLE participant_sessions DROP COLUMN active_client_id, "
+            "DROP COLUMN lease_expires_at"
+        )
         connection.exec_driver_sql(
             "UPDATE alembic_version SET version_num = '3c3c3c3c3c3c'"
         )
@@ -175,7 +181,7 @@ def test_upgrade_from_original_head_preserves_existing_experiments(
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "6a6a6a6a6a6a"
+            == "7c7c7c7c7c7c"
         )
 
 
@@ -197,6 +203,12 @@ def test_upgrade_adopts_unversioned_create_all_database(client, auth_headers):
         connection.exec_driver_sql(
             "ALTER TABLE participant_events ALTER COLUMN epoch_ms TYPE INTEGER"
         )
+        # 0007 added the per-tab lease columns; they are not part of the
+        # simulated pre-Alembic schema being adopted.
+        connection.exec_driver_sql(
+            "ALTER TABLE participant_sessions DROP COLUMN active_client_id, "
+            "DROP COLUMN lease_expires_at"
+        )
         connection.exec_driver_sql("DROP TABLE alembic_version")
         config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         config.attributes["connection"] = connection
@@ -209,7 +221,7 @@ def test_upgrade_adopts_unversioned_create_all_database(client, auth_headers):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "6a6a6a6a6a6a"
+            == "7c7c7c7c7c7c"
         )
         command.upgrade(config, "head")
         assert (

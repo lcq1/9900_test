@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from app.core import clock
 
 from fastapi import HTTPException, status
@@ -17,6 +19,30 @@ from app.participant.schemas import (
     ParticipantSessionSubmit,
 )
 from app.researcher.models import Experiment
+
+
+# A browser tab renews this lease on every autosave. A second tab is refused
+# while the lease is live, so two tabs cannot silently share one session.
+SESSION_LEASE_SECONDS = 90
+
+
+def lease_expiry() -> str:
+    """Epoch-seconds string for a fresh session lease."""
+    return str(
+        int(datetime.now(timezone.utc).timestamp()) + SESSION_LEASE_SECONDS
+    )
+
+
+def lease_is_live(session: ParticipantSession) -> bool:
+    """True while this unfinished session is still owned by an active tab."""
+    if not session.lease_expires_at:
+        return False
+    try:
+        return int(session.lease_expires_at) > int(
+            datetime.now(timezone.utc).timestamp()
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 async def generate_ai_turn(db: Session, prepared: repo.PreparedAITurn, api_key: str | None = None, configuration=None):
@@ -141,6 +167,9 @@ def submit_session(
     started_at = existing.started_at if existing else clock.now_iso()
     if existing:
         existing.finished_at = payload.finished_at
+        if existing.active_client_id:
+            # Every autosave keeps the owning tab's lease alive.
+            existing.lease_expires_at = lease_expiry()
         db.query(ParticipantEvent).filter(ParticipantEvent.session_id == session_id, ParticipantEvent.type != "recording_media", ~ParticipantEvent.type.startswith("server.")).delete()
         db.query(Answer).filter_by(session_id=session_id).delete()
     else:

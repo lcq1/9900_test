@@ -314,7 +314,7 @@ export function createClientStages(consent: Stage): Stage[] {
  const component = (c: Omit<StageComponent, 'id'>): StageComponent => ({ ...c, id: crypto.randomUUID() })
  const make = (name: string, type: string, components: Omit<StageComponent, 'id'>[]): Stage => ({ ...createStage(type), name, components: components.map(component), countdownMinutes: 0, features: { ...createStage(type).features, timer: false, screenRecording: false, selfie: false } })
  const info = (name: string, content: string) => make(name, 'instruction', [{ type: 'text', label: content }])
- const welcome = { ...consent, name: 'Welcome and consent', signingMethod: 'name' as const, features: { ...consent.features, navigation: false }, components: [component({ type: 'text', label: clientContent.instructions['1'] }), ...consent.components] }
+ const welcome = { ...consent, name: 'Read and sign the consent form', signingMethod: 'name' as const, features: { ...consent.features, navigation: false }, components: [component({ type: 'text', label: clientContent.instructions['1'] }), ...consent.components] }
  const design = make('Design task', 'short_answer', [{ type: 'text', label: clientContent.design }, { type: 'textbox', label: 'Your design', required: true }])
  design.countdownMinutes = 60; design.allowExtension = true; design.features = { ...design.features, timer: true, ai: true, screenRecording: true, copyPaste: true, confirm: true }
  const oral = make('Recorded explanation', 'video_oral_answer', clientContent.oral.map(label => ({ type: 'text', label })))

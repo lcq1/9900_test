@@ -1334,7 +1334,7 @@ useEffect(() => {
 	)
 
 	return (
-		<section className="participant-view"><Modal rootClassName="participant-modal" open={confirmation !== null} centered title="Submit this stage?" okText="Submit and continue" cancelText="Keep working" onCancel={() => setConfirmation(null)} onOk={() => { const target = confirmation?.target; setConfirmation(null); void advance(true, target) }}><p>Your answers will be submitted. You may not be able to return to edit them.</p></Modal>
+		<section className="participant-view"><Modal rootClassName="participant-modal" open={confirmation !== null} centered title="Submit this stage?" okText="Yes, I'm sure" cancelText="No, not sure" onCancel={() => setConfirmation(null)} onOk={() => { const target = confirmation?.target; setConfirmation(null); void advance(true, target) }}><p>Ready to submit? Once submitted, you cannot return to this stage.</p></Modal>
 			<div inert={fullscreenLocked}>
 				<div className="participant-top">
 					<button
@@ -1405,7 +1405,8 @@ useEffect(() => {
 								disabled={!allowFreeOrder || isConsent || s.type.toLowerCase() === 'consent' || i === stageIndex || saving || paused || interactionLocked}
 								onClick={() => void advance(false, i)}
 							>
-								{i < stageIndex ? '✓ ' : ''}{s.name}
+								{/* Completed stages get a check, upcoming ones their step number (client nav-bar example). */}
+								{i < stageIndex ? '✓ ' : `${i + 1} `}{s.name}
 							</button>
 						))}
 					</div>

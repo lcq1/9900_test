@@ -863,10 +863,23 @@ it('excludes Consent from selectable stage types and locks the introductory stag
  it('loads Client content with 60 personality items, manual oral recording and no scoring', () => {
  const stages = createClientStages(createStage('consent'))
  expect(stages).toHaveLength(11)
- expect(stages[3].components.filter(c => c.type === 'choice')).toHaveLength(60)
- expect(stages[2].components.find(c => c.label.includes('first language?'))?.options).toHaveLength(10)
+ // Stage names follow the client's data-collection flow and example screens.
+ expect(stages[0].name).toBe('Read and sign the consent form')
+ expect(stages[0].signingMethod).toBe('name')
+ expect(stages[6].name).toBe('Design task')
+ // Design task: 60 minutes plus one researcher-approved 30-minute extension,
+ // AI assistant available, copy-paste logging and submission confirmation on.
  expect(stages[6].countdownMinutes).toBe(60)
  expect(stages[6].allowExtension).toBe(true)
+ expect(stages[6].features).toMatchObject({ ai: true, copyPaste: true, confirm: true, timer: true })
+ // Recorded explanation runs with the AI switched off, one question at a time.
+ expect(stages[8].sequentialQuestions).toBe(true)
+ expect(stages[8].recordingRequired).toBe(true)
+ expect(stages[3].components.filter(c => c.type === 'choice')).toHaveLength(60)
+ expect(stages[2].components.find(c => c.label.includes('first language?'))?.options).toHaveLength(10)
+ // Self-report keeps its multi-select questions and write-in "Other" options.
+ expect(stages[9].components.filter(c => c.type === 'checkbox')).toHaveLength(2)
+ expect(stages[9].components.filter(c => c.otherOption)).toHaveLength(3)
  expect(stages[8].components).toHaveLength(4)
  expect(stages[8].recordingMode).toBe('manual')
  expect(stages[8].countdownMinutes).toBe(10)

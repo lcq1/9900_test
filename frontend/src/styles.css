@@ -3232,6 +3232,16 @@ select:focus-visible,
 .participant-validation {
 	animation: participant-notice-fade 600ms ease 2s forwards;
 }
+/* The time-up dialog sits above the inline Alert, so its missing-required list
+   must not inherit the inline notice's fade (it has to stay readable). */
+.time-up-requirements {
+	text-align: left;
+	margin: 0 0 16px;
+}
+.time-up-back {
+	display: inline-flex;
+	margin-top: 14px;
+}
 .transient-notice {
 	animation: participant-notice-fade 600ms ease 2s forwards;
 }

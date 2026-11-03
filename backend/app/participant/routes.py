@@ -533,5 +533,5 @@ def export_session_workbook(session_id: str, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="Session not found")
     check_session_owner(db, session.experiment_code, researcher)
     experiment = repo.find_experiment_by_code(db, session.experiment_code)
-    return Response(export_csv.export_experiment_xlsx(db, experiment), media_type=export_csv.XLSX_MIME,
+    return Response(export_csv.export_experiment_xlsx(db, experiment, session_id=session_id), media_type=export_csv.XLSX_MIME,
         headers={"Content-Disposition": f'attachment; filename="{export_csv.export_filename(experiment.code)}"'})

@@ -182,6 +182,12 @@ export function ParticipantPreview({
 		const timer = window.setTimeout(() => setValidationError(''), 2600)
 		return () => window.clearTimeout(timer)
 	}, [validationError, validationAttempt])
+	// The "Time is up" dialog can be dismissed so the participant can return to
+	// unanswered required questions instead of being trapped behind the overlay.
+	const [timeUpDismissed, setTimeUpDismissed] = useState(false)
+	// A validation failure raised while the dialog is open is mirrored into it:
+	// the inline Alert has no z-index and is hidden behind the fixed overlay.
+	const [timeUpMissing, setTimeUpMissing] = useState('')
 	const [saving, setSaving] = useState(false)
 	const busyRef = useRef(false)
 	const approvedRef = useRef<{
@@ -297,6 +303,25 @@ export function ParticipantPreview({
 
 	const minutes = String(Math.floor(remaining / 60)).padStart(2, '0')
 	const seconds = String(remaining % 60).padStart(2, '0')
+
+	// The countdown overlay stays until the participant acts on it. Once
+	// dismissed it must remain hidden for this stage; a new stage resets it so
+	// its own timer can show the overlay again. Validation failures are copied
+	// into the dialog because the inline Alert is covered by the overlay.
+	const timeUpVisible = Boolean(
+		stage.features.timer &&
+			remaining === 0 &&
+			!paused &&
+			!interactionLocked &&
+			!timeUpDismissed,
+	)
+	useEffect(() => {
+		setTimeUpDismissed(false)
+		setTimeUpMissing('')
+	}, [stage.id])
+	useEffect(() => {
+		if (timeUpVisible && validationError) setTimeUpMissing(validationError)
+	}, [timeUpVisible, validationError])
 
 	useEffect(() => {
 		let active = true
@@ -1189,7 +1214,7 @@ export function ParticipantPreview({
 				<div className="participant-top">
 					<button
 						className="back-link"
-						onClick={onBack}
+						onClick={() => void finishSession('abort')}
 					>
 						<ArrowLeft size={16} />{' '}
 						{previewOnly ? 'Back to experiment' : 'Back to sign in'}
@@ -1221,7 +1246,7 @@ export function ParticipantPreview({
 								title={recordingError}
 							/>
 						)}
-					{validationError && (
+					{validationError && !timeUpVisible && (
 						<Alert
 							key={validationAttempt}
 							className="participant-validation"
@@ -1324,34 +1349,47 @@ export function ParticipantPreview({
 					</div>
 				)}
 
-				{/* Countdown elapsed: the participant must explicitly continue (they
-          stay on this stage until the button is clicked). */}
-				{stage.features.timer &&
-					remaining === 0 &&
-					!paused &&
-					!interactionLocked && (
-						<div className="pause-overlay">
-							<div className="pause-dialog">
-								<TimerReset size={25} />
-								<h2>Time is up</h2>
-								<p>
-									The countdown for “{stage.name}” has
-									finished. Your work on this stage is saved.
-									Click below to continue — until then you
-									will stay on this page.
-								</p>
-								<button
-									className="primary-button"
-									onClick={() => advance(true)}
-								>
-									{stageIndex < experiment.stages.length - 1
-										? 'Continue to next stage'
-										: 'Finish experiment'}{' '}
-									<ArrowRight size={15} />
-								</button>
-							</div>
+				{/* Countdown elapsed: keep the participant here until they act, but never deadlock. */}
+				{timeUpVisible && (
+					<div className="pause-overlay">
+						<div className="pause-dialog">
+							<TimerReset size={25} />
+							<h2>Time is up</h2>
+							<p>
+								The countdown for “{stage.name}” has
+								finished. Your work on this stage is saved.
+								Click below to continue — until then you
+								will stay on this page.
+							</p>
+							{timeUpMissing && (
+								<Alert
+									className="time-up-requirements"
+									type="error"
+									showIcon
+									title={timeUpMissing}
+								/>
+							)}
+							<button
+								className="primary-button"
+								onClick={() => void advance(true)}
+							>
+								{stageIndex < experiment.stages.length - 1
+									? 'Continue to next stage'
+									: 'Finish experiment'}{' '}
+								<ArrowRight size={15} />
+							</button>
+							<button
+								className="back-link time-up-back"
+								onClick={() => {
+									setTimeUpDismissed(true)
+									setTimeUpMissing('')
+								}}
+							>
+								Back to questions
+							</button>
 						</div>
-					)}
+					</div>
+				)}
 			</div>
 			{fullscreenLocked && (
 				<div

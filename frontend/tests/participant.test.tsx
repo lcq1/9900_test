@@ -690,6 +690,71 @@ describe('participant runtime', () => {
 		}
 	})
 
+	it('lists missing required answers in the time-up dialog and lets the participant go back', () => {
+		vi.useFakeTimers()
+		try {
+			const experiment = study()
+			experiment.stages[0].features.timer = true
+			experiment.stages[0].features.confirm = false
+			experiment.stages[0].countdownMinutes = 1
+			experiment.stages[0].components = [
+				{
+					id: 'required-answer',
+					type: 'textbox',
+					label: 'Your response',
+					required: true,
+				},
+			]
+			render(
+				<ParticipantPreview
+					experiment={experiment}
+					participantCode="P-001"
+					previewOnly
+					onBack={() => {}}
+				/>,
+			)
+			// Fake timers are installed before render so the countdown interval
+			// is driven by them; one minute elapses and remaining reaches zero.
+			act(() => {
+				vi.advanceTimersByTime(60000)
+			})
+			expect(
+				screen.getByRole('heading', { name: 'Time is up' }),
+			).toBeDefined()
+
+			// "Continue" is the action that used to deadlock: advance() still runs
+			// required-field validation and the inline Alert is hidden beneath the
+			// fixed, z-indexed overlay. The dialog must surface the missing item.
+			fireEvent.click(
+				screen.getByRole('button', { name: /Finish experiment/ }),
+			)
+			const dialog = document.querySelector('.pause-dialog')
+			expect(dialog).toBeTruthy()
+			expect(dialog!.textContent).toContain('Required: Your response')
+
+			// A secondary escape hatch dismisses the overlay so the form is
+			// reachable again (no refresh, no lost progress).
+			fireEvent.click(
+				screen.getByRole('button', { name: /Back to questions/ }),
+			)
+			expect(
+				screen.queryByRole('heading', { name: 'Time is up' }),
+			).toBeNull()
+			expect(
+				screen.queryByRole('button', { name: /Back to questions/ }),
+			).toBeNull()
+			const answer = screen.getByPlaceholderText(
+				'Type your response...',
+			) as HTMLTextAreaElement
+			expect(answer.matches(':disabled')).toBe(false)
+			fireEvent.change(answer, { target: { value: 'Now answered' } })
+			expect(answer.value).toBe('Now answered')
+		} finally {
+			cleanup()
+			vi.useRealTimers()
+		}
+	})
+
 	it('advances and finishes researcher preview without submitting study data', async () => {
 		const experiment = study()
 		experiment.stages[0].components = [
@@ -720,13 +785,21 @@ describe('participant runtime', () => {
 	})
 
 
-	it('leaves a participant session immediately without waiting for an unavailable save', () => {
+	it('persists an aborted session through the back link', async () => {
 		const done = vi.fn()
-		vi.mocked(submitSession).mockRejectedValue(new Error('offline'))
-		render(<ParticipantPreview initialSessionId="test-session" experiment={study()} participantCode="P001" onBack={done} />)
+		vi.mocked(submitSession).mockResolvedValue({} as never)
+		render(
+			<ParticipantPreview
+				initialSessionId="test-session"
+				experiment={study()}
+				participantCode="P001"
+				onBack={done}
+			/>,
+		)
 		fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }))
-		expect(done).toHaveBeenCalledOnce()
-		expect(submitSession).not.toHaveBeenCalled()
+		await waitFor(() => expect(submitSession).toHaveBeenCalledOnce())
+		expect(vi.mocked(submitSession).mock.calls[0][0].finishedAt).toBeNull()
+		await waitFor(() => expect(done).toHaveBeenCalledOnce())
 	})
 
 	it('leaves researcher preview immediately without waiting for a session save', () => {

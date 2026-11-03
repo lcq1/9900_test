@@ -430,10 +430,15 @@ def build_workbook(experiment, sessions, answers=(), events=(), consents=(), rec
     return result.getvalue()
 
 
-def export_experiment_xlsx(db, experiment):
+def export_experiment_xlsx(db, experiment, session_id: str | None = None):
     from app.researcher import repository as versions
     from app.participant.models import AIChatTurn, AIConversation
     sessions = db.query(ParticipantSession).filter_by(experiment_code=experiment.code).all()
+    # A single-session download must never expose the rest of the study. Mirror
+    # export_experiment_csv / build_csv: keep only the requested session, which
+    # also scopes the related records queried below to that participant alone.
+    if session_id is not None:
+        sessions = [s for s in sessions if s.id == session_id]
     ids = [s.id for s in sessions]
     records = [db.query(model).filter(model.session_id.in_(ids)).all() if ids else []
                for model in (Answer, ParticipantEvent, Consent, Recording)]

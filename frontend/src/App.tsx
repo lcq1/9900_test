@@ -1,3 +1,4 @@
+import { safeKeys, safeRemoveItem, safeSetItem } from './participant/safeStorage'
 import { useTransientNotice } from './participant/TimerController'
 import { ParticipantAccessPage } from './pages/ParticipantPage'
 import {
@@ -339,18 +340,18 @@ function WorkspacePage({ view }: { view: 'preview' | 'results' | 'settings' }) {
 					settings={workspaceSettings}
 					onChange={(next) => {
 						setWorkspaceSettings(next)
-						localStorage.setItem(
+						safeSetItem(
 							'p13-workspace',
 							JSON.stringify(next),
 						)
-						localStorage.setItem(
+						safeSetItem(
 							'beyond-display-name:' + me?.id,
 							next.researcherName,
 						)
 						window.dispatchEvent(new Event('beyond-profile-change'))
 					}}
 					onClearAll={() => {
-						for (const key of Object.keys(localStorage)) {
+						for (const key of safeKeys()) {
 							if (
 								[
 									'p13-experiments',
@@ -360,10 +361,12 @@ function WorkspacePage({ view }: { view: 'preview' | 'results' | 'settings' }) {
 									'p13-researchers',
 									'p13-platform-settings',
 								].includes(key) ||
-								key.startsWith('p13-api') ||
-								key.startsWith('p13-events')
+										key.startsWith('p13-api') ||
+										key.startsWith('p13-events') ||
+										key.startsWith('p13-runtime') ||
+										key.startsWith('p13-timer')
 							)
-								localStorage.removeItem(key)
+								safeRemoveItem(key)
 						}
 					}}
 				/>

@@ -9,6 +9,8 @@
  * and exported as a single JSON timeline.
  */
 
+import { safeGetItem, safeSetItem } from './safeStorage'
+
 export type ParticipantEventType =
 	| 'progress_checkpoint'
 	| 'fullscreen_enter'
@@ -93,7 +95,7 @@ export class EventQueue {
 	}
 
 	private load(): void {
-		const raw = localStorage.getItem(this.storageKey())
+		const raw = safeGetItem(this.storageKey())
 		if (!raw) return
 		try {
 			const parsed = JSON.parse(raw) as {
@@ -109,7 +111,7 @@ export class EventQueue {
 	}
 
 	private save(): void {
-		localStorage.setItem(
+		safeSetItem(
 			this.storageKey(),
 			JSON.stringify({ events: this.events, seq: this.seq }),
 		)

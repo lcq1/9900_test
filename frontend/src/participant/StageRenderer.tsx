@@ -23,6 +23,13 @@ import { useTimerController, useTransientNotice } from './TimerController'
 import { EventQueue, type ParticipantEvent } from './EventQueue'
 import { readRuntimeProgress, saveRuntimeProgress, type RuntimeProgress } from './ProgressStore'
 import {
+	onStorageDegraded,
+	safeGetItem,
+	safeRemoveItem,
+	safeSetItem,
+	storageDegraded,
+} from './safeStorage'
+import {
 	uploadRecording,
 	submitStage,
 	submitSession,
@@ -80,7 +87,7 @@ export function ParticipantPreview({
  if (previewOnly || !initialSessionId) return undefined
  const local = readRuntimeProgress(initialSessionId)
  const saved = local && (!initialProgress || local.updatedAt > initialProgress.updatedAt) ? local : initialProgress
- if (saved) for (const [id, deadline] of Object.entries(saved.deadlines ?? {})) localStorage.setItem('p13-timer:' + initialSessionId + ':' + id, String(deadline))
+ if (saved) for (const [id, deadline] of Object.entries(saved.deadlines ?? {})) safeSetItem('p13-timer:' + initialSessionId + ':' + id, String(deadline))
  return saved
 })
 const [conversations] = useState<Record<string, string>>(() => restored?.conversations ?? Object.fromEntries(experiment.stages.map(item => [item.id, crypto.randomUUID()])))
@@ -88,6 +95,8 @@ const checkpointRef = useRef<RuntimeProgress | null>(null)
 const autosaveRef = useRef<Promise<unknown> | null>(null)
 const finishingRef = useRef(false)
 const [syncStatus, setSyncStatus] = useState('')
+const [storageLimited, setStorageLimited] = useState(storageDegraded)
+useEffect(() => onStorageDegraded(setStorageLimited), [])
 	const [confirmation, setConfirmation] = useState<{ target?: number } | null>(null)
 	const extensionUsed = useRef(new Set<string>(Object.keys(restored?.extended ?? {}).filter(id => restored?.extended[id])))
 	const [extended, setExtended] = useState<Record<string, boolean>>(restored?.extended ?? {})
@@ -291,7 +300,7 @@ const [syncStatus, setSyncStatus] = useState('')
 				)
 				return
 			}
-			if (reason === 'finish' && initialSessionId) localStorage.removeItem('p13-runtime:' + initialSessionId)
+			if (reason === 'finish' && initialSessionId) safeRemoveItem('p13-runtime:' + initialSessionId)
 			if (reason === 'finish' && onComplete) onComplete()
 			else onBack()
 		},
@@ -334,7 +343,7 @@ const [syncStatus, setSyncStatus] = useState('')
 useEffect(() => {
  if (previewOnly || !initialSessionId || finishingRef.current) return
  const deadlines: Record<string, number> = {}
- for (const item of experiment.stages) { const value = Number(localStorage.getItem('p13-timer:' + initialSessionId + ':' + item.id)); if (value) deadlines[item.id] = value }
+ for (const item of experiment.stages) { const value = Number(safeGetItem('p13-timer:' + initialSessionId + ':' + item.id)); if (value) deadlines[item.id] = value }
  const progress: RuntimeProgress = { sessionId: initialSessionId, updatedAt: Date.now(), stageIndex, answers: selections, consentedStageId, attachments, extended, oralIndex, oralStarted, deadlines, conversations }
  checkpointRef.current = progress
  saveRuntimeProgress(progress)
@@ -875,6 +884,14 @@ useEffect(() => {
 				))}
 			{saving && <p role="status">Saving recording…</p>}
 {syncStatus && !saving && <p role="status">{syncStatus}</p>}
+			{storageLimited && (
+				<Alert
+					className="participant-storage-notice"
+					type="warning"
+					showIcon
+					title="Browser storage is full. Progress is still saved to the study server; keep this page open."
+				/>
+			)}
 			{stage.recordingMode === 'auto' &&
 				(wantsScreen || wantsSelfVideo) && (
 					<p>

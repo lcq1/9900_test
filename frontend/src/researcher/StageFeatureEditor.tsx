@@ -17,6 +17,8 @@ export function StageFeatureEditor({
 	stage: Stage
 	onUpdateStage: (update: (s: Stage) => Stage) => void
 }) {
+	if (stage.type.toLowerCase() === 'consent') return <aside className="right-panel"><label>Signing method<select value={stage.signingMethod ?? 'handwritten'} onChange={event => onUpdateStage(current => ({ ...current, signingMethod: event.target.value as 'handwritten' | 'name' }))}><option value="handwritten">Handwritten signature</option><option value="name">Full legal name</option></select></label>{stage.signingMethod === 'name' && <label>Required consent clauses (one per line)<textarea value={(stage.consentClauses ?? []).join('\n')} onChange={event => onUpdateStage(current => ({ ...current, consentClauses: event.target.value.split('\n') }))} /></label>}</aside>
+
 	// Update one feature while preserving the others.
 	const toggle = (key: FeatureKey, value: boolean) =>
 		onUpdateStage((current) => ({
@@ -43,6 +45,8 @@ export function StageFeatureEditor({
 						/6
 					</span>
 				</div>
+			<label><input type="checkbox" checked={stage.allowExtension ?? false} onChange={event => onUpdateStage(current => ({ ...current, allowExtension: event.target.checked }))} /> Allow one 30-minute extension</label>
+{stage.type === 'video_oral_answer' && <label><input type="checkbox" checked={stage.sequentialQuestions ?? false} onChange={event => onUpdateStage(current => ({ ...current, sequentialQuestions: event.target.checked, recordingMode: 'manual', countdownMinutes: 10, features: { ...current.features, ai: false, timer: true } }))} /> Show questions one at a time (shared 10 minutes)</label>}
 				{(['questionnaire', 'signatureBox', 'attachment'] as const).map(
 					(key) => (
 						<label key={key}>

@@ -110,6 +110,13 @@ def question_map(experiment):
             questions[component["id"]] = (
                 f"{stage_name} / Q{number} – {title}", stage_name, kind,
             )
+    for stage in experiment.stages:
+        if stage.get("signingMethod") == "name":
+            questions["consent"] = ("Signed consent (name, clauses, document and time)", stage.get("name", "Consent"), "text")
+        for component in stage.get("components", []):
+            if component.get("otherOption") and component["id"] in questions:
+                title, name, _ = questions[component["id"]]
+                questions[component["id"] + ":other"] = (title + " / Please specify", name, "textbox")
     return questions, stages
 
 

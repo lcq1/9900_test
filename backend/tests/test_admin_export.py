@@ -480,7 +480,11 @@ def test_versioned_export_and_session_snapshot(client, auth_headers, monkeypatch
     assert client.patch(path, headers=auth_headers, json={"publish": True, "publishRequestId": str(uuid4())}).status_code == 200
     again = client.post("/api/participant/sessions/start", headers=actor, json=start_body).json()
     assert again["experiment"]["stages"][1]["components"][0]["label"] == "Original question"
-    fresh = client.post("/api/participant/sessions/start", headers=actor, json={**start_body, "sessionId": str(uuid4())}).json()
+    resumed = client.post("/api/participant/sessions/start", headers=actor, json={**start_body, "sessionId": str(uuid4())}).json()
+    assert resumed["sessionId"] == sid
+    assert resumed["experiment"]["stages"][1]["components"][0]["label"] == "Original question"
+    fresh_access = client.post("/api/participant/access", json={"experimentCode": code, "participantCode": "P002"}).json()
+    fresh = client.post("/api/participant/sessions/start", headers={"X-Participant-Token": fresh_access["token"]}, json={**start_body, "participantCode": "P002", "sessionId": str(uuid4())}).json()
     assert fresh["experiment"]["stages"][1]["components"][0]["label"] == "New question"
     payload = {"sessionId": sid, "experimentCode": code, "participantCode": "P001", "answers": [{"componentId": "question", "value": "=1+1"}], "events": []}
     saved = client.post("/api/participant/sessions", headers=actor, json=payload)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert } from 'antd'
+import { Alert, Modal } from 'antd'
 import type { Experiment } from '../types'
 import {
   ArrowLeft,
@@ -20,7 +20,8 @@ import { http, downloadFile } from '../api/http'
 import { AIChat } from './AIChat'
 import { ConsentView } from './ConsentView'
 import { useTimerController, useTransientNotice } from './TimerController'
-import { EventQueue } from './EventQueue'
+import { EventQueue, type ParticipantEvent } from './EventQueue'
+import { readRuntimeProgress, saveRuntimeProgress, type RuntimeProgress } from './ProgressStore'
 import {
 	uploadRecording,
 	submitStage,
@@ -63,6 +64,8 @@ export function ParticipantPreview({
 	onComplete,
 	previewOnly = false,
 	initialSessionId,
+	initialProgress,
+	initialEvents,
 }: {
 	experiment: Experiment
 	participantCode: string
@@ -70,22 +73,43 @@ export function ParticipantPreview({
 	onComplete?: () => void
 	previewOnly?: boolean
 	initialSessionId?: string
+	initialProgress?: RuntimeProgress
+	initialEvents?: ParticipantEvent[]
 }) {
-	const [stageIndex, setStageIndex] = useState(0)
+	const [restored] = useState(() => {
+ if (previewOnly || !initialSessionId) return undefined
+ const local = readRuntimeProgress(initialSessionId)
+ const saved = local && (!initialProgress || local.updatedAt > initialProgress.updatedAt) ? local : initialProgress
+ if (saved) for (const [id, deadline] of Object.entries(saved.deadlines ?? {})) localStorage.setItem('p13-timer:' + initialSessionId + ':' + id, String(deadline))
+ return saved
+})
+const [conversations] = useState<Record<string, string>>(() => restored?.conversations ?? Object.fromEntries(experiment.stages.map(item => [item.id, crypto.randomUUID()])))
+const checkpointRef = useRef<RuntimeProgress | null>(null)
+const autosaveRef = useRef<Promise<unknown> | null>(null)
+const finishingRef = useRef(false)
+const [syncStatus, setSyncStatus] = useState('')
+	const [confirmation, setConfirmation] = useState<{ target?: number } | null>(null)
+	const extensionUsed = useRef(new Set<string>(Object.keys(restored?.extended ?? {}).filter(id => restored?.extended[id])))
+	const [extended, setExtended] = useState<Record<string, boolean>>(restored?.extended ?? {})
+	const [oralIndex, setOralIndex] = useState(restored?.oralIndex ?? 0)
+	const [oralStarted, setOralStarted] = useState(restored?.oralStarted ?? false)
+	const [stageIndex, setStageIndex] = useState(Math.min(restored?.stageIndex ?? 0, experiment.stages.length - 1))
+	const allowFreeOrder = Boolean(experiment.stages[0]?.features.navigation)
+	const stageTimes = useRef<Record<string, number>>({})
 	const [consentedStageId, setConsentedStageId] = useState<string | null>(
-		null,
+		restored?.consentedStageId ?? null,
 	)
 	const [paused, setPaused] = useState(false)
 	const [selections, setSelections] = useState<
 		Record<string, string | string[]>
-	>({})
+	>(restored?.answers ?? {})
 	// Tracks the chosen file name per attachment component so the UI can show it
 	// after a pick (the actual bytes are recorded into the event timeline).
-	const [attachments, setAttachments] = useState<Record<string, string>>({})
+	const [attachments, setAttachments] = useState<Record<string, string>>(restored?.attachments ?? {})
 
 	// Stable per-session EventQueue (created once, never per render).
 	const [queue] = useState(
-		() => new EventQueue(`${experiment.code}-${Date.now()}`),
+		() => new EventQueue(previewOnly ? crypto.randomUUID() : initialSessionId ?? `${experiment.code}-${participantCode}`, initialEvents),
 	)
 
 	const stage = experiment.stages[stageIndex]
@@ -185,7 +209,7 @@ export function ParticipantPreview({
 	const approvedRef = useRef<{
 		stageId: string
 		recording: Record<string, boolean>
-	} | null>(null)
+	} | null>(restored?.oralStarted && restored.deadlines?.[experiment.stages[restored.stageIndex]?.id] <= Date.now() ? { stageId: experiment.stages[restored.stageIndex].id, recording: { self: true, screen: false } } : null)
 
 	/**
 	 * Persist the captured session to the backend, then leave the runtime.
@@ -202,6 +226,8 @@ export function ParticipantPreview({
 				onBack()
 				return
 			}
+			finishingRef.current = true
+			await autosaveRef.current
 			if (reason === 'abort') {
 				queue.record('abort', { stageName: stage.name }, stage.id)
 			}
@@ -212,6 +238,7 @@ export function ParticipantPreview({
 					),
 				)
 			} catch {
+				finishingRef.current = false
 				setRecordingError(
 					'Recording upload failed. Keep this page open and retry.',
 				)
@@ -250,11 +277,13 @@ export function ParticipantPreview({
 					events,
 				})
 			} catch {
+				finishingRef.current = false
 				setRecordingError(
 					'Session could not be saved. Keep this page open and retry.',
 				)
 				return
 			}
+			if (reason === 'finish' && initialSessionId) localStorage.removeItem('p13-runtime:' + initialSessionId)
 			if (reason === 'finish' && onComplete) onComplete()
 			else onBack()
 		},
@@ -267,6 +296,7 @@ export function ParticipantPreview({
 			onBack,
 			onComplete,
 			previewOnly,
+			initialSessionId,
 			setRecordingError,
 		],
 	)
@@ -276,8 +306,9 @@ export function ParticipantPreview({
 	const { remaining, reset: setRemaining } = useTimerController({
 		initialSeconds: totalSeconds,
 		enabled:
-			stage.features.timer && !paused && !interactionLocked && !saving,
+			stage.features.timer && !paused && !interactionLocked && !saving && (!stage.sequentialQuestions || oralStarted),
 		stageId: stage.id,
+		storageKey: !previewOnly && initialSessionId && stage.features.timer ? 'p13-timer:' + initialSessionId + ':' + stage.id : undefined,
 	})
 
 	// Recording controllers are imperative objects: kept in a ref and only ever
@@ -291,6 +322,28 @@ export function ParticipantPreview({
 	const activeStageRef = useRef(stage.id)
 	activeStageRef.current = stage.id
 
+// Persist local edits immediately and mirror checkpoints through the existing session API.
+useEffect(() => {
+ if (previewOnly || !initialSessionId || finishingRef.current) return
+ const deadlines: Record<string, number> = {}
+ for (const item of experiment.stages) { const value = Number(localStorage.getItem('p13-timer:' + initialSessionId + ':' + item.id)); if (value) deadlines[item.id] = value }
+ const progress: RuntimeProgress = { sessionId: initialSessionId, updatedAt: Date.now(), stageIndex, answers: selections, consentedStageId, attachments, extended, oralIndex, oralStarted, deadlines, conversations }
+ checkpointRef.current = progress
+ saveRuntimeProgress(progress)
+}, [previewOnly, initialSessionId, experiment.stages, stageIndex, selections, consentedStageId, attachments, extended, oralIndex, oralStarted, remaining, conversations])
+useEffect(() => {
+ if (previewOnly || !initialSessionId) return
+ const save = () => {
+  if (finishingRef.current || autosaveRef.current || !checkpointRef.current) return
+  const progress = checkpointRef.current
+  queue.record('progress_checkpoint', { progress }, experiment.stages[progress.stageIndex].id)
+  setSyncStatus('Saving progress…')
+  autosaveRef.current = submitSession({ sessionId: initialSessionId, experimentCode: experiment.code, participantCode, finishedAt: null, answers: Object.entries(progress.answers).map(([componentId, value]) => ({ componentId, value })), events: queue.all() }).then(() => setSyncStatus('Progress saved.')).catch(() => setSyncStatus('Progress saved on this browser. Server sync failed; retrying.')).finally(() => { autosaveRef.current = null })
+ }
+ const id = window.setInterval(save, 3000)
+ window.addEventListener('pagehide', save)
+ return () => { clearInterval(id); window.removeEventListener('pagehide', save); save() }
+}, [previewOnly, initialSessionId, experiment.code, experiment.stages, participantCode, queue])
 	const minutes = String(Math.floor(remaining / 60)).padStart(2, '0')
 	const seconds = String(remaining % 60).padStart(2, '0')
 
@@ -309,6 +362,11 @@ export function ParticipantPreview({
 		}
 	}, [queue])
 
+	// Reset the viewport after a successful stage change has rendered.
+	useEffect(() => {
+		window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+	}, [stage.id])
+
 	// Record every stage transition (including the first render).
 	useEffect(() => {
 		queue.record('stage_view', { stageName: stage.name }, stage.id)
@@ -317,6 +375,11 @@ export function ParticipantPreview({
 	// Record a milestone once the countdown for this stage elapses.
 	useEffect(() => {
 		if (stage.features.timer && remaining === 0) {
+			if (stage.sequentialQuestions && controllersRef.current.self?.status === 'active') {
+				approvedRef.current = { stageId: stage.id, recording: { self: true, screen: controllersRef.current.screen?.status === 'active' } }
+				controllersRef.current.self.stop()
+			}
+
 			queue.record(
 				'timer_milestone',
 				{ stageName: stage.name, limitMinutes: stage.countdownMinutes },
@@ -327,6 +390,7 @@ export function ParticipantPreview({
 		remaining,
 		stage.features.timer,
 		stage.countdownMinutes,
+		stage.sequentialQuestions,
 		stage.id,
 		stage.name,
 		queue,
@@ -375,7 +439,7 @@ export function ParticipantPreview({
 		)
 			void startRecording('screen')
 		if (
-			stage.recordingMode === 'auto' &&
+			stage.recordingMode === 'auto' && !stage.sequentialQuestions &&
 			(stage.features.selfie || stage.recordingRequired)
 		)
 			void startRecording('self')
@@ -405,8 +469,13 @@ export function ParticipantPreview({
 	 * `skipConfirm` bypasses the double-confirm dialog — used by the
 	 * time-is-up modal, which is itself an explicit user action.
 	 */
-	const advance = async (skipConfirm: boolean) => {
+	const advance = async (skipConfirm: boolean, targetIndex?: number) => {
 		if (busyRef.current) return
+		const choosingStage = targetIndex !== undefined
+		if (choosingStage && (!allowFreeOrder || stage.type.toLowerCase() === 'consent' ||
+			!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= experiment.stages.length ||
+			targetIndex === stageIndex || experiment.stages[targetIndex].type.toLowerCase() === 'consent')) return
+		if (stage.sequentialQuestions && remaining > 0 && oralIndex < stage.components.filter(c => c.type === 'text').length - 1) { setValidationError('Please answer every explanation question before submitting.'); return }
 		setValidationError('')
 		setValidationAttempt((attempt) => attempt + 1)
 		const consentAccepted = consentedStageId === stage.id
@@ -430,10 +499,11 @@ export function ParticipantPreview({
 			)
 			return
 		}
-		const answers = stage.components.map((c) => ({
+		const answers = [...stage.components.map((c) => ({
 			componentId: c.id,
 			value: selections[c.id] ?? '',
-		}))
+		})), ...stage.components.filter(c => c.otherOption).map(c => ({ componentId: c.id + ':other', value: selections[c.id + ':other'] ?? '' }))]
+		if (stage.signingMethod === 'name') answers.push({ componentId: 'consent', value: selections.consent ?? '' })
 		const missing = stage.components
 			.filter((c) => {
 				if (['text', 'button'].includes(c.type)) return false
@@ -450,6 +520,10 @@ export function ParticipantPreview({
 				)
 			})
 			.map((c) => c.label)
+		for (const c of stage.components) {
+			const value = selections[c.id]
+			if (c.otherOption && (Array.isArray(value) ? value.includes(c.otherOption) : value === c.otherOption) && !String(selections[c.id + ':other'] ?? '').trim()) missing.push(c.label + ' (please specify)')
+		}
 		const recording =
 			approvedRef.current?.stageId === stage.id
 				? approvedRef.current.recording
@@ -464,6 +538,7 @@ export function ParticipantPreview({
 			setValidationError('Required: ' + missing.join(', '))
 			return
 		}
+		if (!skipConfirm && stage.features.confirm) { setConfirmation({ target: targetIndex }); return }
 		busyRef.current = true
 		setSaving(true)
 		try {
@@ -485,22 +560,11 @@ export function ParticipantPreview({
 			return
 		}
 		answers.forEach((a) => recordAnswer(a.componentId, a.value))
-		if (
-			!skipConfirm &&
-			stage.features.confirm &&
-			!window.confirm(
-				'Are you sure you want to continue? You may not be able to return.',
-			)
-		) {
-			busyRef.current = false
-			setSaving(false)
-			return
-		}
 		queue.record('stage_exit', { recording }, stage.id)
 		approvedRef.current = { stageId: stage.id, recording }
 		setSaving(true)
 		try {
-			const following = experiment.stages[stageIndex + 1]
+			const following = experiment.stages[targetIndex ?? stageIndex + 1]
 			await Promise.all(
 				(
 					Object.entries(controllersRef.current) as [
@@ -535,23 +599,26 @@ export function ParticipantPreview({
 			{ from: stage.name, triggeredBy: 'participant', recording },
 			stage.id,
 		)
-		if (stageIndex >= experiment.stages.length - 1) {
+		if (!choosingStage && stageIndex >= experiment.stages.length - 1) {
 			await finishSession('finish')
 			busyRef.current = false
 			return
 		}
 		approvedRef.current = null
 		busyRef.current = false
-		const nextIndex = stageIndex + 1
+		const nextIndex = targetIndex ?? stageIndex + 1
+		stageTimes.current[stage.id] = remaining
+		setOralIndex(0)
+		setOralStarted(false)
 		setStageIndex(nextIndex)
-		setSelections({})
-		setRemaining(
-			Math.max(1, experiment.stages[nextIndex].countdownMinutes) * 60,
+		// Retain submitted answers for resuming this session.
+		if (previewOnly || !initialSessionId) setRemaining(
+			stageTimes.current[experiment.stages[nextIndex].id] ?? Math.max(1, experiment.stages[nextIndex].countdownMinutes) * 60,
 		)
 	}
 
 	const startRecording = async (kind: RecordingKind) => {
-		if (startingRef.current[kind] || paused || busyRef.current) return
+		if (startingRef.current[kind] || paused || busyRef.current || (stage.sequentialQuestions && remaining === 0)) return
 		startingRef.current[kind] = true
 		try {
 			const controllers = controllersRef.current
@@ -614,6 +681,7 @@ export function ParticipantPreview({
 			if (!aliveRef.current || activeStageRef.current !== stage.id) return
 			setRecordingStatus((current) => ({ ...current, [kind]: status }))
 			queue.record('recording_start', { kind, status }, stage.id)
+			if (kind === 'self' && status === 'active' && stage.sequentialQuestions) { setOralStarted(true); queue.record('oral_question', { question: oralIndex + 1, recordingId }, stage.id) }
 
 			if (kind === 'self' && controller.stream && videoRef.current) {
 				videoRef.current.srcObject = controller.stream
@@ -700,11 +768,12 @@ export function ParticipantPreview({
 				(component) =>
 					component.type !== 'text' && component.type !== 'button',
 			)
-		: stage.components
+		: stage.sequentialQuestions ? stage.components.filter(c => c.type === 'text').filter((_, i) => i === oralIndex) : stage.components
 
 	const handleConsent = (signatureDataUrl: string, accepted = true) => {
+		setSelections(current => ({ ...current, consent: accepted ? signatureDataUrl : '' }))
 		setConsentedStageId(accepted ? stage.id : null)
-		queue.record('consent', { accepted }, stage.id)
+		queue.record('consent', { accepted, signingMethod: stage.signingMethod ?? 'handwritten', record: signatureDataUrl, document: consentLines }, stage.id)
 		// Store the complete signature image (data URL), not just its length, so it
 		// lands on the backend with the rest of the session timeline (P1).
 		queue.record(
@@ -712,6 +781,7 @@ export function ParticipantPreview({
 			{
 				componentId: 'consent',
 				consent: accepted,
+				value: signatureDataUrl,
 				signatureDataUrl,
 			},
 			stage.id,
@@ -773,6 +843,7 @@ export function ParticipantPreview({
 					recording stops, use Enable screen recording to try again.
 				</p>
 			)}
+{syncStatus && !saving && <p role="status">{syncStatus}</p>}
 			{stage.recordingMode === 'auto' &&
 				(wantsScreen || wantsSelfVideo) && (
 					<p>
@@ -781,7 +852,7 @@ export function ParticipantPreview({
 					</p>
 				)}
 
-			{stage.features.ai && (
+			{(stage.features.ai && stage.type !== 'video_oral_answer') && (
 				<div className="ai-banner">
 					<MessageCircle size={15} />
 					<span>
@@ -798,11 +869,14 @@ export function ParticipantPreview({
 				<ConsentView
 					key={stage.id}
 					text={consentLines}
+ initialValue={typeof selections.consent === 'string' ? selections.consent : undefined}
+ signingMethod={stage.signingMethod} clauses={stage.consentClauses}
 					onConsent={handleConsent}
 				/>
 			)}
 
-			{/* MS-Forms-style stage content */}
+			{stage.sequentialQuestions && <div className="oral-progress"><p>Question {oralIndex + 1} of {stage.components.filter(c => c.type === 'text').length} · Shared time: {minutes}:{seconds}</p><button className="secondary-button" disabled={!oralStarted || saving || paused || interactionLocked || oralIndex >= stage.components.filter(c => c.type === 'text').length - 1} onClick={() => { queue.record('oral_question', { from: oralIndex + 1, to: oralIndex + 2 }, stage.id); setOralIndex(i => i + 1) }}>Next question</button></div>}
+{/* MS-Forms-style stage content */}
 			<fieldset
 				disabled={interactionLocked || paused || saving}
 				inert={interactionLocked || paused || saving}
@@ -921,7 +995,8 @@ export function ParticipantPreview({
 									</div>
 								)}
 
-								{component.type === 'signature' && (
+								{component.otherOption && (Array.isArray(selected) ? selected.includes(component.otherOption) : selected === component.otherOption) && <label>Please specify<input aria-label={component.label + ' (please specify)'} value={String(selections[component.id + ':other'] ?? '')} onChange={event => setText(component.id + ':other', event.target.value)} onBlur={() => commitText(component.id + ':other')} /></label>}
+{component.type === 'signature' && (
 									<div className="signature-box">
 										<PenLine size={18} />
 										<input
@@ -1043,7 +1118,7 @@ export function ParticipantPreview({
 							<span className="capture-badge">
 								{statusLabel(recordingStatus.self ?? 'idle')}
 							</span>
-							{recordingStatus.self === 'active' ? (
+							{recordingStatus.self === 'active' ? stage.sequentialQuestions ? null : (
 								<button
 									className="secondary-button"
 									onClick={() => stopRecording('self')}
@@ -1119,7 +1194,7 @@ export function ParticipantPreview({
 					: 'No copy-paste capture on this stage'}{' '}
 				· {queue.count()} events captured this session
 			</span>
-			<div className="participant-actions">
+			<div className="participant-actions">{stage.allowExtension && !extended[stage.id] && <button className="secondary-button" disabled={saving || paused || interactionLocked} onClick={() => Modal.confirm({ rootClassName: 'participant-modal', centered: true, title: 'Researcher approval required', content: 'Confirm only after the researcher agrees to a 30-minute extension.', onOk: () => { if (extensionUsed.current.has(stage.id)) return; extensionUsed.current.add(stage.id); setExtended(current => ({ ...current, [stage.id]: true })); setRemaining(value => value + 1800); queue.record('timer_extension', { minutes: 30, researcherApprovalConfirmed: true }, stage.id) } })}>Extend by 30 minutes</button>}
 				{stage.features.pauseAbort && (
 					<>
 						<button
@@ -1171,7 +1246,7 @@ export function ParticipantPreview({
 	)
 
 	return (
-		<section className="participant-view">
+		<section className="participant-view"><Modal rootClassName="participant-modal" open={confirmation !== null} centered title="Submit this stage?" okText="Submit and continue" cancelText="Keep working" onCancel={() => setConfirmation(null)} onOk={() => { const target = confirmation?.target; setConfirmation(null); void advance(true, target) }}><p>Your answers will be submitted. You may not be able to return to edit them.</p></Modal>
 			<div inert={fullscreenLocked}>
 				<div className="participant-top">
 					<button
@@ -1187,12 +1262,12 @@ export function ParticipantPreview({
 							? 'Researcher preview · Answers and recordings are not saved'
 							: 'Participant session'}
 					</span>
-					<span>{experiment.code}</span>
+					<strong>{experiment.name}</strong>
 				</div>
 
 				<div
 					className={
-						stage.features.ai
+						(stage.features.ai && stage.type !== 'video_oral_answer')
 							? 'participant-body participant-body-wide'
 							: 'participant-body'
 					}
@@ -1221,16 +1296,23 @@ export function ParticipantPreview({
 					<div className="step-eyebrow">
 						Step {stageIndex + 1} · {stage.name}
 					</div>
-					<div className="progress-segments">
+					<div className="participant-stage-nav" role="navigation" aria-label="Study progress">
 						{experiment.stages.map((s, i) => (
-							<i
+							<button
+								type="button"
 								key={s.id}
-								className={i <= stageIndex ? 'done' : ''}
-							></i>
+								aria-label={s.name}
+								aria-current={i === stageIndex ? 'step' : undefined}
+								className={i < stageIndex ? 'done' : i === stageIndex ? 'current' : ''}
+								disabled={!allowFreeOrder || isConsent || s.type.toLowerCase() === 'consent' || i === stageIndex || saving || paused || interactionLocked}
+								onClick={() => void advance(false, i)}
+							>
+								{i < stageIndex ? '✓ ' : ''}{s.name}
+							</button>
 						))}
 					</div>
 
-					{stage.features.ai ? (
+					{(stage.features.ai && stage.type !== 'video_oral_answer') ? (
 						<div className="participant-split">
 							<div className="participant-card">
 								{stageBody}
@@ -1243,6 +1325,8 @@ export function ParticipantPreview({
 									}
 									key={stage.id}
 									stageId={stage.id}
+ initialConversationId={conversations[stage.id]}
+ initialMessages={queue.all().filter(event => event.stageId === stage.id && (event.type === 'ai_prompt' || event.type === 'ai_reply')).map(event => ({ id: 'event-' + event.seq, role: event.type === 'ai_prompt' ? 'user' as const : 'assistant' as const, text: String(event.detail?.text ?? '') }))}
 									getSessionId={
 										previewOnly ? undefined : ensureSession
 									}
@@ -1310,10 +1394,10 @@ export function ParticipantPreview({
 						<div className="pause-overlay">
 							<div className="pause-dialog">
 								<TimerReset size={25} />
-								<h2>Time is up</h2>
+								<h2>Time is up</h2>{stage.allowExtension && !extended[stage.id] && <button className="secondary-button" disabled={saving || paused || interactionLocked} onClick={() => Modal.confirm({ rootClassName: 'participant-modal', centered: true, title: 'Researcher approval required', content: 'Confirm only after the researcher agrees to a 30-minute extension.', onOk: () => { if (extensionUsed.current.has(stage.id)) return; extensionUsed.current.add(stage.id); setExtended(current => ({ ...current, [stage.id]: true })); setRemaining(value => value + 1800); queue.record('timer_extension', { minutes: 30, researcherApprovalConfirmed: true }, stage.id) } })}>Extend by 30 minutes</button>}
 								<p>
 									The countdown for “{stage.name}” has
-									finished. Your work on this stage is saved.
+									finished. Submit your work below to save it.
 									Click below to continue — until then you
 									will stay on this page.
 								</p>

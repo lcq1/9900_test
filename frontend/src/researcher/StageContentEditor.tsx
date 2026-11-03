@@ -100,7 +100,7 @@ export function StageContentEditor({
 					? {
 							...c,
 							options:
-								(c.options ?? []).length < 6
+								(c.options ?? []).length < 12
 									? [...(c.options ?? []), '']
 									: c.options,
 						}
@@ -148,7 +148,9 @@ export function StageContentEditor({
 		onUpdateStage((current) => {
 			// Adjust components for the new stage type.
 			let comps = current.components
-			if (type === 'true_false') {
+			if (type === 'instruction') {
+				comps = comps.filter(c => c.type === 'text')
+			} else if (type === 'true_false') {
 				// Use True and False options for true/false stages.
 				comps = ensureChoice(comps, ['True', 'False'])
 			} else if (type === 'single_choice' || type === 'multiple_choice') {
@@ -314,7 +316,7 @@ export function StageContentEditor({
 						<div className="content-field">
 							<label className="content-label">Stage type</label>
 							<select
-								className="type-select"
+								aria-label="Stage type" className="type-select"
 								value={stage.type}
 								onChange={(event) =>
 									onTypeChange(event.target.value)
@@ -389,6 +391,7 @@ export function StageContentEditor({
 								{(component.type === 'choice' ||
 									component.type === 'checkbox') && (
 									<div className="options-editor">
+<label>Option requiring explanation<select aria-label="Option requiring explanation" value={component.otherOption ?? ''} onChange={event => onUpdateStage(current => ({ ...current, components: current.components.map(c => c.id === component.id ? { ...c, otherOption: event.target.value || undefined } : c) }))}><option value="">None</option>{component.options?.map((o, i) => <option key={i} value={o}>{o}</option>)}</select></label>
 										{(component.options ?? []).map(
 											(option, i) => (
 												<div

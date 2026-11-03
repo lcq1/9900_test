@@ -41,6 +41,7 @@ class StageComponent(CamelModel):
     label: str
     required: bool = False
     options: Optional[list[str]] = None
+    other_option: Optional[str] = None
 
 
 class Stage(CamelModel):
@@ -55,6 +56,10 @@ class Stage(CamelModel):
     required_features: dict[Literal["questionnaire", "signatureBox", "attachment"], bool] = {}
     recording_required: bool = False
     recording_mode: Literal["manual", "auto"] = "manual"
+    signing_method: Literal["handwritten", "name"] = "handwritten"
+    consent_clauses: list[str] = []
+    allow_extension: bool = False
+    sequential_questions: bool = False
 
 
 class ExperimentCreate(CamelModel):

@@ -121,10 +121,18 @@ def validate_publication(stages: list[dict]) -> None:
     if len(set(ids)) != len(ids) or not all(ids):
         raise HTTPException(status_code=422, detail="Stage identifiers must be unique")
     for stage in stages:
+        if stage.get("signingMethod") == "name" and not any(c.strip() for c in stage.get("consentClauses", [])):
+            raise HTTPException(status_code=422, detail="Enter the approved consent clauses")
         if not stage.get("name", "").strip() or not stage.get("components"):
             raise HTTPException(status_code=422, detail="Each stage needs a name and study content")
         for component in stage["components"]:
             if not component.get("label", "").strip():
                 raise HTTPException(status_code=422, detail="Study content cannot be blank")
+            if component.get("type") in ("choice", "checkbox", "rating"):
+                options = component.get("options") or []
+                if not 2 <= len(options) <= 12 or any(not o.strip() for o in options) or len(set(o.strip() for o in options)) != len(options):
+                    raise HTTPException(status_code=422, detail="Provide 2-12 distinct, non-empty options")
+                if component.get("otherOption") and component["otherOption"] not in options:
+                    raise HTTPException(status_code=422, detail="Explanation option must be a configured option")
             if component.get("type") in ("choice", "checkbox", "rating") and not component.get("options"):
                 raise HTTPException(status_code=422, detail="Choice questions require options")

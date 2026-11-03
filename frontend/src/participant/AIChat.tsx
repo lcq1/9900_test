@@ -23,6 +23,8 @@ export interface ChatMessage {
 }
 
 export interface AIChatProps {
+	initialConversationId?: string
+	initialMessages?: ChatMessage[]
 	disabled?: boolean
 	stageId: string
 	getSessionId?: () => Promise<string>
@@ -38,6 +40,8 @@ export interface AIChatProps {
 
 export function AIChat({
 	disabled = false,
+	initialConversationId,
+	initialMessages,
 	stageId,
 	getSessionId,
 	onFailure,
@@ -46,7 +50,7 @@ export function AIChat({
 	onUserMessage,
 	onAssistantReply,
 }: AIChatProps) {
-	const [messages, setMessages] = useState<ChatMessage[]>([])
+	const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
 	const [input, setInput] = useState('')
 	const [streaming, setStreaming] = useState(false)
 	const [modelLabel, setModelLabel] = useState('')
@@ -68,7 +72,7 @@ export function AIChat({
 	useEffect(() => {
 		if (disabled) abortRef.current?.abort()
 	}, [disabled])
-	const [conversationId] = useState(() => crypto.randomUUID())
+	const [conversationId] = useState(() => initialConversationId ?? crypto.randomUUID())
 	const requestIdRef = useRef('')
 
 	useEffect(() => {

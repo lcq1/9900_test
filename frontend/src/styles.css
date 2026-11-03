@@ -1747,6 +1747,32 @@ nav {
 	display: grid;
 	gap: 6px;
 }
+/* Match the explanation selector to the editor's existing fields. */
+.options-editor > label {
+	display: grid;
+	gap: 7px;
+	margin-bottom: 8px;
+	color: #6b7785;
+	font-size: 12px;
+	font-weight: 600;
+}
+.options-editor > label > select {
+	width: 100%;
+	min-width: 0;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 8px 10px;
+	background: #fff;
+	color: var(--ink);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 400;
+}
+.options-editor > label > select:focus-visible {
+	outline: none;
+	border-color: #8b95a5;
+	box-shadow: 0 0 0 1px #8b95a5;
+}
 .option-row {
 	display: flex;
 	gap: 6px;
@@ -3274,4 +3300,336 @@ select:focus-visible,
 	.results-page .session-head {
 		padding: 16px;
 	}
+}
+
+/* Participant-only visual theme. */
+.participant-view:not(:has(form.entry-card)) {
+	--green: #5654ff;
+	--green-soft: #f0efff;
+	background: #f6f7fa;
+	color: #181b23;
+	min-height: 100vh;
+}
+.participant-view:not(:has(form.entry-card)) .participant-top {
+	height: auto;
+	min-height: 62px;
+	gap: 16px;
+	background: white;
+	border-bottom: 1px solid #e5e8f0;
+	padding: 22px 32px;
+}
+.participant-view:not(:has(form.entry-card)) .participant-body {
+	width: 100%;
+	min-width: 0;
+	max-width: 1000px;
+	padding: 32px 24px 64px;
+}
+.participant-view:not(:has(form.entry-card)) .participant-body-wide,
+.participant-view:not(:has(form.entry-card))
+	.participant-body:has(.consent-columns) {
+	max-width: 1500px;
+}
+.participant-view:not(:has(form.entry-card)) .participant-card,
+.participant-view:not(:has(form.entry-card)) .ai-sidebar {
+	background: white;
+	border: 1px solid #e6e8f0;
+	border-radius: 20px;
+	box-shadow: 0 6px 24px #23304a08;
+}
+.participant-view:not(:has(form.entry-card)) .participant-card {
+	padding: 32px;
+}
+.participant-view:not(:has(form.entry-card)) h1 {
+	overflow-wrap: anywhere;
+	color: #161922;
+	font-size: 28px;
+	margin-bottom: 24px;
+}
+.participant-view:not(:has(form.entry-card)) p {
+	line-height: 1.8;
+	white-space: pre-wrap;
+}
+.participant-view:not(:has(form.entry-card)) .step-eyebrow,
+.participant-view:not(:has(form.entry-card)) .participant-footer,
+.participant-view:not(:has(form.entry-card)) .consent-signing p {
+	color: #718096;
+}
+.participant-view:not(:has(form.entry-card)) .participant-stage-nav {
+	display: flex;
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+	gap: 24px;
+	background: white;
+	border-bottom: 1px solid #e5e8f0;
+	margin: 16px 0 32px;
+}
+.participant-view:not(:has(form.entry-card)) .participant-stage-nav button {
+	border: 0;
+	background: transparent;
+	font: inherit;
+	flex: 0 0 auto;
+	padding: 16px 4px;
+	color: #939bad;
+	white-space: nowrap;
+	border-bottom: 2px solid transparent;
+}
+.participant-view:not(:has(form.entry-card)) .participant-stage-nav button:disabled {
+	opacity: 1;
+	cursor: default;
+}
+.participant-view:not(:has(form.entry-card)) .participant-stage-nav button:hover:not(:disabled) {
+	color: var(--green);
+	background: var(--green-soft);
+}
+.participant-view:not(:has(form.entry-card)) .participant-stage-nav .done,
+.participant-view:not(:has(form.entry-card)) .participant-stage-nav .current {
+	color: #5654ff;
+}
+.participant-view:not(:has(form.entry-card)) .participant-stage-nav .current {
+	border-color: #5654ff;
+	font-weight: 600;
+}
+.participant-view:not(:has(form.entry-card)) .primary-button {
+	background: #5654ff;
+	border-color: #5654ff;
+	color: white;
+	border-radius: 10px;
+	padding: 12px 20px;
+}
+.participant-view:not(:has(form.entry-card)) .secondary-button {
+	border-radius: 10px;
+}
+.participant-view:not(:has(form.entry-card)) button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.participant-view:not(:has(form.entry-card)) :focus-visible {
+	outline: 3px solid #8886ff;
+	outline-offset: 3px;
+}
+.participant-view:not(:has(form.entry-card)) .ms-question {
+	padding: 24px 0;
+}
+.participant-view:not(:has(form.entry-card)) .ms-options {
+	gap: 12px;
+}
+.participant-view:not(:has(form.entry-card)) .ms-option {
+	border: 1px solid #e1e5ee;
+	border-radius: 12px;
+	padding: 14px 18px;
+	background: white;
+}
+.participant-view:not(:has(form.entry-card)) .ms-option.is-selected,
+.participant-view:not(:has(form.entry-card))
+	.consent-confirm:has(input:checked) {
+	background: #f0efff;
+	border-color: #6663ff;
+}
+.participant-view:not(:has(form.entry-card))
+	input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.participant-view:not(:has(form.entry-card)) textarea {
+	border: 1px solid #dce1eb;
+	border-radius: 10px;
+	padding: 12px;
+	max-width: 100%;
+}
+.participant-view:not(:has(form.entry-card)) input[type="checkbox"] {
+	accent-color: #5654ff;
+}
+.participant-view:not(:has(form.entry-card)) .consent-columns {
+	display: grid;
+	grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr);
+	min-width: 0;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	gap: 24px;
+	align-items: start;
+}
+.participant-view:not(:has(form.entry-card)) .consent-document {
+	min-width: 0;
+	max-height: 72vh;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+	overflow-wrap: anywhere;
+	background: white;
+	border: 16px solid #dce0e9;
+	border-radius: 16px;
+	padding: 30px;
+	line-height: 1.8;
+}
+.participant-view:not(:has(form.entry-card)) .consent-signing {
+	min-width: 0;
+	background: white;
+	overflow-wrap: anywhere;
+	border: 1px solid #e6e8f0;
+	border-radius: 18px;
+	padding: 24px;
+}
+.participant-view:not(:has(form.entry-card)) .consent-confirm {
+	display: flex;
+	align-items: start;
+	gap: 12px;
+	border: 1px solid #e1e5ee;
+	border-radius: 12px;
+	padding: 14px;
+	margin: 12px 0;
+}
+.participant-view:not(:has(form.entry-card))
+	.consent-signing
+	label
+	input:not([type="checkbox"]) {
+	display: block;
+	width: 100%;
+	margin-top: 8px;
+}
+.participant-view:not(:has(form.entry-card)) .pause-dialog {
+	border-radius: 20px;
+	text-align: left;
+}
+.participant-view:not(:has(form.entry-card)) .participant-actions {
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 12px;
+}
+@media (max-width: 760px) {
+	.participant-view:not(:has(form.entry-card)) .consent-columns,
+	.participant-view:not(:has(form.entry-card)) .participant-split {
+		display: flex;
+		flex-direction: column;
+	}
+	.participant-view:not(:has(form.entry-card)) .consent-signing,
+	.participant-view:not(:has(form.entry-card)) .ai-sidebar {
+		width: 100%;
+		min-width: 0;
+	}
+	.participant-view:not(:has(form.entry-card)) .participant-top {
+		flex-wrap: wrap;
+		gap: 12px;
+		padding: 16px;
+	}
+	.participant-view:not(:has(form.entry-card)) .participant-body,
+	.participant-view:not(:has(form.entry-card)) .participant-card {
+		padding: 20px 16px;
+	}
+	.participant-view:not(:has(form.entry-card)) .consent-document {
+		max-height: 50vh;
+		padding: 16px;
+	}
+}
+
+.participant-modal .ant-modal-content {
+	border-radius: 20px;
+	padding: 28px;
+}
+.participant-modal .ant-btn-primary {
+	background: #5654ff;
+	border-color: #5654ff;
+}
+.participant-modal .ant-modal-footer {
+	text-align: right;
+}
+
+/* Keep width calculations inside participant cards, including conditional inputs. */
+.participant-view:not(:has(form.entry-card)),
+.participant-view:not(:has(form.entry-card)) *,
+.participant-view:not(:has(form.entry-card)) *::before,
+.participant-view:not(:has(form.entry-card)) *::after {
+	box-sizing: border-box;
+}
+.participant-view:not(:has(form.entry-card)) .participant-top > strong {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.participant-view:not(:has(form.entry-card))
+	.primary-button:hover:not(:disabled) {
+	background: #4643dd;
+	border-color: #4643dd;
+}
+.participant-view:not(:has(form.entry-card)) .primary-button:disabled {
+	background: #d5dbe4;
+	border-color: #d5dbe4;
+	color: #64748b;
+}
+.participant-view:not(:has(form.entry-card)) .ms-option:hover:not(:disabled) {
+	background: var(--green-soft);
+	border-color: var(--green);
+}
+.participant-view:not(:has(form.entry-card)) .ms-q-body {
+	min-width: 0;
+}
+.participant-view:not(:has(form.entry-card)) .ms-q-body > label > input {
+	display: block;
+	width: 100%;
+	margin-top: 8px;
+}
+.participant-view:not(:has(form.entry-card)) .consent-signing > label {
+	display: block;
+}
+.participant-view:not(:has(form.entry-card))
+	.consent-signing
+	> .consent-confirm {
+	display: flex;
+}
+.participant-view:not(:has(form.entry-card)) .ai-sidebar {
+	overflow: hidden;
+}
+.participant-view:not(:has(form.entry-card)) .ai-sidebar .ai-chat {
+	border: 0;
+	border-radius: inherit;
+}
+.participant-view:not(:has(form.entry-card)) .ai-chat-head {
+	background: #f4f3ff;
+}
+.participant-view:not(:has(form.entry-card)) .ai-chat-input {
+	min-width: 0;
+}
+.participant-view:not(:has(form.entry-card)) .ai-chat-input textarea {
+	min-width: 0;
+}
+.participant-modal .ant-btn-primary:hover:not(:disabled) {
+	background: #4643dd;
+	border-color: #4643dd;
+}
+@media (max-width: 900px) {
+	.participant-view:not(:has(form.entry-card)) .consent-columns {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.participant-view:not(:has(form.entry-card)) .consent-document {
+		max-height: 50vh;
+	}
+	.participant-view:not(:has(form.entry-card)) .participant-split {
+		min-height: 0;
+	}
+	.participant-view:not(:has(form.entry-card)) .ai-sidebar .ai-chat {
+		position: static;
+		height: min(620px, 75vh);
+		min-height: 320px;
+	}
+}
+@media (max-width: 760px) {
+	.participant-view:not(:has(form.entry-card)) .participant-top > strong {
+		flex-basis: 100%;
+	}
+	.participant-view:not(:has(form.entry-card)) .ms-q-body {
+		padding-left: 0;
+	}
+	.participant-view:not(:has(form.entry-card)) .participant-actions {
+		width: 100%;
+	}
+	.participant-view:not(:has(form.entry-card)) .consent-signing {
+		padding: 20px;
+	}
+}
+
+/* Explicit consent feedback stays visible until the participant edits their signature. */
+.participant-view:not(:has(form.entry-card)) .consent-signing .consent-recorded {
+	color: #236442;
+	background: #edf8f1;
+	border: 1px solid #bddfc9;
+	border-radius: 10px;
+	padding: 12px 14px;
+	font-size: 14px;
+	font-weight: 500;
 }

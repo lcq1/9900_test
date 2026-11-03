@@ -19,10 +19,7 @@ export function useTransientNotice<T>(initial: T) {
 			(Array.isArray(notice.value) && notice.value.length === 0)
 		)
 			return
-		const timer = window.setTimeout(
-			() => setDismissed(notice.revision),
-			2600,
-		)
+		const timer = window.setTimeout(() => setDismissed(notice.revision), 2600)
 		return () => window.clearTimeout(timer)
 	}, [notice])
 	return [
@@ -34,17 +31,64 @@ export function useTransientNotice<T>(initial: T) {
 }
 
 interface TimerControllerOptions {
-  initialSeconds: number
-  enabled: boolean
-  stageId: string
+	initialSeconds: number
+	enabled: boolean
+	stageId: string
+	storageKey?: string
 }
 
-export function useTimerController({ initialSeconds, enabled, stageId }: TimerControllerOptions) {
-  const [remaining, setRemaining] = useState(initialSeconds)
-  useEffect(() => {
-    if (!enabled) return
-    const id = setInterval(() => setRemaining((value) => Math.max(0, value - 1)), 1000)
-    return () => clearInterval(id)
-  }, [enabled, stageId, initialSeconds])
-  return { remaining, reset: setRemaining }
+export function useTimerController({
+	initialSeconds,
+	enabled,
+	stageId,
+	storageKey,
+}: TimerControllerOptions) {
+	const readDeadline = useCallback(
+		() =>
+			storageKey ? Number(localStorage.getItem(storageKey)) || null : null,
+		[storageKey],
+	)
+	const [remaining, setRemaining] = useState(() => {
+		const deadline = readDeadline()
+		return deadline
+			? Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+			: initialSeconds
+	})
+	useEffect(() => {
+		if (!storageKey) return
+		let deadline = readDeadline()
+		if (!deadline && enabled) {
+			deadline = Date.now() + initialSeconds * 1000
+			localStorage.setItem(storageKey, String(deadline))
+		}
+		const update = () => {
+			deadline = readDeadline()
+			setRemaining(
+				deadline
+					? Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+					: initialSeconds,
+			)
+		}
+		update()
+		if (!deadline) return
+		const id = setInterval(update, 250)
+		return () => clearInterval(id)
+	}, [storageKey, enabled, stageId, initialSeconds, readDeadline])
+	useEffect(() => {
+		if (!enabled || storageKey) return
+		const id = setInterval(
+			() => setRemaining((value) => Math.max(0, value - 1)),
+			1000,
+		)
+		return () => clearInterval(id)
+	}, [enabled, stageId, initialSeconds, storageKey])
+	const reset = (value: SetStateAction<number>) => {
+		setRemaining((previous) => {
+			const next = typeof value === 'function' ? value(previous) : value
+			if (storageKey)
+				localStorage.setItem(storageKey, String(Date.now() + next * 1000))
+			return next
+		})
+	}
+	return { remaining, reset }
 }

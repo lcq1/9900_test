@@ -54,3 +54,25 @@ def test_entry_rejects_draft_invalid_and_short_codes(client, auth_headers):
     for code, participant, expected in [(draft, "P01", 403), ("MISSING", "P01", 404), (draft, "P", 400)]:
         r = client.post("/api/participant/access", json={"experimentCode": code, "participantCode": participant})
         assert r.status_code == expected
+
+
+def test_resume_unfinished_session_by_experiment_and_participant(client, auth_headers):
+    import uuid
+    exp = live_experiment(client, auth_headers, "RESUME1")
+    headers = login(client, "RESUME1", "RESUME-P01")
+    payload = {"experimentCode": exp["code"], "participantCode": "RESUME-P01", "sessionId": str(uuid.uuid4())}
+    first = client.post("/api/participant/sessions/start", headers=headers, json=payload)
+    assert first.status_code == 200
+    session_id = first.json()["sessionId"]
+    progress = {"sessionId": session_id, "updatedAt": 123, "stageIndex": 0, "answers": {"draft": "Unfinished answer"}, "deadlines": {"task": 1793664000000}}
+    saved = client.post("/api/participant/sessions", headers=headers, json={**payload, "sessionId": session_id, "finishedAt": None, "answers": [{"componentId": "draft", "value": "Unfinished answer"}], "events": [{"seq": 0, "type": "progress_checkpoint", "timestamp": "2026-11-03T01:00:00Z", "epochMs": 1793667600000, "perfMs": 0, "detail": {"progress": progress}}]})
+    assert saved.status_code == 201
+    resumed = client.post("/api/participant/sessions/start", headers=headers, json={**payload, "sessionId": str(uuid.uuid4())})
+    assert resumed.status_code == 200
+    assert resumed.json()["sessionId"] == session_id
+    assert resumed.json()["progress"] == progress
+    assert resumed.json()["experiment"] == first.json()["experiment"]
+    other = client.post("/api/participant/sessions/start", headers=login(client, "RESUME1", "RESUME-P02"), json={**payload, "participantCode": "RESUME-P02", "sessionId": str(uuid.uuid4())})
+    assert other.status_code == 200
+    assert other.json()["sessionId"] != session_id
+    assert other.json()["progress"] is None

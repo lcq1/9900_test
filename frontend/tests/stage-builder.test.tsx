@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { StageContentEditor } from "../src/researcher/StageContentEditor";
-import { createStage, type Experiment, getPublishErrors } from "../src/types";
+import { createStage, createClientStages, type Experiment, getPublishErrors } from "../src/types";
 
 import { MemoryRouter } from "react-router-dom";
 import App from "../src/App";
@@ -31,7 +31,7 @@ describe('stage content', () => {
 
 	it('changes single choice to multiple choice without losing options', () => {
 		render(<Harness />)
-		fireEvent.change(screen.getByRole('combobox'), {
+		fireEvent.change(screen.getByRole('combobox', { name: 'Stage type' }), {
 			target: { value: 'multiple_choice' },
 		})
 		const stage = JSON.parse(screen.getByTestId('stage').textContent!)
@@ -619,7 +619,7 @@ it('excludes Consent from selectable stage types and locks the introductory stag
 	expect(
 		screen.queryByRole('option', { name: 'Consent', exact: true }),
 	).toBeNull()
-	expect(screen.getByRole('combobox')).toBeTruthy()
+	expect(screen.getByRole('combobox', { name: 'Stage type' })).toBeTruthy()
 	rerender(
 		<StageContentEditor
 			stage={createStage('consent')}
@@ -629,3 +629,18 @@ it('excludes Consent from selectable stage types and locks the introductory stag
 	expect(screen.queryByRole('combobox')).toBeNull()
 	expect(screen.getByLabelText('Stage name')).toBeTruthy()
 })
+
+ it('loads Client content with 60 personality items, manual oral recording and no scoring', () => {
+ const stages = createClientStages(createStage('consent'))
+ expect(stages).toHaveLength(11)
+ expect(stages[3].components.filter(c => c.type === 'choice')).toHaveLength(60)
+ expect(stages[2].components.find(c => c.label.includes('first language?'))?.options).toHaveLength(10)
+ expect(stages[6].countdownMinutes).toBe(60)
+ expect(stages[6].allowExtension).toBe(true)
+ expect(stages[8].components).toHaveLength(4)
+ expect(stages[8].recordingMode).toBe('manual')
+ expect(stages[8].countdownMinutes).toBe(10)
+ expect(stages[8].features.ai).toBe(false)
+ stages[0].consentClauses = ['Approved clause']
+ expect(getPublishErrors({ id: 'test', name: 'Study', code: 'test', status: 'Draft', created: '', fullScreen: false, stages })).toEqual([])
+ })

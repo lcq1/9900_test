@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
-import type { Stage, Experiment } from '../types'
+import { createClientStages, type Stage, type Experiment } from '../types'
+import { Modal } from 'antd'
 import { ArrowLeft, ArrowRight, Play, Trash2 } from 'lucide-react'
 import { StageBuilder } from '../researcher/StageBuilder'
 import { StageContentEditor } from '../researcher/StageContentEditor'
@@ -147,14 +148,14 @@ export function Editor({
 			</div>
 			{/* Stage list, content editor, and feature settings. */}
 			<div className="editor-grid">
-				<StageBuilder
+				<div><button type="button" className="secondary-button" onClick={() => Modal.confirm({ title: 'Load Client study flow?', content: 'This replaces the stages in this draft and keeps the current consent content. Supply the approved consent document and clauses before publishing.', onOk: () => { const stages = createClientStages(experiment.stages[0]); onUpdateExperiment(current => ({ ...current, stages })); onSelectStage(stages[0].id) } })}>Load Client study flow</button><StageBuilder
 					experiment={experiment}
 					selectedStageId={stage.id}
 					onSelectStage={onSelectStage}
 					onAddStage={onAddStage}
 					onDeleteStage={onDeleteStage}
 					onReorderStages={onReorderStages}
-				/>
+				/></div>
 				<StageContentEditor
 					experimentId={experiment.id}
 					stage={stage}

@@ -38,11 +38,15 @@ vi.mock('../src/api/participant', async (original) => ({
 describe('participant runtime', () => {
 	beforeEach(() => {
 		localStorage.clear()
+		vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
 		vi.clearAllMocks()
 		vi.mocked(submitSession).mockResolvedValue({} as never)
 	})
 
-	afterEach(cleanup)
+	afterEach(() => {
+		cleanup()
+		if (vi.isMockFunction(window.scrollTo)) vi.mocked(window.scrollTo).mockRestore()
+	})
 
 	it.each([false, true])(
 		'requests enabled recordings in auto mode with gate=%s',
@@ -363,6 +367,34 @@ describe('participant runtime', () => {
 		}
 	})
 
+	it('requires confirmation before submission and permits only one extension', async () => {
+ const experiment = study()
+ experiment.stages[0].allowExtension = true
+ experiment.stages[0].features.confirm = true
+ render(<ParticipantPreview experiment={experiment} participantCode="client-test" onBack={() => {}} />)
+ fireEvent.click(screen.getByRole('button', { name: 'Extend by 30 minutes' }))
+ await screen.findAllByText('Researcher approval required')
+ fireEvent.click(screen.getByRole('button', { name: 'OK', exact: true }))
+ await waitFor(() => expect(screen.queryByRole('button', { name: 'Extend by 30 minutes' })).toBeNull())
+ fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'My design' } })
+ fireEvent.click(screen.getByRole('button', { name: 'Finish', exact: true }))
+ await screen.findByText('Submit this stage?')
+ expect(submitStage).not.toHaveBeenCalled()
+ fireEvent.click(screen.getByRole('button', { name: 'Submit and continue' }))
+ await waitFor(() => expect(submitStage).toHaveBeenCalled())
+ const saved = vi.mocked(submitSession).mock.calls.at(-1)![0]
+ expect(saved.events.filter(event => event.type === 'timer_extension')).toHaveLength(1)
+ })
+	it('restores an unfinished stage and unsent text after leaving and returning', () => {
+ const experiment = study()
+ const second = createStage('short_answer'); second.name = 'Resumed task'; second.features.timer = false; second.features.screenRecording = false
+ experiment.stages.push(second)
+ const first = render(<ParticipantPreview initialSessionId="resume-session" experiment={experiment} participantCode="RESUME" onBack={() => {}} />)
+ fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'Draft without blur' } })
+ first.unmount()
+ render(<ParticipantPreview initialSessionId="resume-session" experiment={experiment} participantCode="RESUME" onBack={() => {}} />)
+ expect((screen.getByPlaceholderText('Type your response...') as HTMLTextAreaElement).value).toBe('Draft without blur')
+ })
 	function study(): Experiment {
 		const stage = createStage('short_answer')
 		stage.features = {
@@ -903,6 +935,19 @@ describe('AI chat panel', () => {
 })
 
 describe("countdown controller", () => {
+ it('counts elapsed time while unmounted, preserves extensions, and clamps expired timers', () => {
+  vi.useFakeTimers(); localStorage.clear()
+  const key = 'resume-timer-test'
+  const first = renderHook(() => useTimerController({ initialSeconds: 60, enabled: true, stageId: 'task', storageKey: key }))
+  act(() => vi.advanceTimersByTime(10000)); expect(first.result.current.remaining).toBe(50)
+  act(() => first.result.current.reset(value => value + 30))
+  first.unmount(); act(() => vi.advanceTimersByTime(20000))
+  const resumed = renderHook(() => useTimerController({ initialSeconds: 60, enabled: false, stageId: 'task', storageKey: key }))
+  expect(resumed.result.current.remaining).toBe(60)
+  resumed.unmount(); act(() => vi.advanceTimersByTime(70000))
+  const expired = renderHook(() => useTimerController({ initialSeconds: 60, enabled: false, stageId: 'task', storageKey: key }))
+  expect(expired.result.current.remaining).toBe(0)
+ })
   afterEach(() => {
     cleanup();
     vi.useRealTimers();

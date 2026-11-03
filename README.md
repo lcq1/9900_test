@@ -378,7 +378,7 @@ For WorkBuddy, use `AI_PROVIDER=workbuddy`, the application's `wbpk_` publishabl
 | `ONEDRIVE_CLIENT_SECRET` | Optional Microsoft Graph client secret. |
 | `ONEDRIVE_TENANT_ID` | Optional Microsoft Graph tenant ID. |
 
-Storage locations are configured on the server; Workspace settings does not provide a storage-location selector. Existing saved researcher storage preferences remain applicable. A directory outside the default storage volume needs its own persistent mount in a container deployment. The Microsoft Graph variables apply to the optional storage helper; they do not automatically replace all local recording/material storage.
+Storage locations are configured on the server, and each researcher picks one of the configured names in Workspace settings → Storage. The choice is stored per researcher and validated against the server configuration, and the backend probes it for writability before accepting it (422 for an unknown name, 507 when the directory is not writable). Only new files use the new location; previously saved files stay where they are. A directory outside the default storage volume needs its own persistent mount in a container deployment. The Microsoft Graph variables apply to the optional storage helper; they do not automatically replace all local recording/material storage.
 
 ### Frontend Variables
 

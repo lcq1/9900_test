@@ -16,8 +16,11 @@ import {
 	saveExperimentAIKey,
 	removeExperimentAIKey,
 	setExperimentAISource,
+	getStorageSettings,
+	saveStorageSettings,
 	type ExperimentAIKeyStatus,
 	type ExperimentAISettingsInput,
+	type StorageSettings,
 } from '../api/experiments'
 import { ExportDialog } from '../researcher/ExportDialog'
 import type { ParticipantEvent, ParticipantEventType } from '../participant/EventQueue'
@@ -900,6 +903,110 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 }
 
 // Show AI settings, profiles, members, platform settings, and local usage.
+/**
+ * Lets a researcher choose where new files are written. The backend validates
+ * the choice and probes it for writability, so a rejected location is reported
+ * instead of being silently accepted.
+ */
+export function StorageLocationCard() {
+	const [settings, setSettings] = useState<StorageSettings | null>(null)
+	const [loadError, setLoadError] = useState('')
+	const [saving, setSaving] = useState(false)
+	const [message, setMessage] = useState('')
+	const [failure, setFailure] = useState('')
+	const fieldId = useId()
+
+	useEffect(() => {
+		let active = true
+		void getStorageSettings()
+			.then((value) => {
+				if (active) {
+					setSettings(value)
+					setLoadError('')
+				}
+			})
+			.catch(() => {
+				if (active)
+					setLoadError('Could not load the storage location settings.')
+			})
+		return () => {
+			active = false
+		}
+	}, [])
+
+	const change = async (location: string) => {
+		setSaving(true)
+		setMessage('')
+		setFailure('')
+		try {
+			const next = await saveStorageSettings(location)
+			setSettings(next)
+			setMessage(
+				`New uploads and recordings are now written to "${next.location}". Files already saved stay in their original location.`,
+			)
+		} catch (error) {
+			setFailure(
+				error instanceof Error && error.message
+					? error.message
+					: 'Could not change the storage location.',
+			)
+		} finally {
+			setSaving(false)
+		}
+	}
+
+	return (
+		<section className="settings-card">
+			<h3>Storage</h3>
+			<p className="card-sub">
+				Choose where uploaded materials and recorded media are written.
+				Changing it affects new files only.
+			</p>
+			<div className="settings-field">
+				<label htmlFor={fieldId}>Storage location</label>
+				<select
+					id={fieldId}
+					aria-label="Storage location"
+					value={settings?.location ?? ''}
+					disabled={!settings || saving}
+					onChange={(event) => void change(event.target.value)}
+				>
+					{settings ? (
+						settings.locations.map((name) => (
+							<option key={name} value={name}>
+								{name}
+							</option>
+						))
+					) : (
+						<option value="">Loading…</option>
+					)}
+				</select>
+			</div>
+			{saving && <p className="settings-hint">Checking the location…</p>}
+			{loadError && (
+				<p className="settings-hint" role="alert">
+					{loadError}
+				</p>
+			)}
+			{failure && (
+				<p className="settings-hint" role="alert">
+					{failure}
+				</p>
+			)}
+			{message && (
+				<p className="settings-hint" role="status">
+					{message}
+				</p>
+			)}
+			{settings && (
+				<p className="settings-hint">
+					Available locations: {settings.locations.join(', ')}
+				</p>
+			)}
+		</section>
+	)
+}
+
 export function WorkspaceSettingsPage({
 	experiments,
 	settings,
@@ -979,6 +1086,8 @@ export function WorkspaceSettingsPage({
 			{/* AI configuration, profile, members, policies, usage, and cache settings. */}
 			<div className="settings-grid">
 				<ExperimentAIKeySettings experiments={experiments} />
+				{/* Where new uploads and recordings are written. */}
+				<StorageLocationCard />
 				{/* Researcher profile and display name. */}
 				<section className="settings-card">
 					<h3>Profile</h3>

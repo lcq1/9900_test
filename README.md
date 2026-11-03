@@ -2,6 +2,7 @@
 
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 - [File Tree and Responsibilities](#file-tree-and-responsibilities)
 - [Exported Files](#exported-files)
   - [Downloading and Opening Files](#downloading-and-opening-files)
@@ -17,6 +18,30 @@
   - [Storage Variables](#storage-variables)
   - [Frontend Variables](#frontend-variables)
 
+## Quick Start
+
+Prerequisites: Docker Desktop on Windows/macOS, or Docker Engine with the Compose plugin on Linux. A local Node.js or Python installation is not required.
+
+```bash
+cp .env.example .env    # PowerShell: Copy-Item .env.example .env
+# Edit .env: set JWT_SECRET and POSTGRES_PASSWORD, plus any optional AI_* or access values.
+docker compose up -d --build
+```
+
+| Service | Default address | Notes |
+| --- | --- | --- |
+| Frontend | `http://localhost:5173` | Researcher sign-in, experiment builder and participant runtime. |
+| Backend API | `http://localhost:8000/api` | Health probe: `http://localhost:8000/api/healthz`. |
+| PostgreSQL | `localhost:5432` | Change `POSTGRES_PORT` (for example to `5433`) when the host port is already in use; the container port stays `5432`. |
+
+Verify the stack, then open the frontend and register the first researcher account:
+
+```bash
+curl http://localhost:8000/api/healthz   # {"status":"ok"}
+```
+
+The backend image runs `alembic upgrade head` before serving, so the schema is created on first boot. Stop the stack with `docker compose down`; add `-v` only when you intend to discard stored data. Every supported variable is documented under [Environment Configuration](#environment-configuration); deployment-specific values belong in `.env` and must never be committed.
+
 ## File Tree and Responsibilities
 
 Paths are relative to this directory. Generated dependencies, build output, runtime data, Git internals, and document-folder contents are omitted. Python `__init__.py` files mark packages.
@@ -24,14 +49,9 @@ Paths are relative to this directory. Generated dependencies, build output, runt
 ```text
 project/
 |-- README.md                              # File responsibilities, exports, and environment reference
-|-- CHANGELOG.md                           # Change history and verification records
-|-- CONFIGURATION.md                       # Additional configuration reference
 |-- Plan.md                                # Project requirements and implementation plan
-|-- Dev_Task_List_By_11_Requirements.md     # Requirement-based development task list
-|-- Dev_Task_List_Client_Requirements.md    # Client requirement task list
 |-- .env                                   # Local deployment values and secrets; not for source control
 |-- .env.example                           # Configuration template with placeholders
-|-- .editorconfig                          # Shared editor formatting settings
 |-- .gitignore                             # Source-control exclusions
 |-- .gitlab-ci.yml                         # Continuous integration configuration
 |-- docker-compose.yml                     # Frontend, backend, PostgreSQL, ports, and persistent volumes

@@ -1085,6 +1085,25 @@ describe('AI chat panel', () => {
 })
 
 describe("countdown controller", () => {
+ it('freezes a persisted countdown while paused and resumes from the same value', () => {
+  vi.useFakeTimers(); localStorage.clear()
+  const key = 'pause-timer-test'
+  const { result, rerender, unmount } = renderHook(
+   ({ enabled }) => useTimerController({ initialSeconds: 60, enabled, stageId: 'task', storageKey: key }),
+   { initialProps: { enabled: true } },
+  )
+  act(() => vi.advanceTimersByTime(10000))
+  expect(result.current.remaining).toBe(50)
+  rerender({ enabled: false })
+  act(() => vi.advanceTimersByTime(30000))
+  expect(result.current.remaining).toBe(50)
+  expect(Math.ceil((Number(localStorage.getItem(key)) - Date.now()) / 1000)).toBe(50)
+  rerender({ enabled: true })
+  act(() => vi.advanceTimersByTime(10000))
+  expect(result.current.remaining).toBe(40)
+  unmount()
+  expect(vi.getTimerCount()).toBe(0)
+ })
  it('counts elapsed time while unmounted, preserves extensions, and clamps expired timers', () => {
   vi.useFakeTimers(); localStorage.clear()
   const key = 'resume-timer-test'

@@ -61,11 +61,25 @@ export function useTimerController({
 			deadline = Date.now() + initialSeconds * 1000
 			localStorage.setItem(storageKey, String(deadline))
 		}
+		let last = Date.now()
 		const update = () => {
-			deadline = readDeadline()
+			const now = Date.now()
+			const elapsed = now - last
+			last = now
+			const stored = readDeadline()
+			if (stored && !enabled) {
+				// Paused / interaction-locked: shift the persisted absolute
+				// deadline forward by the elapsed time instead of letting it run
+				// out. The visible countdown freezes, and the deadline written to
+				// storage stays correct for a resume after a page refresh.
+				deadline = stored + elapsed
+				localStorage.setItem(storageKey, String(deadline))
+			} else {
+				deadline = stored
+			}
 			setRemaining(
 				deadline
-					? Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+					? Math.max(0, Math.ceil((deadline - now) / 1000))
 					: initialSeconds,
 			)
 		}

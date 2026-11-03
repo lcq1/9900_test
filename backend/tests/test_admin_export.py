@@ -437,6 +437,66 @@ def test_workbook_capacity_and_invalid_characters(monkeypatch):
         export_csv.workbook_table(Workbook(), "test", ["a"], [["row"]])
 
 
+def test_single_session_xlsx_is_scoped_to_that_participant(client, auth_headers):
+    """A per-session workbook must not leak other participants of the study."""
+    from openpyxl import load_workbook
+
+    def workbook_text(content):
+        book = load_workbook(io.BytesIO(content))
+        return "\n".join(
+            str(cell.value or "")
+            for sheet in book
+            for row in sheet
+            for cell in row
+        )
+
+    experiment = client.post(
+        "/api/experiments",
+        headers=auth_headers,
+        json={"name": "Session privacy", "stages": []},
+    ).json()
+    assert "code" in experiment
+
+    def create_session(participant, marker):
+        response = client.post(
+            "/api/participant/sessions",
+            headers=auth_headers,
+            json={
+                "experimentCode": experiment["code"],
+                "participantCode": participant,
+                "finishedAt": "2026-10-14T00:00:00Z",
+                "answers": [{"componentId": "question", "value": marker}],
+                "events": [],
+            },
+        )
+        assert response.status_code == 201, response.text
+        return response.json()["id"]
+
+    target = create_session("P-TARGET", "TARGET-MARKER-ALPHA")
+    create_session("P-OTHER", "OTHER-MARKER-BETA")
+
+    # The study-level export is unchanged: it still contains every session.
+    study = client.get(
+        f"/api/experiments/{experiment['id']}/results.xlsx", headers=auth_headers
+    )
+    assert study.status_code == 200, study.text if study.status_code != 200 else ""
+    study_text = workbook_text(study.content)
+    assert "TARGET-MARKER-ALPHA" in study_text
+    assert "OTHER-MARKER-BETA" in study_text
+
+    # A single-session export contains only that participant's data.
+    single = client.get(
+        f"/api/participant/sessions/{target}/xlsx", headers=auth_headers
+    )
+    assert single.status_code == 200, single.text if single.status_code != 200 else ""
+    assert "spreadsheetml" in single.headers["content-type"]
+    text = workbook_text(single.content)
+    assert "P-TARGET" in text
+    assert "TARGET-MARKER-ALPHA" in text
+    assert "P-OTHER" not in text
+    assert "OTHER-MARKER-BETA" not in text
+
+
 def published_stages(question="Original question"):
     return [{"id": "consent", "name": "Consent", "type": "consent", "components": [
         {"id": "consent-text", "type": "text", "label": "Please consent"}]},

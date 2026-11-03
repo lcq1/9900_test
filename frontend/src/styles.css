@@ -2987,6 +2987,44 @@ select:focus-visible,
 .editor-grid > .right-panel {
 	display: block;
 }
+/* Consent settings use the same compact fields as the stage feature panel. */
+.editor-grid > .right-panel > label {
+	display: grid;
+	gap: 7px;
+	min-width: 0;
+	margin: 18px 14px;
+	color: #5a6675;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.editor-grid > .right-panel > label > select,
+.editor-grid > .right-panel > label > textarea {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 9px 10px;
+	background: #fff;
+	color: var(--ink);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 400;
+}
+.editor-grid > .right-panel > label > textarea {
+	min-height: 180px;
+	line-height: 1.6;
+	resize: vertical;
+}
+.editor-grid > .right-panel > label > select:focus-visible,
+.editor-grid > .right-panel > label > textarea:focus-visible {
+	outline: none;
+	border-color: #8b95a5;
+	box-shadow: 0 0 0 1px #8b95a5;
+}
 .right-section.features > label {
 	display: flex;
 	flex-direction: column;

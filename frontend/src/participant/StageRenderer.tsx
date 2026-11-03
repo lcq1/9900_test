@@ -43,6 +43,27 @@ import {
 } from './RecordingController'
 
 /**
+ * Wall-clock readout for stages with the clock feature on. It owns its own
+ * interval so a ticking second does not re-render the whole stage, and the
+ * minute display therefore keeps advancing even when no countdown is running.
+ */
+export function StageClock() {
+	const [now, setNow] = useState(() => new Date())
+	useEffect(() => {
+		const id = window.setInterval(() => setNow(new Date()), 1000)
+		return () => window.clearInterval(id)
+	}, [])
+	return (
+		<span className="stage-clock" role="timer" aria-label="Current time">
+			{now.toLocaleTimeString([], {
+				hour: '2-digit',
+				minute: '2-digit',
+			})}
+		</span>
+	)
+}
+
+/**
  * ParticipantPreview — the participant-facing runtime of a single experiment.
  *
  * Preserved behaviours (earlier UI-polish work):
@@ -872,14 +893,7 @@ useEffect(() => {
 		<>
 			<div className="participant-meta">
 				<span className="section-tag">{stage.type.toUpperCase()}</span>
-				{stage.features.clock && (
-					<span className="stage-clock">
-						{new Date().toLocaleTimeString([], {
-							hour: '2-digit',
-							minute: '2-digit',
-						})}
-					</span>
-				)}
+				{stage.features.clock && <StageClock />}
 				{stage.features.timer && (
 					<span className="stage-timer">
 						<TimerReset size={13} /> {minutes}:{seconds}

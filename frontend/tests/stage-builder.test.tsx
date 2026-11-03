@@ -38,7 +38,7 @@ describe('stage content', () => {
 			expect(Boolean(screen.queryByLabelText('Start recording after permission'))).toBe(type !== 'consent')
 			expect(screen.getByLabelText('Signature box')).toBeTruthy()
 			expect(container.querySelector('.feature-count')?.textContent).toContain(
-				type === 'short_answer' ? '/5' : '/4',
+				type === 'short_answer' ? '/8' : '/7',
 			)
 		},
 	)

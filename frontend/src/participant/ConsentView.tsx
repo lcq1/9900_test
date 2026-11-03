@@ -11,18 +11,36 @@ import { PenLine } from 'lucide-react'
 export interface ConsentViewProps {
 	text: string[]
 	onConsent: (signatureDataUrl: string, accepted?: boolean) => void
+	signingMethod?: 'handwritten' | 'name'
+	clauses?: string[]
+	initialValue?: string
 	confirmLabel?: string
 }
 
 export function ConsentView({
 	text,
 	onConsent,
+	signingMethod,
+	clauses = [],
+	initialValue,
 	confirmLabel = 'I consent and want to continue',
 }: ConsentViewProps) {
+	const [restoredConsent] = useState(() => {
+ try { return initialValue && signingMethod === 'name' ? JSON.parse(initialValue) as { name: string; readToEnd: boolean; clauses: { text: string; accepted: boolean }[] } : null } catch { return null }
+})
+	const documentRef = useRef<HTMLDivElement>(null)
+	const [read, setRead] = useState(restoredConsent?.readToEnd ?? false)
+	const [name, setName] = useState(restoredConsent?.name ?? '')
+	const [checks, setChecks] = useState<boolean[]>(clauses.map((text, i) => restoredConsent?.clauses?.[i]?.text === text && restoredConsent.clauses[i].accepted))
+	useEffect(() => {
+		const check = () => { const el = documentRef.current; if (el && el.scrollHeight <= el.clientHeight + 2) setRead(true) }
+		check(); window.addEventListener('resize', check)
+		return () => window.removeEventListener('resize', check)
+	}, [])
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const drawingRef = useRef(false)
 	const [hasSignature, setHasSignature] = useState(false)
-	const [consented, setConsented] = useState(false)
+	const [consented, setConsented] = useState(Boolean(restoredConsent?.name && clauses.length && clauses.every((text, i) => restoredConsent.clauses?.[i]?.text === text && restoredConsent.clauses[i].accepted)))
 
 	useEffect(() => {
 		const canvas = canvasRef.current
@@ -98,6 +116,9 @@ export function ConsentView({
 		onConsent(dataUrl, accepted && hasSignature)
 	}
 
+	if (signingMethod === 'name') return <div className="consent-view consent-columns">
+<div className="consent-document" ref={documentRef} tabIndex={0} aria-label="Consent document" onScroll={event => { const el = event.currentTarget; if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) setRead(true) }}>{text.map((line, i) => <p key={i}>{line}</p>)}</div>
+<div className="consent-signing"><h2>Consent signature</h2><p>Read the full document and confirm each statement before signing.</p>{clauses.map((clause, i) => <label className="consent-confirm" key={i}><input type="checkbox" checked={checks[i] ?? false} onChange={event => { const next = [...checks]; next[i] = event.target.checked; setChecks(next); setConsented(false); onConsent('', false) }} />{clause}</label>)}<label>Full legal name<input value={name} onChange={event => { setName(event.target.value); setConsented(false); onConsent('', false) }} /></label><p>Date: {new Date().toLocaleDateString('en-AU')}</p><button className="primary-button" disabled={consented || !read || !name.trim() || !clauses.length || !clauses.every((_, i) => checks[i])} onClick={() => { onConsent(JSON.stringify({ method: 'name', name: name.trim(), clauses: clauses.map((text, i) => ({ text, accepted: checks[i] })), signedAt: new Date().toISOString(), document: text, readToEnd: read }), true); setConsented(true) }}>{consented ? '✓ Consent confirmed' : 'Confirm consent'}</button><p role="status" className={consented ? 'consent-recorded' : undefined}>{consented ? 'Consent confirmed. Select Next stage to continue.' : read ? 'Document read.' : 'Scroll to the end of the document.'}</p></div></div>
 	return (
 		<div className="consent-view">
 			{text.map((line, index) => (

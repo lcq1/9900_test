@@ -10,9 +10,12 @@
  */
 
 export type ParticipantEventType =
+	| 'progress_checkpoint'
 	| 'fullscreen_enter'
 	| 'fullscreen_exit'
-	| 'stage_view'
+	| 'timer_extension'
+  | 'oral_question'
+  | 'stage_view'
 	| 'answer'
 	| 'ai_prompt'
 	| 'ai_reply'
@@ -79,9 +82,10 @@ export class EventQueue {
 		})
 	}
 
-	constructor(sessionId: string) {
+	constructor(sessionId: string, initialEvents: ParticipantEvent[] = []) {
 		this.sessionId = sessionId
 		this.load()
+		if (Math.max(-1, ...initialEvents.map(e => e.seq)) > Math.max(-1, ...this.events.map(e => e.seq))) { this.events = initialEvents; this.seq = Math.max(0, ...initialEvents.map(e => e.seq + 1)); this.save() }
 	}
 
 	private storageKey(): string {
@@ -130,6 +134,7 @@ export class EventQueue {
 		}
 		if (stageId !== undefined) event.stageId = stageId
 		if (detail !== undefined) event.detail = detail
+		if (type === 'progress_checkpoint') this.events = this.events.filter(e => e.type !== 'progress_checkpoint')
 		this.events.push(event)
 		this.save()
 		return event

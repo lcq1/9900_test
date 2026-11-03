@@ -10,7 +10,7 @@ import { useState } from "react";
 import { StageContentEditor } from "../src/researcher/StageContentEditor";
 import { StageFeatureEditor } from '../src/researcher/StageFeatureEditor'
 import { Dashboard, ExperimentAIKeySettings } from '../src/pages/ResearcherDashboardPage'
-import { createStage, type Experiment, getPublishErrors } from "../src/types";
+import { createStage, createClientStages, type Experiment, getPublishErrors } from "../src/types";
 
 import { MemoryRouter } from "react-router-dom";
 import App from "../src/App";
@@ -26,7 +26,8 @@ describe('stage content', () => {
 				<StageFeatureEditor stage={createStage(type)} onUpdateStage={() => {}} />,
 			)
 			if (type === 'consent') {
-				expect(container.querySelector('.right-panel')?.childElementCount).toBe(0)
+				expect(screen.getByRole('combobox', { name: /Signing method/ })).toBeTruthy()
+				expect(screen.queryByLabelText('AI chat')).toBeNull()
 				return
 			}
 			expect(Boolean(screen.queryByLabelText('Copy-paste logging'))).toBe(type === 'short_answer')
@@ -62,13 +63,13 @@ describe('stage content', () => {
 		draft.stages[1] = stage
 		expect(getPublishErrors(draft)).toEqual([])
 		render(<Harness />)
-		fireEvent.change(screen.getByRole('combobox'), { target: { value: 'video_oral_answer' } })
+		fireEvent.change(screen.getByRole('combobox', { name: 'Stage type' }), { target: { value: 'video_oral_answer' } })
 		const updated = JSON.parse(screen.getByTestId('stage').textContent!)
 		expect(updated.components.map((component: { type: string }) => component.type)).toEqual(['text'])
 		expect(updated.recordingRequired).toBe(true)
 		expect(updated.recordingMode).toBe('auto')
 		expect(screen.getByText('No components yet. Add one below.')).toBeTruthy()
-		fireEvent.change(screen.getByRole('combobox'), { target: { value: 'short_answer' } })
+		fireEvent.change(screen.getByRole('combobox', { name: 'Stage type' }), { target: { value: 'short_answer' } })
 		const reverted = JSON.parse(screen.getByTestId('stage').textContent!)
 		expect(reverted.components[1].type).toBe('textbox')
 	})
@@ -89,9 +90,9 @@ describe('stage content', () => {
 
 	it('changes single choice to multiple choice without losing options', () => {
 		render(<Harness />)
-		expect(screen.getByRole<HTMLSelectElement>('combobox').value).toBe('single_choice')
+		expect(screen.getByRole<HTMLSelectElement>('combobox', { name: 'Stage type' }).value).toBe('single_choice')
 		expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Stage name' }).value).toBe('Stage name')
-		fireEvent.change(screen.getByRole('combobox'), {
+		fireEvent.change(screen.getByRole('combobox', { name: 'Stage type' }), {
 			target: { value: 'multiple_choice' },
 		})
 		const stage = JSON.parse(screen.getByTestId('stage').textContent!)
@@ -105,7 +106,7 @@ describe('stage content', () => {
 		fireEvent.change(screen.getByRole('textbox', { name: 'Stage name' }), {
 			target: { value: 'My custom stage' },
 		})
-		fireEvent.change(screen.getByRole('combobox'), {
+		fireEvent.change(screen.getByRole('combobox', { name: 'Stage type' }), {
 			target: { value: 'short_answer' },
 		})
 		const updated = JSON.parse(screen.getByTestId('stage').textContent!)
@@ -117,14 +118,14 @@ describe('stage content', () => {
 		'replaces the default textbox when switching to %s', (type) => {
 			render(<Harness initialType="short_answer" />)
 			const original = JSON.parse(screen.getByTestId('stage').textContent!)
-			fireEvent.change(screen.getByRole('combobox'), { target: { value: type } })
+			fireEvent.change(screen.getByRole('combobox', { name: 'Stage type' }), { target: { value: type } })
 			const stage = JSON.parse(screen.getByTestId('stage').textContent!)
 			expect(stage.components).toHaveLength(2)
 			expect(stage.components[1].id).toBe(original.components[1].id)
 			expect(stage.components[1].required).toBe(true)
 			expect(stage.components[1].type).toBe(type === 'multiple_choice' ? 'checkbox' : type === 'true_false' ? 'true_false' : 'choice')
 			if (type === 'true_false') expect(stage.components[1].options).toEqual(['True', 'False'])
-			fireEvent.change(screen.getByRole('combobox'), { target: { value: 'short_answer' } })
+			fireEvent.change(screen.getByRole('combobox', { name: 'Stage type' }), { target: { value: 'short_answer' } })
 			const reverted = JSON.parse(screen.getByTestId('stage').textContent!)
 			expect(reverted.components[1].type).toBe('textbox')
 		},
@@ -848,7 +849,7 @@ it('excludes Consent from selectable stage types and locks the introductory stag
 	expect(
 		screen.queryByRole('option', { name: 'Consent', exact: true }),
 	).toBeNull()
-	expect(screen.getByRole('combobox')).toBeTruthy()
+	expect(screen.getByRole('combobox', { name: 'Stage type' })).toBeTruthy()
 	rerender(
 		<StageContentEditor
 			stage={createStage('consent')}
@@ -858,3 +859,18 @@ it('excludes Consent from selectable stage types and locks the introductory stag
 	expect(screen.queryByRole('combobox')).toBeNull()
 	expect(screen.getByLabelText('Stage name')).toBeTruthy()
 })
+
+ it('loads Client content with 60 personality items, manual oral recording and no scoring', () => {
+ const stages = createClientStages(createStage('consent'))
+ expect(stages).toHaveLength(11)
+ expect(stages[3].components.filter(c => c.type === 'choice')).toHaveLength(60)
+ expect(stages[2].components.find(c => c.label.includes('first language?'))?.options).toHaveLength(10)
+ expect(stages[6].countdownMinutes).toBe(60)
+ expect(stages[6].allowExtension).toBe(true)
+ expect(stages[8].components).toHaveLength(4)
+ expect(stages[8].recordingMode).toBe('manual')
+ expect(stages[8].countdownMinutes).toBe(10)
+ expect(stages[8].features.ai).toBe(false)
+ stages[0].consentClauses = ['Approved clause']
+ expect(getPublishErrors({ id: 'test', name: 'Study', code: 'test', status: 'Draft', created: '', fullScreen: false, stages })).toEqual([])
+ })

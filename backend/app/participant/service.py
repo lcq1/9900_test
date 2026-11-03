@@ -72,6 +72,20 @@ def validate_stage(stage: dict, answers: list, recording: dict):
             and stage.get("features", {}).get("screenRecording")
             and recording.get("screen") is not True):
         missing.append("Screen recording")
+    if stage.get("signingMethod") == "name":
+        import json
+        try:
+            consent = json.loads(values.get("consent", ""))
+            clauses = stage.get("consentClauses", [])
+            document = [c["label"] for c in stage.get("components", []) if c["type"] == "text"]
+            valid = (consent.get("method") == "name" and bool(consent.get("name", "").strip())
+                     and consent.get("readToEnd") is True and bool(consent.get("signedAt"))
+                     and bool(clauses) and consent.get("document") == document
+                     and consent.get("clauses") == [{"text": c, "accepted": True} for c in clauses])
+        except (ValueError, TypeError, AttributeError):
+            valid = False
+        if not valid:
+            missing.append("Signed consent with all required clauses")
     required = stage.get("requiredFeatures", {})
     for component in stage.get("components", []):
         kind = component["type"]
@@ -81,6 +95,10 @@ def validate_stage(stage: dict, answers: list, recording: dict):
         value = values.get(component["id"], "")
         if required.get(feature, component.get("required", False)) and not (value.strip() if isinstance(value, str) else value):
             missing.append(component["label"])
+        other = component.get("otherOption")
+        selected = value if isinstance(value, list) else [value]
+        if other and other in selected and not str(values.get(component["id"] + ":other", "")).strip():
+            missing.append(component["label"] + " (please specify)")
     if stage.get("recordingRequired") and recording.get("self") is not True:
         missing.append("Camera and microphone recording")
     if missing:

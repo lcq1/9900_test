@@ -449,7 +449,7 @@ describe('participant runtime', () => {
  fireEvent.click(screen.getByRole('button', { name: 'Finish', exact: true }))
  await screen.findByText('Submit this stage?')
  expect(submitStage).not.toHaveBeenCalled()
- fireEvent.click(screen.getByRole('button', { name: 'Submit and continue' }))
+ fireEvent.click(screen.getByRole('button', { name: "Yes, I'm sure" }))
  await waitFor(() => expect(submitStage).toHaveBeenCalled())
  const saved = vi.mocked(submitSession).mock.calls.at(-1)![0]
  expect(saved.events.filter(event => event.type === 'timer_extension')).toHaveLength(1)
@@ -633,6 +633,32 @@ describe('participant runtime', () => {
 			canvasContext.mockRestore()
 			canvasImage.mockRestore()
 		}
+	})
+
+	it('signs with the full legal name after every clause (client consent example)', () => {
+		const experiment = study()
+		const consent = createStage('consent')
+		consent.signingMethod = 'name'
+		consent.consentClauses = ['I understand the study.', 'I consent to participate.']
+		experiment.stages.unshift(consent)
+		render(<ParticipantPreview experiment={experiment} participantCode="NAME-SIGN" previewOnly onBack={() => {}} />)
+
+		const sign = screen.getByRole('button', { name: 'Sign consent and continue' }) as HTMLButtonElement
+		expect(sign.disabled).toBe(true)
+		expect(screen.getByText('Scroll through the full document before signing.')).toBeTruthy()
+
+		// Every clause box must be ticked before the signature is accepted.
+		const clauses = screen.getAllByRole('checkbox')
+		expect(clauses).toHaveLength(2)
+		for (const clause of clauses) fireEvent.click(clause)
+		expect(sign.disabled).toBe(true)
+
+		fireEvent.change(screen.getByLabelText('Full legal name'), { target: { value: 'Kholoud AlQattan' } })
+		expect(sign.disabled).toBe(false)
+		fireEvent.click(sign)
+
+		expect(screen.getByText('Consent confirmed. Select Next stage to continue.')).toBeTruthy()
+		expect(screen.getByRole('button', { name: 'Next stage' }).disabled).toBe(false)
 	})
 
 	it('places validation above Step and resets its dismissal timer on retry', () => {

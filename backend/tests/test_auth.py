@@ -279,3 +279,26 @@ def test_enabled_empty_allowlist_denies_access(monkeypatch):
     with pytest.raises(HTTPException): require_allowed_email("user@example.com")
     monkeypatch.setattr(settings, "access_allowlist_enabled", False)
     assert require_allowed_email("user@example.com") == "user@example.com"
+
+
+@pytest.mark.parametrize("email,allowed", [
+    ("k.alqattan@unsw.edu.au", True), ("K.AlQattan@UNSW.edu.au", True),
+    ("k.alqattan@ad.unsw.edu.au", False), ("researcher@unsw.edu.au", False),
+])
+def test_client_allowlist_admits_only_the_configured_client_address(monkeypatch, email, allowed):
+    """The snippet documented in .env.example admits the client and nobody else.
+
+    Listing one address must not silently open the UNSW domain, so the shared
+    student/staff subdomain stays rejected until it is named explicitly.
+    """
+    from app.core.config import settings, require_allowed_email
+    from fastapi import HTTPException
+    monkeypatch.setattr(settings, "access_allowlist_enabled", True)
+    monkeypatch.setattr(settings, "allowed_emails", "k.alqattan@unsw.edu.au")
+    monkeypatch.setattr(settings, "allowed_domains", "")
+    if allowed:
+        assert require_allowed_email(email) == "k.alqattan@unsw.edu.au"
+    else:
+        with pytest.raises(HTTPException) as error: require_allowed_email(email)
+        assert error.value.status_code == 403
+

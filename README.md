@@ -334,6 +334,17 @@ The defaults below describe the checked-in backend/Compose configuration, not th
 
 When the allowlist is enabled, an email must match an allowed address or domain. Empty lists deny all accounts, including requests using existing researcher tokens.
 
+#### Client access
+
+To admit the client account while keeping registration otherwise closed:
+
+```dotenv
+ACCESS_ALLOWLIST_ENABLED=true
+ALLOWED_EMAILS=k.alqattan@unsw.edu.au
+```
+
+Exact-address matching ignores case and surrounding whitespace. `ALLOWED_DOMAINS=unsw.edu.au` admits the whole domain; subdomains such as `ad.unsw.edu.au` are matched separately and must be listed explicitly. Settings are cached for the process lifetime, so restart the backend after editing `.env`. Registration and login both apply the same check, and a rejected address receives `403` with a message naming the allowlist.
+
 ### AI Variables
 
 | Variable | Purpose and default behavior |

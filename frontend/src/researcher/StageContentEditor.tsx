@@ -1,4 +1,7 @@
-import { type Stage, type ComponentType, type StageComponent, STAGE_TYPES } from '../types'
+import { useTransientNotice } from '../participant/TimerController'
+import { useState } from 'react'
+import { http, downloadFile } from '../api/http'
+import { type Stage, type ComponentType, type StageComponent, STAGE_TYPES, stageTypeLabel } from '../types'
 import {
 	Type,
 	TextCursorInput,
@@ -17,6 +20,7 @@ const QUICK_ADD: { type: ComponentType; label: string; icon: typeof Plus }[] = [
 	{ type: 'textbox', label: 'Text box', icon: TextCursorInput },
 	{ type: 'choice', label: 'Choice', icon: CircleDot },
 	{ type: 'checkbox', label: 'Checkbox', icon: CheckSquare },
+	{ type: 'true_false', label: 'True / False', icon: CircleDot },
 	{ type: 'rating', label: 'Rating', icon: Star },
 	{ type: 'signature', label: 'Signature', icon: PenLine },
 	{ type: 'attachment', label: 'Attachment', icon: Paperclip },
@@ -25,18 +29,68 @@ const QUICK_ADD: { type: ComponentType; label: string; icon: typeof Plus }[] = [
 // Edit stage content; normalize choice options when the stage type changes.
 export function StageContentEditor({
 	stage,
+	experimentId,
 	onUpdateStage,
 }: {
 	stage: Stage
+	experimentId?: string
 	onUpdateStage: (update: (s: Stage) => Stage) => void
 }) {
+	const isConsent = stage.type.toLowerCase() === 'consent'
+	const question = stage.components[0]?.type === 'text' ? stage.components[0] : undefined
+	const editableComponents = stage.components.filter((component) => component.id !== question?.id)
+	const [
+		materialError,
+		setMaterialError,
+		materialErrorVisible,
+		materialErrorRevision,
+	] = useTransientNotice('')
+	const [deletingMaterial, setDeletingMaterial] = useState<string | null>(
+		null,
+	)
+	const deleteMaterial = async (materialId: string) => {
+		if (deletingMaterial || !experimentId) return
+		const sourceStage = stage.id
+		setDeletingMaterial(materialId)
+		setMaterialError('')
+		try {
+			await http.del(
+				`/experiments/${experimentId}/stages/${sourceStage}/materials/${materialId}`,
+			)
+			onUpdateStage((current) =>
+				current.id === sourceStage
+					? {
+							...current,
+							materials: (current.materials ?? []).filter(
+								(item) => item.id !== materialId,
+							),
+						}
+					: current,
+			)
+		} catch (error) {
+			setMaterialError(
+				error instanceof Error
+					? error.message
+					: 'Delete failed. Please retry.',
+			)
+		} finally {
+			setDeletingMaterial(null)
+		}
+	}
 	// Replace components through the stage update callback.
-	const updateComponents = (fn: (components: StageComponent[]) => StageComponent[]) =>
-		onUpdateStage((current) => ({ ...current, components: fn(current.components) }))
+	const updateComponents = (
+		fn: (components: StageComponent[]) => StageComponent[],
+	) =>
+		onUpdateStage((current) => ({
+			...current,
+			components: fn(current.components),
+		}))
 
 	// Update the component label.
 	const setLabel = (id: string, label: string) =>
-		updateComponents((comps) => comps.map((c) => (c.id === id ? { ...c, label } : c)))
+		updateComponents((comps) =>
+			comps.map((c) => (c.id === id ? { ...c, label } : c)),
+		)
 
 	// Remove the content component.
 	const removeComponent = (id: string) =>
@@ -49,7 +103,10 @@ export function StageContentEditor({
 				c.id === id
 					? {
 							...c,
-							options: (c.options ?? []).length < 6 ? [...(c.options ?? []), ''] : c.options,
+							options:
+								(c.options ?? []).length < 6
+									? [...(c.options ?? []), '']
+									: c.options,
 						}
 					: c,
 			),
@@ -60,7 +117,12 @@ export function StageContentEditor({
 		updateComponents((comps) =>
 			comps.map((c) =>
 				c.id === id
-					? { ...c, options: (c.options ?? []).map((o, i) => (i === index ? value : o)) }
+					? {
+							...c,
+							options: (c.options ?? []).map((o, i) =>
+								i === index ? value : o,
+							),
+						}
 					: c,
 			),
 		)
@@ -70,7 +132,12 @@ export function StageContentEditor({
 		updateComponents((comps) =>
 			comps.map((c) =>
 				c.id === id && (c.options ?? []).length > 2
-					? { ...c, options: (c.options ?? []).filter((_, i) => i !== index) }
+					? {
+							...c,
+							options: (c.options ?? []).filter(
+								(_, i) => i !== index,
+							),
+						}
 					: c,
 			),
 		)
@@ -85,81 +152,255 @@ export function StageContentEditor({
 		onUpdateStage((current) => {
 			// Adjust components for the new stage type.
 			let comps = current.components
-			if (type === 'true_false') {
+			if (type === 'video_oral_answer') {
+				// Remove only the default response; retain authored extra components.
+				comps = comps.filter((component, index) => !(index === 1 &&
+					['textbox', 'choice', 'checkbox', 'true_false'].includes(component.type) &&
+					['Question', 'Your response'].includes(component.label)))
+			} else if (type === 'true_false') {
 				// Use True and False options for true/false stages.
-				comps = ensureChoice(comps, ['True', 'False'])
+				comps = ensureChoice(comps, ['True', 'False']).map((c) =>
+					c.type === 'choice' || c.type === 'checkbox' || c.type === 'true_false'
+						? { ...c, type: 'true_false', options: ['True', 'False'] }
+						: c,
+				)
 			} else if (type === 'single_choice' || type === 'multiple_choice') {
 				// Keep valid options or create two empty choices.
 				comps = ensureChoice(comps, ['', '']).map((c) =>
-					c.type === 'choice' || c.type === 'checkbox'
-						? { ...c, type: type === 'multiple_choice' ? 'checkbox' : 'choice' }
+					c.type === 'choice' || c.type === 'checkbox' || c.type === 'true_false'
+						? {
+								...c,
+								type:
+									type === 'multiple_choice'
+										? 'checkbox'
+										: 'choice',
+							}
 						: c,
 				)
 			} else if (type === 'fill_blank' || type === 'short_answer') {
 				// Remove choice options for fill-in and short-answer stages.
 				comps = comps.map((c) =>
-					c.type === 'choice' || c.type === 'checkbox' ? { ...c, options: undefined } : c,
+					c.type === 'choice' || c.type === 'checkbox' || c.type === 'true_false'
+						? { ...c, type: 'textbox', options: undefined }
+						: c,
 				)
+				if (!comps.some((component) => component.type === 'textbox'))
+					comps = [...comps, makeComponent('textbox')]
 			}
-			return { ...current, type, components: comps }
+			return {
+				...current,
+				type,
+				name: current.name === stageTypeLabel(current.type)
+					? 'Stage name'
+					: current.name,
+				components: comps,
+				...(type === 'video_oral_answer' ? {
+					recordingRequired: true,
+					recordingMode: 'auto',
+					features: { ...current.features, selfie: true, copyPaste: false },
+				} : {}),
+			}
 		})
 	}
 
-	// Render the current view.
 	return (
 		<div className="canvas-wrap">
+			{experimentId && stage.type.toLowerCase() !== 'consent' && (
+				<section className="settings-card">
+					<label>
+						Study materials (save the stage first, maximum 10 MB)
+						<input
+							type="file"
+							disabled={deletingMaterial !== null}
+							accept=".pdf,.txt,.png,.jpg,.jpeg,.docx"
+							onChange={(event) => {
+								const input = event.currentTarget
+								const file = event.target.files?.[0]
+								if (!file) return
+								if (file.size > 10 * 1024 * 1024) {
+									setMaterialError(
+										'Maximum material size is 10 MB.',
+									)
+									return
+								}
+								const sourceStage = stage.id
+								void http
+									.post<{
+										id: string
+										name: string
+										reference: string
+									}>(
+										`/experiments/${experimentId}/stages/${sourceStage}/materials?filename=${encodeURIComponent(file.name)}`,
+										file,
+									)
+									.then((material) => {
+										onUpdateStage((current) =>
+											current.id === sourceStage
+												? {
+														...current,
+														materials: [
+															...(current.materials ??
+																[]),
+															material,
+														],
+													}
+												: current,
+										)
+										setMaterialError('')
+									})
+									.catch(() =>
+										setMaterialError(
+											'Upload failed. Save this draft stage and check the file and storage location.',
+										),
+									)
+									.finally(() => {
+										input.value = ''
+									})
+							}}
+						/>
+					</label>
+					{stage.materials?.map((material) => (
+						<div
+							key={material.id}
+							style={{
+								display: 'flex',
+								alignItems: 'center',
+								gap: 8,
+							}}
+						>
+							<button
+								type="button"
+								className="secondary-button"
+								style={{ flex: 1 }}
+								onClick={() =>
+									void downloadFile(
+										`/experiments/${experimentId}/stages/${stage.id}/materials/${material.id}`,
+										material.name,
+									).catch(() =>
+										setMaterialError('Download failed.'),
+									)
+								}
+							>
+								{material.name}
+							</button>
+							<button
+								type="button"
+								className="secondary-button"
+								aria-label={`Delete ${material.name}`}
+								disabled={deletingMaterial !== null}
+								onClick={() => void deleteMaterial(material.id)}
+							>
+								{deletingMaterial === material.id
+									? 'Deleting…'
+									: 'Delete'}
+							</button>
+						</div>
+					))}
+					{materialError && materialErrorVisible && (
+						<p
+							key={materialErrorRevision}
+							className="entry-error transient-notice"
+							role="alert"
+						>
+							{materialError}
+						</p>
+					)}
+				</section>
+			)}
 			<div className="canvas-toolbar">
 				<span>
 					<span className="live-dot" /> Stage content
 				</span>
-				<span className="canvas-hint">Edit the stage name, type and components</span>
+				<span className="canvas-hint">
+					{isConsent ? 'Edit the stage name and consent text' : 'Edit the stage name, type and components'}
+				</span>
 			</div>
 			<div className="builder-canvas">
 				<div className="canvas-paper">
-					{/* Stage type and editable name. */}
+					{/* Clearly label the editable stage name. */}
 					<div className="paper-header">
-						<span className="section-tag">{stage.type.toUpperCase()}</span>
+						<label className="content-label" htmlFor={`stage-name-${stage.id}`}>
+							Stage name
+						</label>
 						<input
+							id={`stage-name-${stage.id}`}
 							className="stage-name"
 							value={stage.name}
 							onChange={(event) =>
-								onUpdateStage((current) => ({ ...current, name: event.target.value }))
+								onUpdateStage((current) => ({
+									...current,
+									name: event.target.value,
+								}))
 							}
-							placeholder="Untitled stage"
+							placeholder="Enter stage name"
 							aria-label="Stage name"
 						/>
 					</div>
 
 					{/* Stage type selection and option defaults. */}
-					<div className="content-field">
-						<label className="content-label">Stage type</label>
-						<select
-							className="type-select"
-							value={stage.type}
-							onChange={(event) => onTypeChange(event.target.value)}
-						>
-							{STAGE_TYPES.map((t) => (
-								<option key={t.type} value={t.type}>
-									{t.label}
-								</option>
-							))}
-						</select>
-					</div>
+					{stage.type.toLowerCase() !== 'consent' && (
+						<div className="content-field">
+							<label className="content-label">Stage type</label>
+							<select
+								className="type-select"
+								value={stage.type}
+								onChange={(event) =>
+									onTypeChange(event.target.value)
+								}
+							>
+								{STAGE_TYPES.filter(
+									(t) => t.type !== 'consent',
+								).map((t) => (
+									<option key={t.type} value={t.type}>
+										{t.label}
+									</option>
+								))}
+							</select>
+						</div>
+					)}
+
+					{/* Keep the leading question separate from removable components. */}
+					{question && (
+						<div className="content-field">
+							<label className="content-label" htmlFor={`stage-question-${stage.id}`}>
+								{isConsent ? 'Consent text' : 'Question stem'}
+							</label>
+							<textarea
+								id={`stage-question-${stage.id}`}
+								className="component-label"
+								rows={4}
+								value={question.label}
+								onChange={(event) => setLabel(question.id, event.target.value)}
+								placeholder={isConsent ? 'Enter consent text' : 'Enter the question stem'}
+								aria-label={isConsent ? 'Consent text' : 'Question stem'}
+							/>
+						</div>
+					)}
 
 					{/* Stage components and choice options. */}
+					{!isConsent && (
 					<div className="components-editor">
 						<div className="panel-heading">
 							<span>COMPONENTS</span>
-							<b>{stage.components.length}</b>
+							<b>{editableComponents.length}</b>
 						</div>
-						{stage.components.length === 0 && (
-							<div className="empty-components">No components yet. Add one below.</div>
+						{editableComponents.length === 0 && (
+							<div className="empty-components">
+								No components yet. Add one below.
+							</div>
 						)}
-						{stage.components.map((component) => (
+						{editableComponents.map((component) => (
 							<div className="builder-block" key={component.id}>
 								<div className="block-top">
-									<span className="block-type">{component.type}</span>
-									<button className="block-delete" onClick={() => removeComponent(component.id)}>
+									<span className="block-type">
+										{component.type === 'true_false' ? 'True / False' : component.type}
+									</span>
+									<button
+										className="block-delete"
+										onClick={() =>
+											removeComponent(component.id)
+										}
+									>
 										<X size={14} />
 									</button>
 								</div>
@@ -170,25 +411,49 @@ export function StageContentEditor({
 									placeholder="Label"
 								/>
 								{/* Add, edit, and remove choice options. */}
-								{(component.type === 'choice' || component.type === 'checkbox') && (
+								{component.type === 'true_false' && <p>True / False</p>}
+								{(component.type === 'choice' ||
+									component.type === 'checkbox') && (
 									<div className="options-editor">
-										{(component.options ?? []).map((option, i) => (
-											<div className="option-row" key={i}>
-												<input
-													className="option-input"
-													value={option}
-													onChange={(event) => setOption(component.id, i, event.target.value)}
-													placeholder={`Option ${i + 1}`}
-												/>
-												<button
-													className="icon-button"
-													onClick={() => removeOption(component.id, i)}
+										{(component.options ?? []).map(
+											(option, i) => (
+												<div
+													className="option-row"
+													key={i}
 												>
-													<X size={13} />
-												</button>
-											</div>
-										))}
-										<button className="add-option" onClick={() => addOption(component.id)}>
+													<input
+														className="option-input"
+														value={option}
+														onChange={(event) =>
+															setOption(
+																component.id,
+																i,
+																event.target
+																	.value,
+															)
+														}
+														placeholder={`Option ${i + 1}`}
+													/>
+													<button
+														className="icon-button"
+														onClick={() =>
+															removeOption(
+																component.id,
+																i,
+															)
+														}
+													>
+														<X size={13} />
+													</button>
+												</div>
+											),
+										)}
+										<button
+											className="add-option"
+											onClick={() =>
+												addOption(component.id)
+											}
+										>
 											<Plus size={13} /> Add option
 										</button>
 									</div>
@@ -212,6 +477,7 @@ export function StageContentEditor({
 							))}
 						</div>
 					</div>
+					)}
 				</div>
 			</div>
 		</div>
@@ -220,7 +486,7 @@ export function StageContentEditor({
 
 // Create a choice component if missing; otherwise update the first match.
 function ensureChoice(comps: StageComponent[], opts: string[]): StageComponent[] {
-	const index = comps.findIndex((c) => c.type === 'choice' || c.type === 'checkbox')
+	const index = comps.findIndex((c) => ['choice', 'checkbox', 'textbox', 'true_false'].includes(c.type))
 	if (index === -1) {
 		// Create a choice component with default options.
 		const created = makeComponent('choice')
@@ -243,9 +509,9 @@ function makeComponent(type: ComponentType): StageComponent {
 	return {
 		id: crypto.randomUUID(),
 		type,
-		label: type === 'text' ? 'New instruction' : 'Your response',
-		required: ['textbox', 'signature'].includes(type),
-		options: ['choice', 'checkbox'].includes(type)
+		label: type === 'text' ? 'New instruction' : 'Question',
+		required: ['textbox', 'signature', 'true_false'].includes(type),
+		options: type === 'true_false' ? ['True', 'False'] : ['choice', 'checkbox'].includes(type)
 			? ['Option A', 'Option B']
 			: type === 'rating'
 				? ['1', '2', '3', '4', '5']

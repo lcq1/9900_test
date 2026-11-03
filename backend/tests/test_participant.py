@@ -122,3 +122,11 @@ def test_lookup_and_submit_roundtrip(client, auth_headers):
 def test_participant_requires_auth(client):
     assert client.get("/api/participant/sessions").status_code == 401
 
+
+def test_publication_requires_consent_and_content():
+    import pytest
+    from fastapi import HTTPException
+    from app.researcher.service import validate_publication
+    with pytest.raises(HTTPException): validate_publication([])
+    with pytest.raises(HTTPException): validate_publication([{"id": "a", "type": "short_answer"}] * 2)
+    validate_publication([{"id": "c", "type": "consent", "name": "Consent", "components": [{"type": "text", "label": "Consent text"}]}, {"id": "t", "type": "short_answer", "name": "Task", "components": [{"type": "text", "label": "Task text"}]}])

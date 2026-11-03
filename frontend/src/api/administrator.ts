@@ -11,19 +11,9 @@ export interface PlatformSettings {
 	dataRetentionDays: number
 	maxSessionMinutes: number
 }
-
-// Platform settings endpoint.
-const SETTINGS_PATH = '/admin/settings'
-
-// Fetch platform settings.
-export async function getSettings(): Promise<PlatformSettings> {
-	return http.get<PlatformSettings>(SETTINGS_PATH)
-}
-
-// Update platform settings and return the saved result.
-export async function updateSettings(patch: Partial<PlatformSettings>): Promise<PlatformSettings> {
-	return http.patch<PlatformSettings>(SETTINGS_PATH, patch)
-}
+export const getSettings = () => http.get<PlatformSettings>('/admin/settings')
+export const updateSettings = (patch: Partial<PlatformSettings>) =>
+	http.patch<PlatformSettings>('/admin/settings', patch)
 export const getWorkspaceMembers = () => http.get<Researcher[]>('/workspace/members')
 export const getWorkspaceSettings = () => http.get<PlatformSettings>('/workspace/settings')
 
@@ -32,4 +22,7 @@ export const listResearchersForAdmin = () => http.get<Researcher[]>('/admin/rese
 export const listAdminExperiments = () => http.get<Experiment[]>('/admin/experiments')
 export const listAdminParticipants = () => http.get<ParticipantSessionResult[]>('/admin/participants')
 export const downloadAdminResults = (id: string) =>
-	downloadFile('/admin/experiments/' + id + '/results.csv', 'experiment_results.csv')
+	downloadFile(
+		'/admin/experiments/' + id + '/results.xlsx',
+		'experiment.xlsx',
+	)

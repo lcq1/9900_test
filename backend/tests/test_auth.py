@@ -41,7 +41,7 @@ def test_database_uses_postgresql_and_real_migrations(client):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "5f5f5f5f5f5f"
+            == "6a6a6a6a6a6a"
         )
         inspector = inspect(connection)
         columns = {
@@ -156,6 +156,7 @@ def test_upgrade_from_original_head_preserves_existing_experiments(
     # Simulate the original 0003 schema in this test's isolated PostgreSQL schema.
     with database.engine.begin() as connection:
         connection.exec_driver_sql("DROP TABLE ai_chat_turns, ai_conversations")
+        connection.exec_driver_sql("ALTER TABLE researchers DROP COLUMN storage_location")
         connection.exec_driver_sql("ALTER TABLE experiments DROP COLUMN owner_id")
         connection.exec_driver_sql(
             "ALTER TABLE participant_events ALTER COLUMN epoch_ms TYPE INTEGER"
@@ -174,7 +175,7 @@ def test_upgrade_from_original_head_preserves_existing_experiments(
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "5f5f5f5f5f5f"
+            == "6a6a6a6a6a6a"
         )
 
 
@@ -191,6 +192,7 @@ def test_upgrade_adopts_unversioned_create_all_database(client, auth_headers):
     ).json()
     with database.engine.begin() as connection:
         connection.exec_driver_sql("DROP TABLE ai_chat_turns, ai_conversations")
+        connection.exec_driver_sql("ALTER TABLE researchers DROP COLUMN storage_location")
         connection.exec_driver_sql("ALTER TABLE experiments DROP COLUMN owner_id")
         connection.exec_driver_sql(
             "ALTER TABLE participant_events ALTER COLUMN epoch_ms TYPE INTEGER"
@@ -207,7 +209,7 @@ def test_upgrade_adopts_unversioned_create_all_database(client, auth_headers):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "5f5f5f5f5f5f"
+            == "6a6a6a6a6a6a"
         )
         command.upgrade(config, "head")
         assert (
@@ -224,6 +226,7 @@ def test_unversioned_incompatible_schema_is_not_stamped(client):
     with database.engine.begin() as connection:
         connection.exec_driver_sql("DROP TABLE alembic_version")
         connection.exec_driver_sql("DROP TABLE ai_chat_turns, ai_conversations")
+        connection.exec_driver_sql("ALTER TABLE researchers DROP COLUMN storage_location")
         connection.exec_driver_sql(
             "ALTER TABLE researchers RENAME COLUMN email TO legacy_email"
         )
@@ -234,3 +237,33 @@ def test_unversioned_incompatible_schema_is_not_stamped(client):
             .inspect(connection)
             .has_table("alembic_version")
         )
+
+
+@pytest.mark.parametrize("email,allowed", [
+    ("Alice@Example.COM", True), (" alice@example.com ", True),
+    ("bob@approved.edu", True), ("bob@sub.approved.edu", False),
+    ("bob@evilapproved.edu", False), ("alice@example.com.evil", False),
+    ("bob@example.com", False),
+])
+def test_access_allowlist_exact_boundaries(monkeypatch, email, allowed):
+    from app.core.config import settings, require_allowed_email
+    from fastapi import HTTPException
+    monkeypatch.setattr(settings, "access_allowlist_enabled", True)
+    monkeypatch.setattr(settings, "allowed_emails", "alice@example.com")
+    monkeypatch.setattr(settings, "allowed_domains", "approved.edu")
+    if allowed:
+        assert require_allowed_email(email) == email.strip().lower()
+    else:
+        with pytest.raises(HTTPException) as error: require_allowed_email(email)
+        assert error.value.status_code == 403
+
+
+def test_enabled_empty_allowlist_denies_access(monkeypatch):
+    from app.core.config import settings, require_allowed_email
+    from fastapi import HTTPException
+    monkeypatch.setattr(settings, "access_allowlist_enabled", True)
+    monkeypatch.setattr(settings, "allowed_emails", "")
+    monkeypatch.setattr(settings, "allowed_domains", "")
+    with pytest.raises(HTTPException): require_allowed_email("user@example.com")
+    monkeypatch.setattr(settings, "access_allowlist_enabled", False)
+    assert require_allowed_email("user@example.com") == "user@example.com"

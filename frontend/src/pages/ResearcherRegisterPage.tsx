@@ -1,6 +1,6 @@
+import { useTransientNotice } from '../participant/TimerController'
 // Researcher registration with session storage and completion callbacks.
-import { useState } from 'react'
-import type { FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { ArrowLeft, Check } from 'lucide-react'
 import * as auth from '../api/auth'
 
@@ -11,13 +11,17 @@ export interface ResearcherRegisterPageProps {
 }
 
 // Validate registration, create the account, and save the session.
-export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegisterPageProps) {
+export function ResearcherRegisterPage({
+	onRegistered,
+	onBack,
+}: ResearcherRegisterPageProps) {
 	// Track registration fields, validation errors, and the created account.
 	const [name, setName] = useState('')
 	const [email, setEmail] = useState('')
 	const [password, setPassword] = useState('')
 	const [confirm, setConfirm] = useState('')
-	const [error, setError] = useState('')
+	const [error, setError, errorVisible, errorRevision] =
+		useTransientNotice('')
 	const [done, setDone] = useState<auth.Researcher | null>(null)
 	const [busy, setBusy] = useState(false)
 
@@ -43,12 +47,18 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 		setBusy(true)
 		try {
 			// Authenticate, save the session, and notify the parent.
-			const researcher = await auth.registerResearcher({ name, email, password })
+			const researcher = await auth.registerResearcher({
+				name,
+				email,
+				password,
+			})
 			setDone(researcher)
 			onRegistered?.(researcher)
 		} catch (err) {
 			// Show the request error and retain loaded data.
-			setError(err instanceof Error ? err.message : 'Registration failed.')
+			setError(
+				err instanceof Error ? err.message : 'Registration failed.',
+			)
 		} finally {
 			// Reset loading state after the request.
 			setBusy(false)
@@ -57,7 +67,6 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 
 	if (done) {
 		// Show confirmation after registration.
-		// Render the current view.
 		return (
 			<section className="page">
 				{/* Registered account details and workspace entry. */}
@@ -66,8 +75,13 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 						<Check size={28} />
 					</span>
 					<h1>Welcome, {done.name}</h1>
-					<p className="subheading">Your researcher account ({done.email}) has been created.</p>
-					<button className="primary-button" onClick={() => onBack?.()}>
+					<p className="subheading">
+						Your researcher account ({done.email}) has been created.
+					</p>
+					<button
+						className="primary-button"
+						onClick={() => onBack?.()}
+					>
 						Return to login
 					</button>
 				</div>
@@ -75,7 +89,6 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 		)
 	}
 
-	// Render the current view.
 	return (
 		<section className="page">
 			<button className="back-link" onClick={() => onBack?.()}>
@@ -84,7 +97,9 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 			<div className="register-card">
 				<p className="eyebrow">RESEARCHER SIGN-UP</p>
 				<h1>Create your researcher account</h1>
-				<p className="subheading">Register to build and run human-AI studies on protocol.</p>
+				<p className="subheading">
+					Register to build and run human-AI studies on protocol.
+				</p>
 				{/* Form fields and validated submission. */}
 				<form onSubmit={submit}>
 					<label className="entry-label">
@@ -109,7 +124,9 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 						<input
 							type="password"
 							value={password}
-							onChange={(event) => setPassword(event.target.value)}
+							onChange={(event) =>
+								setPassword(event.target.value)
+							}
 							placeholder="At least 6 characters"
 						/>
 					</label>
@@ -122,8 +139,19 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 							placeholder="Re-enter password"
 						/>
 					</label>
-					{error && <p className="entry-error">{error}</p>}
-					<button className="primary-button entry-button" type="submit" disabled={busy}>
+					{error && errorVisible && (
+						<p
+							key={errorRevision}
+							className="entry-error transient-notice"
+						>
+							{error}
+						</p>
+					)}
+					<button
+						className="primary-button entry-button"
+						type="submit"
+						disabled={busy}
+					>
 						{busy ? 'Creating…' : 'Create account'}
 					</button>
 				</form>

@@ -12,7 +12,7 @@ from app.researcher.schemas import (
 )
 from app.participant.schemas import ParticipantSessionResult
 from app.participant import service as participant_service
-from app.participant.export_csv import export_experiment_csv
+from app.participant.export_csv import ExportView, export_experiment_csv
 from app.researcher.service import get_experiment_or_404
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -92,14 +92,23 @@ def participants(
 @router.get("/experiments/{experiment_id}/results.csv")
 def results(
     experiment_id: str,
+    view: ExportView = "answers",
     db: Session = Depends(get_db),
     _: Researcher = Depends(get_current_administrator),
 ):
     exp = get_experiment_or_404(db, experiment_id)
     return Response(
-        export_experiment_csv(db, exp),
+        export_experiment_csv(db, exp, view),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="experiment_results.csv"'
+            "Content-Disposition": f'attachment; filename="experiment_{view}.csv"'
         },
     )
+
+
+@router.get("/experiments/{experiment_id}/results.xlsx")
+def results_workbook(experiment_id: str, db: Session = Depends(get_db), _: Researcher = Depends(get_current_administrator)):
+    from app.participant.export_csv import export_experiment_xlsx, export_filename, XLSX_MIME
+    exp = get_experiment_or_404(db, experiment_id)
+    return Response(export_experiment_xlsx(db, exp), media_type=XLSX_MIME,
+                    headers={"Content-Disposition": f'attachment; filename="{export_filename(exp.code)}"'})

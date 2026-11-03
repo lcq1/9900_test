@@ -18,19 +18,45 @@ export interface ParticipantSessionResult {
 	events: ParticipantEvent[]
 }
 
+export const submitStage = (
+	stageId: string,
+	input: {
+		experimentCode: string
+		participantCode: string
+		sessionId?: string
+		answers: ParticipantAnswer[]
+		recording: Record<string, boolean>
+		consentAccepted?: boolean
+	},
+) =>
+	http.post(
+		`/participant/stages/${encodeURIComponent(stageId)}/submit`,
+		input,
+	)
+
 // Participant session endpoint.
 const PATH = '/participant/sessions'
 
 // Fetch saved participant sessions.
-export async function listSessions(): Promise<ParticipantSessionResult[]> {
-	return http.get<ParticipantSessionResult[]>(PATH)
+export async function listSessions(
+	experimentCode = '',
+): Promise<ParticipantSessionResult[]> {
+	return http.get<ParticipantSessionResult[]>(
+		PATH +
+			(experimentCode
+				? '?experiment_code=' + encodeURIComponent(experimentCode)
+				: ''),
+	)
 }
 
 // Submit a session; the backend generates its ID and start time.
 export async function submitSession(
-	input: Omit<ParticipantSessionResult, 'id' | 'startedAt'>,
+	input: Omit<ParticipantSessionResult, 'id' | 'startedAt'> & {
+		sessionId?: string
+	},
 ): Promise<ParticipantSessionResult> {
 	return http.post<ParticipantSessionResult>(PATH, {
+		sessionId: input.sessionId,
 		experimentCode: input.experimentCode,
 		participantCode: input.participantCode,
 		finishedAt: input.finishedAt,
@@ -39,17 +65,31 @@ export async function submitSession(
 	})
 }
 
-export const downloadSessionCsv = (id: string) =>
-	downloadFile(PATH + '/' + encodeURIComponent(id) + '/csv', id + '.csv')
+export type CsvView = 'answers' | 'activity'
+
+/** Download saved answers or activity from the study server. */
+export const downloadSessionCsv = (id: string, view: CsvView = 'answers') =>
+	downloadFile(
+		PATH + '/' + encodeURIComponent(id) + '/csv?view=' + view,
+		id + '_' + view + '.csv',
+	)
+
+export const downloadSessionWorkbook = (id: string) =>
+	downloadFile(
+		PATH + '/' + encodeURIComponent(id) + '/xlsx',
+		'experiment.xlsx',
+	)
 
 export interface AIConfig {
 	model: string
 	configured: boolean
 }
 
-export const getAIConfig = () => http.get<AIConfig>('/ai/config')
+export const getAIConfig = (stageId?: string) => http.get<AIConfig>('/ai/config' +
+	(stageId ? '?stageId=' + encodeURIComponent(stageId) : ''))
 
 export interface StreamChatOptions {
+	sessionId?: string
 	stageId: string
 	prompt: string
 	conversationId: string
@@ -76,7 +116,10 @@ export class LlmCallError extends Error {
 	}
 }
 
-export async function streamChat(options: StreamChatOptions): Promise<StreamChatResult> {
+/** Decode backend NDJSON across arbitrary network and UTF-8 boundaries. */
+export async function streamChat(
+	options: StreamChatOptions,
+): Promise<StreamChatResult> {
 	let text = '',
 		model = '',
 		pending = '',
@@ -103,22 +146,33 @@ export async function streamChat(options: StreamChatOptions): Promise<StreamChat
 		}
 		if (event.type === 'delta') {
 			if (typeof event.text !== 'string')
-				throw new LlmCallError('The study server sent an invalid reply.', true, text)
+				throw new LlmCallError(
+					'The study server sent an invalid reply.',
+					true,
+					text,
+				)
 			text += event.text
 			options.onDelta(event.text)
 		} else if (event.type === 'done') done = true
 	}
 	try {
 		const response = await openApiStream(
-			'/participant/stages/' + encodeURIComponent(options.stageId) + '/ai-stream',
+			'/participant/stages/' +
+				encodeURIComponent(options.stageId) +
+				'/ai-stream',
 			{
 				content: options.prompt,
+				sessionId: options.sessionId,
 				conversationId: options.conversationId,
 				requestId: options.requestId,
 			},
 			options.signal,
 		)
-		if (!response.body) throw new LlmCallError('The study server returned an empty response.', true)
+		if (!response.body)
+			throw new LlmCallError(
+				'The study server returned an empty response.',
+				true,
+			)
 		reader = response.body.getReader()
 		const decoder = new TextDecoder()
 		while (true) {
@@ -133,15 +187,27 @@ export async function streamChat(options: StreamChatOptions): Promise<StreamChat
 		}
 		pending += decoder.decode()
 		if (pending.trim()) accept(pending)
-		if (!done) throw new LlmCallError('The AI reply was interrupted. Please retry.', true, text)
+		if (!done)
+			throw new LlmCallError(
+				'The AI reply was interrupted. Please retry.',
+				true,
+				text,
+			)
 		return { text, model, aborted: false }
 	} catch (error) {
-		if (options.signal?.aborted || (error instanceof Error && error.name === 'AbortError'))
+		if (
+			options.signal?.aborted ||
+			(error instanceof Error && error.name === 'AbortError')
+		)
 			return { text, model, aborted: true }
 		if (error instanceof LlmCallError) throw error
-		const retryable = !(error instanceof HttpError) || [0, 409, 429, 502, 503, 504].includes(error.status)
+		const retryable =
+			!(error instanceof HttpError) ||
+			[0, 409, 429, 502, 503, 504].includes(error.status)
 		throw new LlmCallError(
-			error instanceof Error ? error.message : 'Cannot reach the study server. Please retry.',
+			error instanceof Error
+				? error.message
+				: 'Cannot reach the study server. Please retry.',
 			retryable,
 			text,
 		)
@@ -149,4 +215,24 @@ export async function streamChat(options: StreamChatOptions): Promise<StreamChat
 		await reader?.cancel().catch(() => undefined)
 		reader?.releaseLock()
 	}
+}
+
+export async function uploadRecording(
+	sessionId: string,
+	stageId: string,
+	recordingId: string,
+	kind: string,
+	offset: number,
+	chunk: Blob,
+): Promise<void> {
+	const query = new URLSearchParams({
+		stage_id: stageId,
+		kind,
+		offset: String(offset),
+		mime: chunk.type || 'video/webm',
+	})
+	await http.post(
+		`/participant/sessions/${sessionId}/recordings/${recordingId}?${query}`,
+		chunk,
+	)
 }

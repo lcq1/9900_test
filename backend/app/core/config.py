@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,6 +45,15 @@ class Settings(BaseSettings):
             hide_password=False
         )
 
+    # Empty uses backend/storage; relative paths are resolved from backend/.
+    local_storage_dir: str = ""
+    storage_locations: dict[str, str] = {}
+    storage_default_location: str = "legacy"
+
+    access_allowlist_enabled: bool = False
+    allowed_emails: str = ""
+    allowed_domains: str = ""
+
     # JWT / auth
     jwt_secret: str = "dev-secret-change-me-in-production"
     jwt_algorithm: str = "HS256"
@@ -61,7 +69,7 @@ class Settings(BaseSettings):
 
     # Both transports share the same credential, completion URL and model settings.
     # WorkBuddy uses its public application key, not a model-provider secret.
-    ai_provider: Literal["openai_compatible", "workbuddy"] = "openai_compatible"
+    ai_provider: str = Field(default="openai_compatible", min_length=1, max_length=32)
     ai_api_key: str | None = None
     ai_model: str = "gpt-4o-mini"
     ai_api_base: str = "https://api.openai.com/v1/chat/completions"
@@ -86,3 +94,20 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def require_allowed_email(email: str) -> str:
+    """Match exact case-insensitive emails or exact domains; never suffix-match."""
+    from fastapi import HTTPException
+    normalized = email.strip().lower()
+    if normalized.count("@") != 1 or any(char.isspace() for char in normalized):
+        raise HTTPException(status_code=422, detail="Enter a valid email address")
+    local, domain = normalized.split("@")
+    if not local or not domain or domain.startswith(".") or domain.endswith("."):
+        raise HTTPException(status_code=422, detail="Enter a valid email address")
+    if settings.access_allowlist_enabled:
+        emails = {item.strip().lower() for item in settings.allowed_emails.split(",") if item.strip()}
+        domains = {item.strip().lower() for item in settings.allowed_domains.split(",") if item.strip()}
+        if normalized not in emails and domain not in domains:
+            raise HTTPException(status_code=403, detail="This email is not permitted to access this study platform. Contact the researcher.")
+    return normalized

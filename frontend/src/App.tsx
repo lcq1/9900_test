@@ -1,3 +1,5 @@
+import { useTransientNotice } from './participant/TimerController'
+import { ParticipantAccessPage } from './pages/ParticipantPage'
 import {
 	useCallback,
 	useEffect,
@@ -26,7 +28,12 @@ import {
 } from "lucide-react";
 import { useExperiments } from "./api/experiments";
 import { signOut } from "./api/auth";
-import { clear, getSession, useSessionStore } from "./auth/sessionStore";
+import {
+	clear,
+	clearParticipantToken,
+	getSession,
+	useSessionStore,
+} from './auth/sessionStore'
 import { AuthScreen } from './pages/LoginPage'
 import { ResearcherRegisterPage } from "./pages/ResearcherRegisterPage";
 import {
@@ -259,119 +266,166 @@ function WorkspaceLayout({
 		</div>
 	);
 }
-function WorkspacePage({ view }: { view: "preview" | "results" | "settings" }) {
+function WorkspacePage({ view }: { view: 'preview' | 'results' | 'settings' }) {
 	const navigate = useNavigate(),
-		{ experiments } = useExperiments();
-	const me = useSessionStore((s) => s.session?.researcher);
+		location = useLocation(),
+		{ experiments, loading, error } = useExperiments()
+	const requestedExperiment = new URLSearchParams(location.search).get(
+		'experiment',
+	)
+	const previewExperiment = requestedExperiment
+		? experiments.find(
+				(experiment) => experiment.id === requestedExperiment,
+			)
+		: experiments[0]
+	const [previewParticipantCode] = useState(
+		() => `PREVIEW-${crypto.randomUUID()}`,
+	)
+	const me = useSessionStore((s) => s.session?.researcher)
 	const [workspaceSettings, setWorkspaceSettings] = useState(() => {
 		try {
 			return {
 				researcherName:
-					localStorage.getItem("beyond-display-name:" + me?.id) ||
-					JSON.parse(localStorage.getItem("p13-workspace") || "{}")
+					localStorage.getItem('beyond-display-name:' + me?.id) ||
+					JSON.parse(localStorage.getItem('p13-workspace') || '{}')
 						.researcherName ||
 					me?.name ||
-					"Researcher",
-			};
+					'Researcher',
+			}
 		} catch {
-			return { researcherName: me?.name || "Researcher" };
+			return { researcherName: me?.name || 'Researcher' }
 		}
-	});
+	})
 	return (
 		<WorkspaceLayout
 			title={
-				view === "preview"
-					? "Participant preview"
-					: view === "results"
-						? "Visualization results"
-						: "Workspace settings"
+				view === 'preview'
+					? 'Participant preview'
+					: view === 'results'
+						? 'Visualization results'
+						: 'Workspace settings'
 			}
 		>
-			{view === "preview" ? (
-				<ParticipantEntry
-					experiments={experiments}
-					onBack={() => navigate("/researcher/dashboard")}
-				/>
-			) : view === "results" ? (
+			{view === 'preview' ? (
+				loading ? (
+					<p className="page">Loading experiment…</p>
+				) : error ? (
+					<Alert type="error" title={error.message} />
+				) : previewExperiment ? (
+					<ParticipantEntry
+						key={previewExperiment.id}
+						previewOnly
+						experiments={[previewExperiment]}
+						initialExperimentCode={previewExperiment.code}
+						initialParticipantCode={previewParticipantCode}
+						onBack={() =>
+							navigate(
+								`/researcher/experiment/${previewExperiment.id}`,
+							)
+						}
+					/>
+				) : (
+					<p className="page">
+						{requestedExperiment
+							? 'Experiment not found.'
+							: 'Create an experiment before previewing it.'}
+					</p>
+				)
+			) : view === 'results' ? (
 				<ResultsPage experiments={experiments} />
 			) : (
 				<WorkspaceSettingsPage
 					experiments={experiments}
 					settings={workspaceSettings}
 					onChange={(next) => {
-						setWorkspaceSettings(next);
-						localStorage.setItem("p13-workspace", JSON.stringify(next));
+						setWorkspaceSettings(next)
 						localStorage.setItem(
-							"beyond-display-name:" + me?.id,
+							'p13-workspace',
+							JSON.stringify(next),
+						)
+						localStorage.setItem(
+							'beyond-display-name:' + me?.id,
 							next.researcherName,
-						);
-						window.dispatchEvent(new Event("beyond-profile-change"));
+						)
+						window.dispatchEvent(new Event('beyond-profile-change'))
 					}}
 					onClearAll={() => {
 						for (const key of Object.keys(localStorage)) {
 							if (
 								[
-									"p13-experiments",
-									"p13-workspace",
-									"p13-signed-in",
-									"p13-session",
-									"p13-researchers",
-									"p13-platform-settings",
+									'p13-experiments',
+									'p13-workspace',
+									'p13-signed-in',
+									'p13-session',
+									'p13-researchers',
+									'p13-platform-settings',
 								].includes(key) ||
-								key.startsWith("p13-api") ||
-								key.startsWith("p13-events")
+								key.startsWith('p13-api') ||
+								key.startsWith('p13-events')
 							)
-								localStorage.removeItem(key);
+								localStorage.removeItem(key)
 						}
 					}}
-					onClose={() => navigate("/researcher/dashboard")}
 				/>
 			)}
 		</WorkspaceLayout>
-	);
+	)
 }
 function Workspace() {
 	const navigate = useNavigate(),
 		{ experiments, loading, error, addExperiment, removeExperiment } =
-			useExperiments();
-	const [query, setQuery] = useState(""),
-		[failure, setFailure] = useState("");
+			useExperiments()
+	const [query, setQuery] = useState(''),
+		[failure, setFailure, failureVisible, failureRevision] =
+			useTransientNotice('')
 	const create = async () => {
-		const name = window.prompt("Experiment name");
-		if (!name?.trim()) return;
+		const name = window.prompt('Experiment name')
+		if (!name?.trim()) return
 		try {
 			const e = await addExperiment({
 				name: name.trim(),
-				stages: [createStage("consent")],
+				stages: [createStage('consent')],
 				fullScreen: false,
-			});
-			navigate("/researcher/experiment/" + e.id);
+			})
+			navigate('/researcher/experiment/' + e.id)
 		} catch (e) {
 			setFailure(
-				e instanceof Error ? e.message : "Could not create experiment.",
-			);
+				e instanceof Error ? e.message : 'Could not create experiment.',
+			)
 		}
-	};
+	}
 	const remove = (id: string) => {
 		Modal.confirm({
-			title: "Delete this experiment?",
-			content: "Experiments with participant runs cannot be deleted.",
+			title: 'Delete this experiment?',
+			content: 'Experiments with participant runs cannot be deleted.',
 			onOk: async () => {
 				try {
-					await removeExperiment(id);
+					await removeExperiment(id)
 				} catch (e) {
 					setFailure(
-						e instanceof Error ? e.message : "Could not delete experiment.",
-					);
-					throw e;
+						e instanceof Error
+							? e.message
+							: 'Could not delete experiment.',
+					)
+					throw e
 				}
 			},
-		});
-	};
+		})
+	}
 	return (
 		<WorkspaceLayout>
-			{(error || failure) && (
-				<Alert type="error" showIcon title={failure || error?.message} />
+			{(error || (failure && failureVisible)) && (
+				<Alert
+					key={failureRevision}
+					className={
+						failure && failureVisible
+							? 'transient-notice'
+							: undefined
+					}
+					type="error"
+					showIcon
+					title={failure && failureVisible ? failure : error?.message}
+				/>
 			)}
 			{loading ? (
 				<p className="page">Loading experiments…</p>
@@ -381,12 +435,12 @@ function Workspace() {
 					query={query}
 					setQuery={setQuery}
 					onCreate={() => void create()}
-					onEdit={(id) => navigate("/researcher/experiment/" + id)}
+					onEdit={(id) => navigate('/researcher/experiment/' + id)}
 					onDelete={remove}
 				/>
 			)}
 		</WorkspaceLayout>
-	);
+	)
 }
 function ExperimentEditor() {
 	const { experimentId } = useParams(),
@@ -399,41 +453,63 @@ function ExperimentEditor() {
 }
 function ExperimentDraft({ remote }: { remote: Experiment }) {
 	const navigate = useNavigate(),
-		{ saveExperiment, removeExperiment } = useExperiments();
-	const revision = useRef(0);
-	const requestInFlight = useRef(false);
-	const [draft, setDraft] = useState<Experiment>(() => structuredClone(remote)),
-		[selected, setSelected] = useState(remote.stages[0]?.id ?? ""),
+		{ saveExperiment, removeExperiment } = useExperiments()
+	const revision = useRef(0)
+	const publishIntent = useRef<{ key: string; id: string } | null>(null)
+	const requestInFlight = useRef(false)
+	const [draft, setDraft] = useState<Experiment>(() =>
+			structuredClone(remote),
+		),
+		[selected, setSelected] = useState(remote.stages[0]?.id ?? ''),
 		[dirty, setDirty] = useState(false),
 		[saving, setSaving] = useState(false),
 		[publishing, setPublishing] = useState(false),
-		[publishErrors, setPublishErrors] = useState<string[]>([]),
-		[success, setSuccess] = useState(""),
-		[failure, setFailure] = useState("");
-	const stage = draft.stages.find((s) => s.id === selected) ?? draft.stages[0];
+		[unpublishing, setUnpublishing] = useState(false),
+		[
+			publishErrors,
+			setPublishErrors,
+			publishErrorsVisible,
+			publishErrorsRevision,
+		] = useTransientNotice<string[]>([]),
+		[success, setSuccess, successVisible, successRevision] =
+			useTransientNotice(''),
+		[failure, setFailure, failureVisible, failureRevision] =
+			useTransientNotice('')
+	const stage = draft.stages.find((s) => s.id === selected) ?? draft.stages[0]
 	const change = (fn: (e: Experiment) => Experiment) => {
-		revision.current += 1;
-		setDraft(fn);
-		setDirty(true);
-		setSuccess("");
-		setPublishErrors([]);
-	};
+		revision.current += 1
+		setDraft((current) => {
+			const updated = fn(current)
+			const changed =
+				updated.name !== current.name ||
+				updated.fullScreen !== current.fullScreen ||
+				JSON.stringify(updated.stages) !==
+					JSON.stringify(current.stages)
+			return changed && current.status === 'Live'
+				? { ...updated, status: 'Draft' }
+				: updated
+		})
+		setDirty(true)
+		setSuccess('')
+		setPublishErrors([])
+	}
 	const changeStage = (fn: (s: Stage) => Stage) =>
 		change((e) => ({
 			...e,
 			stages: e.stages.map((s) => (s.id === stage.id ? fn(s) : s)),
-		}));
+		}))
 	const add = () => {
-		if (draft.stages.length >= 20) return;
-		const next = createStage();
-		change((e) => ({ ...e, stages: [...e.stages, next] }));
-		setSelected(next.id);
-	};
+		if (draft.stages.length >= 20) return
+		const next = createStage()
+		next.features.navigation = draft.stages[0]?.features.navigation ?? false
+		change((e) => ({ ...e, stages: [...e.stages, next] }))
+		setSelected(next.id)
+	}
 	const removeStage = (id: string) => {
-		if (draft.stages[0]?.id === id) return;
-		change((e) => ({ ...e, stages: e.stages.filter((s) => s.id !== id) }));
-		if (selected === id) setSelected(draft.stages[0].id);
-	};
+		if (draft.stages[0]?.id === id) return
+		change((e) => ({ ...e, stages: e.stages.filter((s) => s.id !== id) }))
+		if (selected === id) setSelected(draft.stages[0].id)
+	}
 	const reorder = (from: number, to: number) => {
 		if (
 			from <= 0 ||
@@ -441,77 +517,144 @@ function ExperimentDraft({ remote }: { remote: Experiment }) {
 			from >= draft.stages.length ||
 			to >= draft.stages.length
 		)
-			return;
+			return
 		change((e) => {
-			const stages = [...e.stages];
-			const [moved] = stages.splice(from, 1);
-			stages.splice(to, 0, moved);
-			return { ...e, stages };
-		});
-	};
+			const stages = [...e.stages]
+			const [moved] = stages.splice(from, 1)
+			stages.splice(to, 0, moved)
+			return { ...e, stages }
+		})
+	}
 	const save = useCallback(
-		async (publish = false) => {
-			if (requestInFlight.current) return;
-			setFailure("");
-			setSuccess("");
-			const errors = publish ? getPublishErrors(draft) : [];
-			setPublishErrors(errors);
-			if (errors.length) return;
-			if (publish && draft.status === "Live" && !dirty) return;
-			requestInFlight.current = true;
-			setSaving(true);
-			setPublishing(publish);
+		async (publish = false, notifySuccess = false, unpublish = false) => {
+			if (requestInFlight.current) return
+			setFailure('')
+			setSuccess('')
+			const errors = publish ? getPublishErrors(draft) : []
+			setPublishErrors(errors)
+			if (errors.length) return
+			if (publish && draft.status === 'Live' && !dirty) return
+			requestInFlight.current = true
+			setSaving(true)
+			setPublishing(publish)
+			setUnpublishing(unpublish)
 			try {
-				const pending = revision.current;
+				const pending = revision.current
+				const intentKey = JSON.stringify(draft)
+				if (publish && publishIntent.current?.key !== intentKey) {
+					publishIntent.current = {
+						key: intentKey,
+						id: crypto.randomUUID(),
+					}
+				}
 				const saved = await saveExperiment(
-					publish ? { ...draft, status: "Live" } : draft,
-				);
-				if (publish && saved.status !== "Live")
+					publish
+						? {
+								...draft,
+								status: 'Live',
+								publish: true,
+								publishRequestId: publishIntent.current!.id,
+							}
+						: unpublish
+							? { ...draft, status: 'Draft', publish: false }
+							: draft,
+				)
+				if (publish && saved.status !== 'Live')
 					throw new Error(
-						"The server did not confirm publication. Please retry.",
-					);
+						'The server did not confirm publication. Please retry.',
+					)
+				if (unpublish && saved.status !== 'Draft')
+					throw new Error(
+						'The server did not confirm unpublishing. Please retry.',
+					)
+				if (publish || unpublish) publishIntent.current = null
 				if (pending === revision.current) {
-					setDraft(saved);
-					setDirty(false);
+					setDraft(saved)
+					setDirty(false)
 				} else {
-					setDraft((current) => ({ ...current, status: saved.status }));
+					// Preserve edits made while the request was pending, including their dirty state.
+					setDraft((current) => ({
+						...current,
+						status:
+							current.status === 'Closed' ? 'Closed' : 'Draft',
+					}))
+				}
+				if (unpublish)
+					setSuccess(
+						'Experiment unpublished. Participation is paused until you publish again.',
+					)
+				if (!publish && notifySuccess) {
+					setSuccess(
+						pending === revision.current
+							? 'Draft saved.'
+							: 'Draft saved. Newer edits are still being saved.',
+					)
 				}
 				if (publish)
 					setSuccess(
-						`Experiment published. Experiment code: ${saved.code}.${pending !== revision.current ? " Newer edits are still unsaved; publish changes when ready." : ""}`,
-					);
+						`Experiment published. Experiment code: ${saved.code}.${pending !== revision.current ? ' Newer edits are still unsaved; publish changes when ready.' : ''}`,
+					)
 			} catch (e) {
 				setFailure(
 					e instanceof Error
 						? e.message
 						: publish
-							? "Could not publish experiment."
-							: "Could not save experiment.",
-				);
+							? 'Could not publish experiment.'
+							: unpublish
+								? 'Could not unpublish experiment.'
+								: 'Could not save experiment.',
+				)
 			} finally {
-				requestInFlight.current = false;
-				setSaving(false);
-				setPublishing(false);
+				requestInFlight.current = false
+				setSaving(false)
+				setPublishing(false)
+				setUnpublishing(false)
 			}
 		},
-		[draft, dirty, saveExperiment],
-	);
+		[
+			draft,
+			dirty,
+			saveExperiment,
+			setFailure,
+			setSuccess,
+			setPublishErrors,
+		],
+	)
+	// Preserve the original editor's automatic persistence with the backup's
+	// in-flight revision guard. Manual Save/Publish remain available.
 	useEffect(() => {
-		if (!dirty || saving || failure) return;
-		const timer = window.setTimeout(() => void save(), 600);
-		return () => window.clearTimeout(timer);
-	}, [draft, dirty, saving, failure, save]);
+		if (!dirty || saving || failure) return
+		const timer = window.setTimeout(() => void save(), 600)
+		return () => window.clearTimeout(timer)
+	}, [draft, dirty, saving, failure, save])
 	return (
 		<WorkspaceLayout
 			title={draft.name}
 			dirty={dirty}
 			saving={saving}
-			onSave={() => void save()}
+			onSave={() => void save(false, true)}
 		>
-			{failure && <Alert type="error" title={failure} />}
-			{success && <Alert type="success" showIcon title={success} />}
-			{publishErrors.length > 0 && (
+			{failure && failureVisible && (
 				<Alert
+					key={failureRevision}
+					className="transient-notice"
+					type="error"
+					title={failure}
+				/>
+			)}
+			{success && successVisible && (
+				<Alert
+					key={successRevision}
+					className="transient-notice"
+					type="success"
+					showIcon
+					title={success}
+				/>
+			)}
+			{publishErrors.length > 0 && publishErrorsVisible && (
+				<Alert
+					key={publishErrorsRevision}
+					className="transient-notice"
 					type="error"
 					showIcon
 					title="This experiment is not ready to publish"
@@ -528,13 +671,18 @@ function ExperimentDraft({ remote }: { remote: Experiment }) {
 				<Editor
 					experiment={draft}
 					onPublish={() => void save(true)}
+					onUnpublish={() => void save(false, false, true)}
 					publishing={publishing}
+					unpublishing={unpublishing}
 					saving={saving}
 					dirty={dirty}
 					stage={stage}
 					onBack={() => {
-						if (!dirty || window.confirm("Discard unsaved changes?"))
-							navigate("/researcher/dashboard");
+						if (
+							!dirty ||
+							window.confirm('Discard unsaved changes?')
+						)
+							navigate('/researcher/dashboard')
 					}}
 					onAddStage={add}
 					onSelectStage={setSelected}
@@ -542,36 +690,38 @@ function ExperimentDraft({ remote }: { remote: Experiment }) {
 					onUpdateStage={changeStage}
 					onDelete={(id) => {
 						Modal.confirm({
-							title: "Delete this experiment?",
+							title: 'Delete this experiment?',
 							onOk: async () => {
-								await removeExperiment(id);
-								navigate("/researcher/dashboard");
+								await removeExperiment(id)
+								navigate('/researcher/dashboard')
 							},
-						});
+						})
 					}}
 					onDeleteStage={removeStage}
 					onReorderStages={reorder}
 				/>
 			)}
 		</WorkspaceLayout>
-	);
+	)
 }
 function Participant() {
 	const navigate = useNavigate(),
-		location = useLocation(),
-		{ experiments } = useExperiments();
+		location = useLocation()
 	const access = (location.state ?? {}) as {
-		experimentCode?: string;
-		participantCode?: string;
-	};
+		experimentCode?: string
+		participantCode?: string
+	}
 	return (
-		<ParticipantEntry
-			experiments={experiments}
-			onBack={() => navigate("/login")}
+		<ParticipantAccessPage
+			onBack={() => {
+				clearParticipantToken()
+				clear()
+				navigate('/login', { replace: true })
+			}}
 			initialExperimentCode={access.experimentCode}
 			initialParticipantCode={access.participantCode}
 		/>
-	);
+	)
 }
 export default function App() {
 	return (

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import aclosing
 from dataclasses import dataclass
+from typing import Protocol
 import json
 
 import httpx
@@ -11,6 +13,23 @@ from fastapi import HTTPException
 
 from app.core.config import settings
 from app.researcher.ai_config import get_system_prompt
+from contextvars import ContextVar
+from contextlib import contextmanager
+
+_request_settings = ContextVar("ai_request_settings", default=None)
+
+
+def current_settings():
+    return _request_settings.get() or settings
+
+
+@contextmanager
+def use_configuration(configuration):
+    token = _request_settings.set(configuration)
+    try:
+        yield
+    finally:
+        _request_settings.reset(token)
 
 
 @dataclass(frozen=True)
@@ -19,19 +38,85 @@ class ChatReply:
     model: str
 
 
+class ChatProvider(Protocol):
+    def validate(self, key: str) -> None: ...
+    async def chat(self, client: httpx.AsyncClient, key: str, payload: dict) -> ChatReply: ...
+    def stream(self, key: str, payload: dict) -> AsyncIterator[dict]: ...
+    def error(self, exc: Exception) -> HTTPException: ...
+
+
+class OpenAICompatibleProvider:
+    def validate(self, key: str) -> None:
+        pass
+
+    def headers(self, key: str) -> dict:
+        return {"Authorization": f"Bearer {key}"}
+
+    def streaming_payload(self, payload: dict) -> dict:
+        return {**payload, "stream": True}
+
+    async def chat(self, client: httpx.AsyncClient, key: str, payload: dict) -> ChatReply:
+        return await _api_key_chat(client, key, payload)
+
+    def stream(self, key: str, payload: dict) -> AsyncIterator[dict]:
+        return _stream_completion(self, key, payload)
+
+    def error(self, exc: Exception) -> HTTPException:
+        return HTTPException(status_code=502, detail="The AI provider request failed. Please retry.")
+
+
+class WorkBuddyProvider(OpenAICompatibleProvider):
+    def validate(self, key: str) -> None:
+        if not key.startswith("wbpk_"):
+            raise HTTPException(status_code=503, detail="WorkBuddy requires its application's wbpk_ publishable key in AI_API_KEY.")
+
+    def headers(self, key: str) -> dict:
+        return {"x-wb-webapp-access-key": key}
+
+    def streaming_payload(self, payload: dict) -> dict:
+        return {**super().streaming_payload(payload), "stream_options": {"include_usage": True}}
+
+    async def chat(self, client: httpx.AsyncClient, key: str, payload: dict) -> ChatReply:
+        return await _workbuddy_chat(client, key, payload)
+
+    def error(self, exc: Exception) -> HTTPException:
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (401, 403):
+            return HTTPException(status_code=503, detail="WorkBuddy rejected server access. Check the application key and cloud access settings.")
+        return super().error(exc)
+
+
+PROVIDERS: dict[str, ChatProvider] = {}
+
+
+def register_provider(name: str, provider: ChatProvider) -> None:
+    if not name or len(name) > 32 or name != name.strip() or name in PROVIDERS:
+        raise ValueError("Provider names must be unique and contain 1–32 characters")
+    PROVIDERS[name] = provider
+
+
+def get_provider() -> ChatProvider:
+    provider = PROVIDERS.get(current_settings().ai_provider)
+    if provider is None:
+        raise HTTPException(status_code=503, detail="The AI provider is not registered. Please contact the researcher.")
+    return provider
+
+
+register_provider("openai_compatible", OpenAICompatibleProvider())
+register_provider("workbuddy", WorkBuddyProvider())
+
+
 async def chat(
     message: str,
     history: list[dict] | None = None,
+    api_key: str | None = None,
 ) -> ChatReply:
     """Build the same context for either provider; credentials stay on the server."""
-    key = validate_configuration()
+    key = validate_configuration(api_key)
     payload = make_payload(message, history)
 
     try:
-        async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
-            if settings.ai_provider == "workbuddy":
-                return await _workbuddy_chat(client, key, payload)
-            return await _api_key_chat(client, key, payload)
+        async with httpx.AsyncClient(timeout=current_settings().ai_timeout_seconds) as client:
+            return await get_provider().chat(client, key, payload)
     except (
         httpx.HTTPError,
         ValueError,
@@ -43,29 +128,25 @@ async def chat(
         raise provider_error(exc) from exc
 
 
-def validate_configuration() -> str:
+def validate_configuration(api_key: str | None = None) -> str:
     """Reject unconfigured providers before starting a streaming response."""
-    key = (settings.ai_api_key or "").strip()
-    if not key or not settings.ai_api_base.strip() or not settings.ai_model.strip():
+    key = (api_key if api_key is not None else current_settings().ai_api_key or "").strip()
+    if not key or not current_settings().ai_api_base.strip() or not current_settings().ai_model.strip():
         raise HTTPException(
             status_code=503,
             detail="The AI provider is not configured. Please contact the researcher.",
         )
-    if settings.ai_provider == "workbuddy" and not key.startswith("wbpk_"):
-        raise HTTPException(
-            status_code=503,
-            detail="WorkBuddy requires its application's wbpk_ publishable key in AI_API_KEY.",
-        )
+    get_provider().validate(key)
 
     return key
 
 
 def make_payload(message: str, history: list[dict] | None = None) -> dict:
     """Only the server owns the model, system prompt and context limits."""
-    if not message.strip() or len(message) > settings.ai_max_prompt_chars:
+    if not message.strip() or len(message) > current_settings().ai_max_prompt_chars:
         raise HTTPException(
             status_code=422,
-            detail=f"Prompt must contain 1–{settings.ai_max_prompt_chars} characters.",
+            detail=f"Prompt must contain 1–{current_settings().ai_max_prompt_chars} characters.",
         )
     filtered = [
         item
@@ -74,66 +155,59 @@ def make_payload(message: str, history: list[dict] | None = None) -> dict:
         and isinstance(item.get("content"), str)
     ]
     bounded = (
-        filtered[-settings.ai_history_messages :]
-        if settings.ai_history_messages
+        filtered[-current_settings().ai_history_messages :]
+        if current_settings().ai_history_messages
         else []
     )
-    messages = [{"role": "system", "content": get_system_prompt()}]
+    messages = [{"role": "system", "content": get_system_prompt(current_settings())}]
     messages.extend(
         {
             "role": item["role"],
-            "content": item["content"][: settings.ai_history_message_chars],
+            "content": item["content"][: current_settings().ai_history_message_chars],
         }
         for item in bounded
     )
     messages.append({"role": "user", "content": message})
-    payload = {"model": settings.ai_model, "messages": messages}
-    if settings.ai_temperature is not None:
-        payload["temperature"] = settings.ai_temperature
+    payload = {"model": current_settings().ai_model, "messages": messages}
+    if current_settings().ai_temperature is not None:
+        payload["temperature"] = current_settings().ai_temperature
     return payload
 
 
 def provider_error(exc: Exception) -> HTTPException:
-    # Never include upstream bodies, URLs or credentials in client errors.
-    if (
-        settings.ai_provider == "workbuddy"
-        and isinstance(exc, httpx.HTTPStatusError)
-        and exc.response.status_code in (401, 403)
-    ):
-        return HTTPException(
-            status_code=503,
-            detail="WorkBuddy rejected server access. Check the application key and cloud access settings.",
-        )
-    return HTTPException(
-        status_code=502, detail="The AI provider request failed. Please retry."
-    )
+    # Adapters must return sanitized errors without upstream bodies or credentials.
+    return get_provider().error(exc)
 
 
 async def stream_chat(
-    message: str, history: list[dict] | None = None
+    message: str, history: list[dict] | None = None, api_key: str | None = None
 ) -> AsyncIterator[dict]:
     """Normalize either provider to local delta/done events; cancellation closes HTTP."""
-    key = validate_configuration()
+    key = validate_configuration(api_key)
     payload = make_payload(message, history)
-    if not settings.ai_stream:
-        reply = await chat(message, history)
+    if not current_settings().ai_stream:
+        reply = await chat(message, history, api_key=api_key) if api_key is not None else await chat(message, history)
         yield {"type": "delta", "text": reply.content, "model": reply.model}
         yield {"type": "done", "model": reply.model}
         return
-    headers = (
-        {"x-wb-webapp-access-key": key}
-        if settings.ai_provider == "workbuddy"
-        else {"Authorization": f"Bearer {key}"}
-    )
-    payload["stream"] = True
-    if settings.ai_provider == "workbuddy":
-        payload["stream_options"] = {"include_usage": True}
-    model, has_text, finished = settings.ai_model, False, False
+    provider = get_provider()
     try:
-        async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
+        async with aclosing(provider.stream(key, payload)) as source:
+            async for event in source:
+                yield event
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
+        raise provider.error(exc) from exc
+
+
+async def _stream_completion(provider: OpenAICompatibleProvider, key: str, payload: dict) -> AsyncIterator[dict]:
+    headers = provider.headers(key)
+    payload = provider.streaming_payload(payload)
+    model, has_text, finished = current_settings().ai_model, False, False
+    try:
+        async with httpx.AsyncClient(timeout=current_settings().ai_timeout_seconds) as client:
             async with client.stream(
                 "POST",
-                settings.ai_api_base,
+                current_settings().ai_api_base,
                 json=payload,
                 headers={**headers, "Accept": "text/event-stream"},
             ) as response:
@@ -158,16 +232,10 @@ async def stream_chat(
                     if "error" in chunk:
                         raise ValueError("Provider stream error")
                     model = _model_name(chunk, model)
-                    for choice in chunk.get("choices", []):
-                        if choice.get("index", 0) != 0:
-                            continue
-                        text = choice.get("delta", {}).get("content")
-                        if text is not None:
-                            if not isinstance(text, str):
-                                raise ValueError("Invalid text delta")
-                            if text:
-                                has_text = True
-                                yield {"type": "delta", "text": text, "model": model}
+                    for text in _text_deltas(chunk, "Invalid text delta"):
+                        if text:
+                            has_text = True
+                            yield {"type": "delta", "text": text, "model": model}
         if not finished or not has_text:
             raise ValueError("Incomplete or empty reply")
         yield {"type": "done", "model": model}
@@ -186,7 +254,7 @@ async def _api_key_chat(
     client: httpx.AsyncClient, key: str, payload: dict
 ) -> ChatReply:
     response = await client.post(
-        settings.ai_api_base,
+        current_settings().ai_api_base,
         json=payload,
         headers={"Authorization": f"Bearer {key}"},
     )
@@ -205,7 +273,7 @@ async def _workbuddy_chat(
     headers = {"x-wb-webapp-access-key": key, "Accept": "text/event-stream"}
     payload = {**payload, "stream": True, "stream_options": {"include_usage": True}}
     async with client.stream(
-        "POST", settings.ai_api_base, json=payload, headers=headers
+        "POST", current_settings().ai_api_base, json=payload, headers=headers
     ) as response:
         response.raise_for_status()
         if (
@@ -215,7 +283,7 @@ async def _workbuddy_chat(
         ):
             raise ValueError("Expected a WorkBuddy event stream")
         parts: list[str] = []
-        model = settings.ai_model
+        model = current_settings().ai_model
         finished = False
         async for event, data in _sse_events(response):
             if event == "error":
@@ -229,19 +297,23 @@ async def _workbuddy_chat(
             if "error" in chunk:
                 raise ValueError("WorkBuddy stream error")
             model = _model_name(chunk, model)
-            # Usage-only chunks can have an empty choices array.
-            for choice in chunk.get("choices", []):
-                if choice.get("index", 0) != 0:
-                    continue
-                text = choice.get("delta", {}).get("content")
-                if text is not None:
-                    if not isinstance(text, str):
-                        raise ValueError("Invalid assistant text")
-                    parts.append(text)
+            parts.extend(_text_deltas(chunk, "Invalid assistant text"))
         content = "".join(parts)
         if not finished or not content.strip():
             raise ValueError("Incomplete or empty WorkBuddy reply")
         return ChatReply(content=content, model=model)
+
+
+def _text_deltas(chunk: dict, error_detail: str) -> Iterator[str]:
+    """Read the first choice; usage-only chunks may contain no choices."""
+    for choice in chunk.get("choices", []):
+        if choice.get("index", 0) != 0:
+            continue
+        text = choice.get("delta", {}).get("content")
+        if text is not None:
+            if not isinstance(text, str):
+                raise ValueError(error_detail)
+            yield text
 
 
 async def _sse_events(response: httpx.Response) -> AsyncIterator[tuple[str, str]]:
@@ -270,5 +342,5 @@ def _model_name(data: dict, fallback: str | None = None) -> str:
     return (
         model
         if isinstance(model, str) and model.strip()
-        else (fallback or settings.ai_model)
+        else (fallback or current_settings().ai_model)
     )

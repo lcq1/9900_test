@@ -1,4 +1,4 @@
-// Shared HTTP layer for authentication, errors, and response parsing.
+import { getParticipantToken } from '../auth/sessionStore'// Shared HTTP layer for authentication, errors, and response parsing.
 import axios from 'axios'
 import { clear, getSession } from '../auth/sessionStore'
 export class HttpError extends Error {
@@ -15,16 +15,34 @@ const apiClient = axios.create({
 })
 apiClient.interceptors.request.use((config) => {
 	const token = getSession()?.token
+	const participantToken =
+		!token &&
+		(config.url?.startsWith('/participant/') || config.url?.split('?')[0] === '/ai/config')
+			? getParticipantToken()
+			: null
+	if (participantToken)
+		config.headers['X-Participant-Token'] = participantToken
 	if (token) config.headers.Authorization = 'Bearer ' + token
 	config.headers['X-Request-Id'] = crypto.randomUUID()
 	return config
 })
 apiClient.interceptors.response.use(
 	(r) => r,
-	(error: unknown) => {
+	async (error: unknown) => {
 		if (axios.isAxiosError(error)) {
 			if (error.response?.status === 401) clear()
-			const detail = error.response?.data?.error?.message ?? error.response?.data?.detail
+			let data = error.response?.data
+			if (data instanceof Blob) {
+				try {
+					data = JSON.parse(await data.text())
+				} catch {
+					data = null
+				}
+			}
+			const rawDetail = data?.error?.message ?? data?.detail
+			const detail = Array.isArray(rawDetail)
+				? [...new Set(rawDetail.map((item: { msg?: string }) => item.msg).filter(Boolean))].slice(0, 3).join('; ')
+				: rawDetail
 			return Promise.reject(
 				new HttpError(
 					typeof detail === 'string'
@@ -46,13 +64,23 @@ export const http = {
 	del: async <T,>(p: string): Promise<T> => (await apiClient.delete<T>(p)).data,
 }
 
-export async function openApiStream(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
+/** Native fetch keeps the backend response streamed and forwards cancellation. */
+export async function openApiStream(
+	path: string,
+	body: unknown,
+	signal?: AbortSignal,
+): Promise<Response> {
 	const token = getSession()?.token
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/json',
 		Accept: 'application/x-ndjson',
 		'X-Request-Id': crypto.randomUUID(),
 	}
+	const participantToken =
+		!token && path.startsWith('/participant/')
+			? getParticipantToken()
+			: null
+	if (participantToken) headers['X-Participant-Token'] = participantToken
 	if (token) headers.Authorization = 'Bearer ' + token
 	const base = (import.meta.env.VITE_API_BASE ?? '/api').replace(/\/$/, '')
 	const response = await fetch(base + path, {
@@ -66,7 +94,9 @@ export async function openApiStream(path: string, body: unknown, signal?: AbortS
 	if (!response.ok) {
 		const data = await response.json().catch(() => null)
 		throw new HttpError(
-			typeof data?.detail === 'string' ? data.detail : 'AI request failed (' + response.status + ').',
+			typeof data?.detail === 'string'
+				? data.detail
+				: 'AI request failed (' + response.status + ').',
 			response.status,
 		)
 	}
@@ -77,7 +107,9 @@ export async function downloadFile(p: string, filename: string): Promise<void> {
 	const url = URL.createObjectURL(r.data)
 	const a = document.createElement('a')
 	a.href = url
-	a.download = filename
+	const disposition = r.headers['content-disposition'] as string | undefined
+	const serverName = disposition?.match(/filename="([^"\r\n]+)"/)?.[1]
+	a.download = serverName?.split(/[\\/]/).pop() || filename
 	document.body.appendChild(a)
 	a.click()
 	a.remove()

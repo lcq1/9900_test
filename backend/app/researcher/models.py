@@ -27,6 +27,7 @@ class Researcher(Base, TimestampMixin):
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), default="researcher")
+    storage_location: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class Experiment(Base):

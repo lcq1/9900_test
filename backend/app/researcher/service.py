@@ -7,6 +7,7 @@ from typing import Any, Optional
 from fastapi import HTTPException, status as http_status
 from sqlalchemy.orm import Session
 
+from app.core.config import require_allowed_email
 from app.core.security import hash_password, verify_password
 from app.researcher import repository as repo
 from app.researcher.models import Experiment, Researcher
@@ -15,6 +16,7 @@ from app.researcher.models import Experiment, Researcher
 def register_researcher(
     db: Session, *, name: str, email: str, password: Optional[str]
 ) -> Researcher:
+    email = require_allowed_email(email)
     if repo.get_researcher_by_email(db, email):
         raise HTTPException(
             status_code=http_status.HTTP_409_CONFLICT,
@@ -27,6 +29,7 @@ def register_researcher(
 
 
 def authenticate(db: Session, email: str, password: str) -> Optional[Researcher]:
+    email = require_allowed_email(email)
     researcher = repo.get_researcher_by_email(db, email)
     if researcher is None or not researcher.password_hash:
         return None
@@ -57,6 +60,8 @@ def create_experiment(
     stages: Optional[list[Any]] = None,
     id: Optional[str] = None,
 ) -> Experiment:
+    if status == "Live":
+        validate_publication(stages or [])
     from secrets import token_hex
 
     code = "EXP-" + token_hex(4).upper()
@@ -89,6 +94,15 @@ def list_experiments(db: Session) -> list[Experiment]:
 
 
 def update_experiment(db: Session, experiment_id: str, **fields: Any) -> Experiment:
+    current = db.query(Experiment).filter_by(id=experiment_id).populate_existing().with_for_update().first()
+    if current is None:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    if fields.get("status") == "Live" and current.status != "Live" and not fields.get("publish"):
+        raise HTTPException(status_code=422, detail="Use Publish to open this experiment for participation")
+    if fields.get("publish"):
+        validate_publication(fields.get("stages", current.stages))
+    if fields.get("publish"):
+        fields["status"] = "Live"
     experiment = repo.update_experiment(db, experiment_id, **fields)
     if experiment is None:
         raise HTTPException(status_code=404, detail="Experiment not found")
@@ -98,3 +112,19 @@ def update_experiment(db: Session, experiment_id: str, **fields: Any) -> Experim
 def delete_experiment(db: Session, experiment_id: str) -> None:
     if not repo.delete_experiment(db, experiment_id):
         raise HTTPException(status_code=404, detail="Experiment not found")
+
+
+def validate_publication(stages: list[dict]) -> None:
+    if not 2 <= len(stages) <= 20 or stages[0].get("type", "").lower() != "consent":
+        raise HTTPException(status_code=422, detail="Publish requires a consent stage followed by at least one study stage")
+    ids = [stage.get("id") for stage in stages]
+    if len(set(ids)) != len(ids) or not all(ids):
+        raise HTTPException(status_code=422, detail="Stage identifiers must be unique")
+    for stage in stages:
+        if not stage.get("name", "").strip() or not stage.get("components"):
+            raise HTTPException(status_code=422, detail="Each stage needs a name and study content")
+        for component in stage["components"]:
+            if not component.get("label", "").strip():
+                raise HTTPException(status_code=422, detail="Study content cannot be blank")
+            if component.get("type") in ("choice", "checkbox", "rating") and not component.get("options"):
+                raise HTTPException(status_code=422, detail="Choice questions require options")

@@ -76,6 +76,8 @@ def get_current_researcher(
     researcher = db.get(Researcher, subject)
     if researcher is None:
         raise CREDENTIALS_EXC
+    from app.core.config import require_allowed_email
+    require_allowed_email(researcher.email)
     return researcher
 
 

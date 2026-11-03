@@ -45,8 +45,8 @@ def legacy_schema_baseline(connection: Connection) -> str | None:
         expected = Base.metadata.tables[name]
         columns = {column["name"]: column for column in inspector.get_columns(name)}
         for column in expected.columns:
-            if name == "experiments" and column.name == "owner_id":
-                continue  # Added by migration 0004 for the original schema.
+            if (name, column.name) in {("experiments", "owner_id"), ("researchers", "storage_location")}:
+                continue  # Added by later migrations, not required in the original schema.
             actual = columns.get(column.name)
             if actual is None:
                 problems.append(f"missing column {name}.{column.name}")

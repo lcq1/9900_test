@@ -26,10 +26,62 @@ STORAGE_DIR = os.path.join(_PROJECT_ROOT, "storage")
 
 def _safe_local_path(path: str) -> str:
     """Map a logical storage path to a safe local filesystem path."""
-    normalised = os.path.normpath(path.lstrip("/"))
-    if normalised.startswith("..") or os.path.isabs(normalised):
+    from pathlib import Path, PurePosixPath
+    location, separator, relative = path.partition(":")
+    if not separator:
+        location, relative = "legacy", path
+    roots = storage_locations()
+    if location not in roots or not relative or "\\" in relative or ":" in relative:
+        raise ValueError("Invalid storage reference")
+    parts = PurePosixPath(relative)
+    if parts.is_absolute() or ".." in parts.parts:
         raise ValueError("Invalid storage path")
-    return os.path.join(STORAGE_DIR, normalised)
+    root = Path(roots[location]).resolve()
+    target = (root / relative).resolve()
+    if not target.is_relative_to(root) or target == root:
+        raise ValueError("Invalid storage path")
+    return str(target)
+
+
+def storage_locations() -> dict[str, str]:
+    import re
+    from pathlib import Path
+    configured = settings.local_storage_dir.strip()
+    root = Path(configured).expanduser() if configured else Path(STORAGE_DIR)
+    if not root.is_absolute():
+        root = Path(_PROJECT_ROOT) / root
+    roots = {"legacy": str(root.resolve())}
+    for name, root in settings.storage_locations.items():
+        if name == "legacy" or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", name) or not Path(root).is_absolute():
+            raise ValueError("Invalid server storage configuration")
+        roots[name] = root
+    return roots
+
+
+def logical_reference(location: str | None, relative: str) -> str:
+    name = location or settings.storage_default_location
+    reference = f"{name}:{relative}"
+    _safe_local_path(reference)
+    return reference
+
+
+def check_location(location: str) -> None:
+    import tempfile
+    from pathlib import Path
+    roots = storage_locations()
+    if location not in roots:
+        raise ValueError("Unknown storage location")
+    root = Path(roots[location])
+    root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryFile(dir=root) as handle:
+        handle.write(b"storage-check")
+        handle.flush()
+
+
+async def delete(path: str) -> None:
+    from pathlib import Path
+    Path(_safe_local_path(path)).unlink(missing_ok=True)
+
 
 
 def _graph_configured() -> bool:
@@ -51,7 +103,7 @@ async def upload(path: str, data: bytes) -> str:
     os.makedirs(os.path.dirname(local), exist_ok=True)
     with open(local, "wb") as handle:
         handle.write(data)
-    return local
+    return path
 
 
 async def download(path: str) -> bytes:

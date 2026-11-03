@@ -1,11 +1,23 @@
 import type { Stage, FeatureKey } from '../types'
-import { Copy, MessageCircle, MonitorPlay, PenLine, TimerReset } from 'lucide-react'
+import {
+	Clock,
+	Copy,
+	MessageCircle,
+	MonitorPlay,
+	Pause,
+	PenLine,
+	ShieldCheck,
+	TimerReset,
+} from 'lucide-react'
 const featureLabels = {
 	ai: { label: 'AI chat', icon: MessageCircle },
 	timer: { label: 'Countdown timer', icon: TimerReset },
+	clock: { label: 'Stage clock', icon: Clock },
 	screenRecording: { label: 'Screen recording', icon: MonitorPlay },
 	copyPaste: { label: 'Copy-paste logging', icon: Copy },
 	signatureBox: { label: 'Signature box', icon: PenLine },
+	confirm: { label: 'Confirm before changing stage', icon: ShieldCheck },
+	pauseAbort: { label: 'Pause and abort controls', icon: Pause },
 }
 
 // Configure stage features; copy/paste logging requires fill-in or short-answer stages.

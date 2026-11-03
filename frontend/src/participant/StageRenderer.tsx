@@ -23,6 +23,13 @@ import { useTimerController, useTransientNotice } from './TimerController'
 import { EventQueue, type ParticipantEvent } from './EventQueue'
 import { readRuntimeProgress, saveRuntimeProgress, type RuntimeProgress } from './ProgressStore'
 import {
+	onStorageDegraded,
+	safeGetItem,
+	safeRemoveItem,
+	safeSetItem,
+	storageDegraded,
+} from './safeStorage'
+import {
 	uploadRecording,
 	submitStage,
 	submitSession,
@@ -34,6 +41,27 @@ import {
   type RecordingKind,
   type RecordingStatus,
 } from './RecordingController'
+
+/**
+ * Wall-clock readout for stages with the clock feature on. It owns its own
+ * interval so a ticking second does not re-render the whole stage, and the
+ * minute display therefore keeps advancing even when no countdown is running.
+ */
+export function StageClock() {
+	const [now, setNow] = useState(() => new Date())
+	useEffect(() => {
+		const id = window.setInterval(() => setNow(new Date()), 1000)
+		return () => window.clearInterval(id)
+	}, [])
+	return (
+		<span className="stage-clock" role="timer" aria-label="Current time">
+			{now.toLocaleTimeString([], {
+				hour: '2-digit',
+				minute: '2-digit',
+			})}
+		</span>
+	)
+}
 
 /**
  * ParticipantPreview — the participant-facing runtime of a single experiment.
@@ -80,7 +108,7 @@ export function ParticipantPreview({
  if (previewOnly || !initialSessionId) return undefined
  const local = readRuntimeProgress(initialSessionId)
  const saved = local && (!initialProgress || local.updatedAt > initialProgress.updatedAt) ? local : initialProgress
- if (saved) for (const [id, deadline] of Object.entries(saved.deadlines ?? {})) localStorage.setItem('p13-timer:' + initialSessionId + ':' + id, String(deadline))
+ if (saved) for (const [id, deadline] of Object.entries(saved.deadlines ?? {})) safeSetItem('p13-timer:' + initialSessionId + ':' + id, String(deadline))
  return saved
 })
 const [conversations] = useState<Record<string, string>>(() => restored?.conversations ?? Object.fromEntries(experiment.stages.map(item => [item.id, crypto.randomUUID()])))
@@ -88,6 +116,8 @@ const checkpointRef = useRef<RuntimeProgress | null>(null)
 const autosaveRef = useRef<Promise<unknown> | null>(null)
 const finishingRef = useRef(false)
 const [syncStatus, setSyncStatus] = useState('')
+const [storageLimited, setStorageLimited] = useState(storageDegraded)
+useEffect(() => onStorageDegraded(setStorageLimited), [])
 	const [confirmation, setConfirmation] = useState<{ target?: number } | null>(null)
 	const extensionUsed = useRef(new Set<string>(Object.keys(restored?.extended ?? {}).filter(id => restored?.extended[id])))
 	const [extended, setExtended] = useState<Record<string, boolean>>(restored?.extended ?? {})
@@ -102,7 +132,32 @@ const [syncStatus, setSyncStatus] = useState('')
 	const [paused, setPaused] = useState(false)
 	const [selections, setSelections] = useState<
 		Record<string, string | string[]>
-	>(restored?.answers ?? {})
+	>(() => {
+		const base: Record<string, string | string[]> = {
+			...(restored?.answers ?? {}),
+		}
+		// A compact checkpoint can drop bulky inline media when browser storage
+		// is full. The event timeline still carries every answer value, so use it
+		// to restore anything missing locally (B2 + B3).
+		for (const event of initialEvents ?? []) {
+			if (event.type !== 'answer') continue
+			const detail = event.detail as {
+				componentId?: string
+				value?: string | string[]
+				consent?: boolean
+			} | undefined
+			const id = detail?.componentId
+			if (!id || base[id] !== undefined) continue
+			const value =
+				detail?.value !== undefined
+					? detail.value
+					: detail?.consent
+						? 'consented'
+						: undefined
+			if (value !== undefined) base[id] = value
+		}
+		return base
+	})
 	// Tracks the chosen file name per attachment component so the UI can show it
 	// after a pick (the actual bytes are recorded into the event timeline).
 	const [attachments, setAttachments] = useState<Record<string, string>>(restored?.attachments ?? {})
@@ -218,6 +273,24 @@ const [syncStatus, setSyncStatus] = useState('')
 	} | null>(restored?.oralStarted && restored.deadlines?.[experiment.stages[restored.stageIndex]?.id] <= Date.now() ? { stageId: experiment.stages[restored.stageIndex].id, recording: { self: true, screen: false } } : null)
 
 	/**
+	 * The COMPLETE current answer state, used for every session submit.
+	 *
+	 * The backend replaces the whole session row on each submit (answers and
+	 * events are deleted first), and a resumed session may have lost local
+	 * events. Deriving answers from the timeline therefore silently dropped
+	 * answers (B3). `selections` is the authoritative client-side state and
+	 * already includes :other values and consent signatures.
+	 */
+	const collectAnswers = useCallback(
+		(): ParticipantAnswer[] =>
+			Object.entries(selections).map(([componentId, value]) => ({
+				componentId,
+				value,
+			})),
+		[selections],
+	)
+
+	/**
 	 * Persist the captured session to the backend, then leave the runtime.
 	 *
 	 * This is the single convergence point for every exit (last-stage Finish,
@@ -251,25 +324,7 @@ const [syncStatus, setSyncStatus] = useState('')
 				return
 			}
 			const events = queue.all()
-			const answers: ParticipantAnswer[] = events
-				.filter(
-					(event) =>
-						event.type === 'answer' && event.detail?.componentId,
-				)
-				.map((event) => {
-					const detail = event.detail as {
-						componentId?: string
-						value?: string | string[]
-						consent?: boolean
-					}
-					const value: string | string[] =
-						detail.value !== undefined
-							? detail.value
-							: detail.consent
-								? 'consented'
-								: ''
-					return { componentId: String(detail.componentId), value }
-				})
+			const answers: ParticipantAnswer[] = collectAnswers()
 			try {
 				await submitSession({
 					sessionId: sessionRef.current
@@ -291,7 +346,7 @@ const [syncStatus, setSyncStatus] = useState('')
 				)
 				return
 			}
-			if (reason === 'finish' && initialSessionId) localStorage.removeItem('p13-runtime:' + initialSessionId)
+			if (reason === 'finish' && initialSessionId) safeRemoveItem('p13-runtime:' + initialSessionId)
 			if (reason === 'finish' && onComplete) onComplete()
 			else onBack()
 		},
@@ -306,6 +361,7 @@ const [syncStatus, setSyncStatus] = useState('')
 			previewOnly,
 			initialSessionId,
 			setRecordingError,
+			collectAnswers,
 		],
 	)
 
@@ -334,7 +390,7 @@ const [syncStatus, setSyncStatus] = useState('')
 useEffect(() => {
  if (previewOnly || !initialSessionId || finishingRef.current) return
  const deadlines: Record<string, number> = {}
- for (const item of experiment.stages) { const value = Number(localStorage.getItem('p13-timer:' + initialSessionId + ':' + item.id)); if (value) deadlines[item.id] = value }
+ for (const item of experiment.stages) { const value = Number(safeGetItem('p13-timer:' + initialSessionId + ':' + item.id)); if (value) deadlines[item.id] = value }
  const progress: RuntimeProgress = { sessionId: initialSessionId, updatedAt: Date.now(), stageIndex, answers: selections, consentedStageId, attachments, extended, oralIndex, oralStarted, deadlines, conversations }
  checkpointRef.current = progress
  saveRuntimeProgress(progress)
@@ -837,14 +893,7 @@ useEffect(() => {
 		<>
 			<div className="participant-meta">
 				<span className="section-tag">{stage.type.toUpperCase()}</span>
-				{stage.features.clock && (
-					<span className="stage-clock">
-						{new Date().toLocaleTimeString([], {
-							hour: '2-digit',
-							minute: '2-digit',
-						})}
-					</span>
-				)}
+				{stage.features.clock && <StageClock />}
 				{stage.features.timer && (
 					<span className="stage-timer">
 						<TimerReset size={13} /> {minutes}:{seconds}
@@ -875,6 +924,14 @@ useEffect(() => {
 				))}
 			{saving && <p role="status">Saving recording…</p>}
 {syncStatus && !saving && <p role="status">{syncStatus}</p>}
+			{storageLimited && (
+				<Alert
+					className="participant-storage-notice"
+					type="warning"
+					showIcon
+					title="Browser storage is full. Progress is still saved to the study server; keep this page open."
+				/>
+			)}
 			{stage.recordingMode === 'auto' &&
 				(wantsScreen || wantsSelfVideo) && (
 					<p>

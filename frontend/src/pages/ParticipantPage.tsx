@@ -167,6 +167,25 @@ export function ParticipantEntry({
 	)
 }
 
+/**
+ * A client id stable for this browser tab across refreshes but unique per tab
+ * (sessionStorage is not shared between tabs). The study server uses it as the
+ * holder of the session lease so two tabs cannot silently share one unfinished
+ * session and overwrite each other's autosaves.
+ */
+function tabClientId(): string {
+	const key = 'p13-client-id'
+	try {
+		const existing = sessionStorage.getItem(key)
+		if (existing) return existing
+		const id = crypto.randomUUID()
+		sessionStorage.setItem(key, id)
+		return id
+	} catch {
+		return crypto.randomUUID()
+	}
+}
+
 export function ParticipantAccessPage({
 	initialExperimentCode = '',
 	initialParticipantCode = '',
@@ -273,6 +292,7 @@ export function ParticipantAccessPage({
 				experiment: Experiment
 			}>('/participant/sessions/start', {
 				sessionId: startId.current,
+				clientId: tabClientId(),
 				experimentCode: active.experiment.code,
 				participantCode: active.participant,
 			})

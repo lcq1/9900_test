@@ -24,6 +24,9 @@ class ParticipantSession(Base):
     participant_code: Mapped[str] = mapped_column(String(128))
     started_at: Mapped[str] = mapped_column(String(64))  # ISO timestamp (server-set)
     finished_at: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Browser-tab lease: only the holding tab may continue an unfinished session.
+    active_client_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class ParticipantEvent(Base):

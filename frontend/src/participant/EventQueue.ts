@@ -9,6 +9,8 @@
  * and exported as a single JSON timeline.
  */
 
+import { safeGetItem, safeSetItem } from './safeStorage'
+
 export type ParticipantEventType =
 	| 'progress_checkpoint'
 	| 'fullscreen_enter'
@@ -85,7 +87,25 @@ export class EventQueue {
 	constructor(sessionId: string, initialEvents: ParticipantEvent[] = []) {
 		this.sessionId = sessionId
 		this.load()
-		if (Math.max(-1, ...initialEvents.map(e => e.seq)) > Math.max(-1, ...this.events.map(e => e.seq))) { this.events = initialEvents; this.seq = Math.max(0, ...initialEvents.map(e => e.seq + 1)); this.save() }
+		if (initialEvents.length) {
+			// On resume the server may hold a newer snapshot, but this browser can
+			// also hold events recorded after the last checkpoint. Replacing the
+			// whole array by max(seq) silently discarded those local events (B3),
+			// which later caused answers to disappear on abort/finish.
+			const merged = new Map<number, ParticipantEvent>()
+			for (const event of this.events) merged.set(event.seq, event)
+			for (const event of initialEvents) {
+				if (!merged.has(event.seq)) merged.set(event.seq, event)
+			}
+			this.events = [...merged.values()].sort((a, b) => a.seq - b.seq)
+			const checkpoints = this.events.filter(e => e.type === 'progress_checkpoint')
+			if (checkpoints.length > 1) {
+				const keep = checkpoints[checkpoints.length - 1]
+				this.events = this.events.filter(e => e.type !== 'progress_checkpoint' || e === keep)
+			}
+			this.seq = Math.max(this.seq, 0, ...this.events.map(e => e.seq + 1))
+			this.save()
+		}
 	}
 
 	private storageKey(): string {
@@ -93,7 +113,7 @@ export class EventQueue {
 	}
 
 	private load(): void {
-		const raw = localStorage.getItem(this.storageKey())
+		const raw = safeGetItem(this.storageKey())
 		if (!raw) return
 		try {
 			const parsed = JSON.parse(raw) as {
@@ -109,7 +129,7 @@ export class EventQueue {
 	}
 
 	private save(): void {
-		localStorage.setItem(
+		safeSetItem(
 			this.storageKey(),
 			JSON.stringify({ events: this.events, seq: this.seq }),
 		)

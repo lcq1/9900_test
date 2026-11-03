@@ -45,7 +45,12 @@ def legacy_schema_baseline(connection: Connection) -> str | None:
         expected = Base.metadata.tables[name]
         columns = {column["name"]: column for column in inspector.get_columns(name)}
         for column in expected.columns:
-            if (name, column.name) in {("experiments", "owner_id"), ("researchers", "storage_location")}:
+            if (name, column.name) in {
+                ("experiments", "owner_id"),
+                ("researchers", "storage_location"),
+                ("participant_sessions", "active_client_id"),
+                ("participant_sessions", "lease_expires_at"),
+            }:
                 continue  # Added by later migrations, not required in the original schema.
             actual = columns.get(column.name)
             if actual is None:

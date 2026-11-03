@@ -2,6 +2,7 @@
 
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 - [File Tree and Responsibilities](#file-tree-and-responsibilities)
 - [Exported Files](#exported-files)
   - [Downloading and Opening Files](#downloading-and-opening-files)
@@ -17,6 +18,30 @@
   - [Storage Variables](#storage-variables)
   - [Frontend Variables](#frontend-variables)
 
+## Quick Start
+
+Prerequisites: Docker Desktop on Windows/macOS, or Docker Engine with the Compose plugin on Linux. A local Node.js or Python installation is not required.
+
+```bash
+cp .env.example .env    # PowerShell: Copy-Item .env.example .env
+# Edit .env: set JWT_SECRET and POSTGRES_PASSWORD, plus any optional AI_* or access values.
+docker compose up -d --build
+```
+
+| Service | Default address | Notes |
+| --- | --- | --- |
+| Frontend | `http://localhost:5173` | Researcher sign-in, experiment builder and participant runtime. |
+| Backend API | `http://localhost:8000/api` | Health probe: `http://localhost:8000/api/healthz`. |
+| PostgreSQL | `localhost:5432` | Change `POSTGRES_PORT` (for example to `5433`) when the host port is already in use; the container port stays `5432`. |
+
+Verify the stack, then open the frontend and register the first researcher account:
+
+```bash
+curl http://localhost:8000/api/healthz   # {"status":"ok"}
+```
+
+The backend image runs `alembic upgrade head` before serving, so the schema is created on first boot. Stop the stack with `docker compose down`; add `-v` only when you intend to discard stored data. Every supported variable is documented under [Environment Configuration](#environment-configuration); deployment-specific values belong in `.env` and must never be committed.
+
 ## File Tree and Responsibilities
 
 Paths are relative to this directory. Generated dependencies, build output, runtime data, Git internals, and document-folder contents are omitted. Python `__init__.py` files mark packages.
@@ -24,14 +49,9 @@ Paths are relative to this directory. Generated dependencies, build output, runt
 ```text
 project/
 |-- README.md                              # File responsibilities, exports, and environment reference
-|-- CHANGELOG.md                           # Change history and verification records
-|-- CONFIGURATION.md                       # Additional configuration reference
 |-- Plan.md                                # Project requirements and implementation plan
-|-- Dev_Task_List_By_11_Requirements.md     # Requirement-based development task list
-|-- Dev_Task_List_Client_Requirements.md    # Client requirement task list
 |-- .env                                   # Local deployment values and secrets; not for source control
 |-- .env.example                           # Configuration template with placeholders
-|-- .editorconfig                          # Shared editor formatting settings
 |-- .gitignore                             # Source-control exclusions
 |-- .gitlab-ci.yml                         # Continuous integration configuration
 |-- docker-compose.yml                     # Frontend, backend, PostgreSQL, ports, and persistent volumes
@@ -314,6 +334,17 @@ The defaults below describe the checked-in backend/Compose configuration, not th
 
 When the allowlist is enabled, an email must match an allowed address or domain. Empty lists deny all accounts, including requests using existing researcher tokens.
 
+#### Client access
+
+To admit the client account while keeping registration otherwise closed:
+
+```dotenv
+ACCESS_ALLOWLIST_ENABLED=true
+ALLOWED_EMAILS=k.alqattan@unsw.edu.au
+```
+
+Exact-address matching ignores case and surrounding whitespace. `ALLOWED_DOMAINS=unsw.edu.au` admits the whole domain; subdomains such as `ad.unsw.edu.au` are matched separately and must be listed explicitly. Settings are cached for the process lifetime, so restart the backend after editing `.env`. Registration and login both apply the same check, and a rejected address receives `403` with a message naming the allowlist.
+
 ### AI Variables
 
 | Variable | Purpose and default behavior |
@@ -347,7 +378,7 @@ For WorkBuddy, use `AI_PROVIDER=workbuddy`, the application's `wbpk_` publishabl
 | `ONEDRIVE_CLIENT_SECRET` | Optional Microsoft Graph client secret. |
 | `ONEDRIVE_TENANT_ID` | Optional Microsoft Graph tenant ID. |
 
-Storage locations are configured on the server; Workspace settings does not provide a storage-location selector. Existing saved researcher storage preferences remain applicable. A directory outside the default storage volume needs its own persistent mount in a container deployment. The Microsoft Graph variables apply to the optional storage helper; they do not automatically replace all local recording/material storage.
+Storage locations are configured on the server, and each researcher picks one of the configured names in Workspace settings → Storage. The choice is stored per researcher and validated against the server configuration, and the backend probes it for writability before accepting it (422 for an unknown name, 507 when the directory is not writable). Only new files use the new location; previously saved files stay where they are. A directory outside the default storage volume needs its own persistent mount in a container deployment. The Microsoft Graph variables apply to the optional storage helper; they do not automatically replace all local recording/material storage.
 
 ### Frontend Variables
 

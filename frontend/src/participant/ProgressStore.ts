@@ -5,6 +5,8 @@
  * resumed and so the researcher can later inspect collected responses.
  */
 
+import { safeGetItem, safeSetItem } from './safeStorage'
+
 export type AnswerValue = string | string[]
 
 export interface CollectedAnswers {
@@ -33,7 +35,7 @@ export class ProgressStore {
 	}
 
 	private load(): void {
-		const raw = localStorage.getItem(this.storageKey())
+		const raw = safeGetItem(this.storageKey())
 		if (!raw) return
 		try {
 			const parsed = JSON.parse(raw) as ProgressSnapshot
@@ -51,7 +53,7 @@ export class ProgressStore {
 			stageIndex: this.stageIndexValue,
 			answers: this.answersValue,
 		}
-		localStorage.setItem(this.storageKey(), JSON.stringify(snapshot))
+		safeSetItem(this.storageKey(), JSON.stringify(snapshot))
 	}
 
 	/** The current 0-based stage index. */
@@ -105,16 +107,37 @@ export function readRuntimeProgress(
 ): RuntimeProgress | undefined {
 	try {
 		return (
-			JSON.parse(localStorage.getItem('p13-runtime:' + sessionId) ?? 'null') ??
+			JSON.parse(safeGetItem('p13-runtime:' + sessionId) ?? 'null') ??
 			undefined
 		)
 	} catch {
 		return undefined
 	}
 }
+/** Detail above this size is a base64 attachment or signature image. */
+const CHECKPOINT_VALUE_LIMIT = 4096
+
+/**
+ * If durable storage is full, keep the navigation/deadline state but drop the
+ * bulky inline media from the local checkpoint. The full values remain in the
+ * event timeline, which is autosaved to the study server.
+ */
+function compactProgress(progress: RuntimeProgress): RuntimeProgress {
+	const answers: CollectedAnswers = {}
+	for (const [id, value] of Object.entries(progress.answers)) {
+		const oversized = Array.isArray(value)
+			? value.some((item) => item.length > CHECKPOINT_VALUE_LIMIT)
+			: value.length > CHECKPOINT_VALUE_LIMIT
+		if (!oversized) answers[id] = value
+	}
+	return { ...progress, answers }
+}
+
 export function saveRuntimeProgress(progress: RuntimeProgress): void {
-	localStorage.setItem(
-		'p13-runtime:' + progress.sessionId,
+	const key = 'p13-runtime:' + progress.sessionId
+	safeSetItem(
+		key,
 		JSON.stringify(progress),
+		JSON.stringify(compactProgress(progress)),
 	)
 }

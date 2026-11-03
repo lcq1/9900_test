@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type SetStateAction } from 'react'
+import { safeGetItem, safeSetItem } from './safeStorage'
 
 /** Hide feedback after its fade without clearing errors used by retry guards. */
 export function useTransientNotice<T>(initial: T) {
@@ -45,7 +46,7 @@ export function useTimerController({
 }: TimerControllerOptions) {
 	const readDeadline = useCallback(
 		() =>
-			storageKey ? Number(localStorage.getItem(storageKey)) || null : null,
+			storageKey ? Number(safeGetItem(storageKey)) || null : null,
 		[storageKey],
 	)
 	const [remaining, setRemaining] = useState(() => {
@@ -59,13 +60,27 @@ export function useTimerController({
 		let deadline = readDeadline()
 		if (!deadline && enabled) {
 			deadline = Date.now() + initialSeconds * 1000
-			localStorage.setItem(storageKey, String(deadline))
+			safeSetItem(storageKey, String(deadline))
 		}
+		let last = Date.now()
 		const update = () => {
-			deadline = readDeadline()
+			const now = Date.now()
+			const elapsed = now - last
+			last = now
+			const stored = readDeadline()
+			if (stored && !enabled) {
+				// Paused / interaction-locked: shift the persisted absolute
+				// deadline forward by the elapsed time instead of letting it run
+				// out. The visible countdown freezes, and the deadline written to
+				// storage stays correct for a resume after a page refresh.
+				deadline = stored + elapsed
+				safeSetItem(storageKey, String(deadline))
+			} else {
+				deadline = stored
+			}
 			setRemaining(
 				deadline
-					? Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+					? Math.max(0, Math.ceil((deadline - now) / 1000))
 					: initialSeconds,
 			)
 		}
@@ -86,7 +101,7 @@ export function useTimerController({
 		setRemaining((previous) => {
 			const next = typeof value === 'function' ? value(previous) : value
 			if (storageKey)
-				localStorage.setItem(storageKey, String(Date.now() + next * 1000))
+				safeSetItem(storageKey, String(Date.now() + next * 1000))
 			return next
 		})
 	}

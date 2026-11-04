@@ -2733,18 +2733,26 @@ nav {
 	line-height: 1.6;
 	overflow-wrap: anywhere;
 }
+/* The AI card previously used a two-column "description left, form right" grid.
+   The left column only held a short heading + one paragraph, leaving a tall
+   empty gutter (the reported wasted space). Collapse to a single column: the
+   heading becomes a compact full-width header and the form fills the card, so
+   no horizontal space is reserved for an empty sidebar. */
 .workspace-settings-page .ai-settings-card {
 	grid-column: 1 / -1;
-	grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
-	gap: 32px;
 	border-top: 3px solid #2563eb;
 }
-.workspace-settings-page .settings-card-heading,
-.ai-key-controls {
+.workspace-settings-page .ai-settings-card .settings-card-heading {
+	gap: 6px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--line);
+}
+.workspace-settings-page .ai-settings-card .ai-key-controls {
 	display: grid;
-	gap: 14px;
+	gap: 16px;
 	min-width: 0;
 	align-content: start;
+	margin-top: 4px;
 }
 .workspace-settings-page [role="status"]:empty {
 	display: none;

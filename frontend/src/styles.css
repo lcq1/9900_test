@@ -248,6 +248,9 @@ nav {
 .main-content {
 	margin-left: 238px;
 	min-width: 0;
+	width: calc(100% - 238px);
+	max-width: calc(100% - 238px);
+	overflow-x: clip;
 }
 .topbar {
 	height: 70px;
@@ -1018,13 +1021,15 @@ nav {
 }
 .participant-top {
 	height: 62px;
-	padding: 0 42px;
+	padding: env(safe-area-inset-top, 0px) calc(42px + env(safe-area-inset-right, 0px)) 0 42px;
 	background: #fff;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	color: #6b7785;
 	font-size: 11px;
+	min-height: calc(62px + env(safe-area-inset-top, 0px));
+	box-sizing: border-box;
 }
 .preview-label {
 	color: var(--green);
@@ -1150,6 +1155,10 @@ nav {
 	gap: 14px;
 	color: #8a96a4;
 	font-size: 10px;
+	position: sticky;
+	bottom: 0;
+	background: #fff;
+	box-shadow: 0 -2px 12px rgba(30, 58, 95, 0.06);
 }
 .auth-screen {
 	min-height: 100vh;
@@ -2429,6 +2438,8 @@ nav {
 .ai-sidebar {
 	min-width: 0;
 	position: relative;
+	padding-top: env(safe-area-inset-top, 0px);
+	box-sizing: border-box;
 }
 .ai-sidebar .ai-chat {
 	margin: 0;
@@ -3436,6 +3447,11 @@ select:focus-visible,
 .results-chart-visual {
 	padding: 12px 0;
 }
+.results-chart-visual svg {
+	max-width: 100%;
+	height: auto;
+	display: block;
+}
 .results-chart-data {
 	max-height: 400px;
 	overflow: auto;
@@ -3491,6 +3507,20 @@ select:focus-visible,
 .results-page .results-note {
 	line-height: 1.7;
 }
+@media (max-width: 1280px) {
+	.results-page .results-chart-card {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 20px;
+	}
+	.results-page .stats-row {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.results-chart-visual {
+		width: 100%;
+		max-width: 760px;
+		margin: auto;
+	}
+}
 @media (max-width: 1100px) {
 	.results-page .results-chart-card {
 		grid-template-columns: minmax(0, 1fr);
@@ -3536,11 +3566,12 @@ select:focus-visible,
 }
 .participant-view:not(:has(form.entry-card)) .participant-top {
 	height: auto;
-	min-height: 62px;
+	min-height: calc(62px + env(safe-area-inset-top, 0px));
 	gap: 16px;
 	background: white;
 	border-bottom: 1px solid #e5e8f0;
-	padding: 22px 32px;
+	padding: calc(22px + env(safe-area-inset-top, 0px)) calc(32px + env(safe-area-inset-right, 0px)) 22px 32px;
+	box-sizing: border-box;
 }
 .participant-view:not(:has(form.entry-card)) .participant-body {
 	width: 100%;
@@ -3552,6 +3583,19 @@ select:focus-visible,
 .participant-view:not(:has(form.entry-card))
 	.participant-body:has(.consent-columns) {
 	max-width: 1500px;
+}
+/* Projector / low-resolution safeguard: never clip the participant flow,
+   allow the page to scroll so nothing is unreachable. */
+@media (max-width: 1024px) {
+	.participant-body {
+		max-width: 100%;
+		padding: 28px 16px 56px;
+		overflow-x: visible;
+	}
+	.participant-view:not(:has(form.entry-card)) .participant-body {
+		max-width: 100%;
+		padding: 28px 16px 56px;
+	}
 }
 .participant-view:not(:has(form.entry-card)) .participant-card,
 .participant-view:not(:has(form.entry-card)) .ai-sidebar {

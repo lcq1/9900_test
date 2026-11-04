@@ -315,6 +315,8 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 			...event,
 			elapsedMs: start ? event.epochMs - start : 0,
 			order: index + 1,
+			sessionId: s.id,
+			sessionLabel: s.experimentName,
 		}))
 	})
 	const totalEvents = allEvents.length
@@ -401,6 +403,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 							pie: 'Event mix',
 							scatter: 'Event order',
 							histogram: 'Elapsed time',
+							timeline: 'Session timelines',
 						}).map(([type, title]) => (
 							<option key={type} value={type}>
 								{title}
@@ -419,6 +422,8 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 							<Doughnut segments={segments} total={totalEvents} />
 						) : chart === 'line' ? (
 							<ActivityLine events={allEvents} />
+						) : chart === 'timeline' ? (
+							<SessionTimeline events={allEvents} />
 						) : (
 							<ResultPlot
 								chart={chart}
@@ -441,7 +446,13 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 							<tbody>
 								{segments.map((s) => (
 									<tr key={s.label}>
-										<td>{s.label}</td>
+										<td>
+											<i
+												className="type-swatch"
+												style={{ background: s.color }}
+											/>
+											{s.label}
+										</td>
 										<td>{s.count}</td>
 									</tr>
 								))}
@@ -1270,34 +1281,45 @@ export function WorkspaceSettingsPage({
 	)
 }
 
+type TimelineEvent = ParticipantEvent & {
+	elapsedMs?: number
+	order?: number
+	sessionId?: string
+	sessionLabel?: string
+}
+
+/** Elapsed milliseconds since the session's own first event (0 when unknown). */
+const elapsedOfEvent = (event: TimelineEvent) =>
+	Number.isFinite(event.elapsedMs) && (event.elapsedMs ?? 0) >= 0
+		? (event.elapsedMs as number)
+		: Math.max(0, event.epochMs)
+
+/** Compact duration for axis ticks: raw millisecond values ("13143656.7ms")
+ *  collide into an unreadable smear; "3h 39m" carries the same information in
+ *  a fraction of the width. */
+function fmtElapsed(ms: number): string {
+	const totalSeconds = Math.round(ms / 1000)
+	if (totalSeconds < 1) return '0s'
+	if (totalSeconds < 60) return `${totalSeconds}s`
+	const minutes = Math.floor(totalSeconds / 60)
+	const rest = totalSeconds % 60
+	if (minutes < 60) return rest ? `${minutes}m ${rest}s` : `${minutes}m`
+	const hours = Math.floor(minutes / 60)
+	const minutesRest = minutes % 60
+	return minutesRest ? `${hours}h ${minutesRest}m` : `${hours}h`
+}
+
 function ResultPlot({
 	chart,
 	events,
 	segments,
 }: {
 	chart: string
-	events: (ParticipantEvent & { elapsedMs?: number; order?: number })[]
+	events: TimelineEvent[]
 	segments: { label: string; count: number }[]
 }) {
-	const elapsedOf = (event: ParticipantEvent & { elapsedMs?: number }) =>
-		Number.isFinite(event.elapsedMs) && (event.elapsedMs ?? 0) >= 0
-			? (event.elapsedMs as number)
-			: Math.max(0, event.epochMs)
-	const maxElapsed = Math.max(1, ...events.map(elapsedOf))
+	const maxElapsed = Math.max(1, ...events.map(elapsedOfEvent))
 	const maxOrder = Math.max(1, ...events.map((event) => event.order ?? 1))
-	// Raw millisecond bin labels ("13143656.7ms") collide into an unreadable
-	// smear; compact durations carry the same information in far less width.
-	const fmtElapsed = (ms: number) => {
-		const totalSeconds = Math.round(ms / 1000)
-		if (totalSeconds < 1) return '0s'
-		if (totalSeconds < 60) return `${totalSeconds}s`
-		const minutes = Math.floor(totalSeconds / 60)
-		const rest = totalSeconds % 60
-		if (minutes < 60) return rest ? `${minutes}m ${rest}s` : `${minutes}m`
-		const hours = Math.floor(minutes / 60)
-		const minutesRest = minutes % 60
-		return minutesRest ? `${hours}h ${minutesRest}m` : `${hours}h`
-	}
 
 	const W = 600
 	const H = 280
@@ -1314,7 +1336,7 @@ function ResultPlot({
 		count: 0,
 	}))
 	events.forEach((event) => {
-		bins[Math.min(9, Math.floor((elapsedOf(event) / maxElapsed) * 10))]
+		bins[Math.min(9, Math.floor((elapsedOfEvent(event) / maxElapsed) * 10))]
 			.count++
 	})
 	const data = chart === 'histogram' ? bins : segments
@@ -1385,7 +1407,7 @@ function ResultPlot({
 					{events.map((event, i) => (
 						<circle
 							key={i}
-							cx={LEFT + (elapsedOf(event) / maxElapsed) * plotW}
+							cx={LEFT + (elapsedOfEvent(event) / maxElapsed) * plotW}
 							cy={
 								BOTTOM -
 								((event.order ?? 1) / maxOrder) * plotH
@@ -1394,7 +1416,7 @@ function ResultPlot({
 							fill="#2563eb"
 						>
 							<title>
-								{event.type} · {fmtElapsed(elapsedOf(event))} ·
+								{event.type} · {fmtElapsed(elapsedOfEvent(event))} ·
 								event {event.order ?? event.seq}
 							</title>
 						</circle>
@@ -1448,6 +1470,134 @@ function ResultPlot({
 					</g>
 				))
 			)}
+		</svg>
+	)
+}
+
+/**
+ * Per-session event raster ("Session timelines"): one horizontal row per
+ * captured session, x = elapsed time since that session's own first event,
+ * each dot = one event coloured by its type. It is the closest visual match
+ * to the client's "precise single-clock timeline" requirement: it shows when
+ * bursts happen inside each session and lets a researcher compare pacing
+ * across sessions on one shared elapsed-time axis.
+ */
+function SessionTimeline({ events }: { events: TimelineEvent[] }) {
+	const groups = new Map<
+		string,
+		{ id: string; label: string; events: TimelineEvent[] }
+	>()
+	events.forEach((event) => {
+		const id = event.sessionId ?? 'session'
+		const group = groups.get(id) ?? {
+			id,
+			label: event.sessionLabel ?? 'Session',
+			events: [],
+		}
+		group.events.push(event)
+		groups.set(id, group)
+	})
+	const sessions = [...groups.values()].sort(
+		(a, b) => (a.events[0]?.epochMs ?? 0) - (b.events[0]?.epochMs ?? 0),
+	)
+	const maxElapsed = Math.max(1, ...events.map(elapsedOfEvent))
+
+	const W = 600
+	const LEFT = 124
+	const RIGHT = 590
+	const TOP = 34
+	const rowH = Math.max(14, Math.min(26, 220 / Math.max(1, sessions.length)))
+	const BOTTOM = TOP + sessions.length * rowH
+	const H = BOTTOM + 44
+	const plotW = RIGHT - LEFT
+	const fractions = [0, 0.25, 0.5, 0.75, 1]
+
+	return (
+		<svg
+			viewBox={`0 0 ${W} ${H}`}
+			role="img"
+			aria-label="timeline chart"
+			style={{ width: '100%', maxHeight: 320 }}
+		>
+			<text x={LEFT} y="14" fontSize="12" fontWeight="600" fill="#1e293b">
+				Session timelines
+			</text>
+			{sessions.map((session, row) => {
+				const cy = TOP + row * rowH + rowH / 2
+				return (
+					<g key={session.id}>
+						<text
+							x={LEFT - 8}
+							y={cy + 3}
+							fontSize="9"
+							textAnchor="end"
+							fill="#475569"
+						>
+							{`${session.label} · ${session.id.slice(0, 6)}`.slice(
+								0,
+								24,
+							)}
+						</text>
+						<line
+							x1={LEFT}
+							x2={RIGHT}
+							y1={cy}
+							y2={cy}
+							stroke="#eef2f7"
+						/>
+						{session.events.map((event, i) => (
+							<circle
+								key={i}
+								cx={
+									LEFT +
+									(elapsedOfEvent(event) / maxElapsed) * plotW
+								}
+								cy={cy}
+								r="3"
+								fill={
+									TYPE_META[event.type]?.color ?? '#64748b'
+								}
+							>
+								<title>
+									{TYPE_META[event.type]?.label ?? event.type}{' '}
+									· {fmtElapsed(elapsedOfEvent(event))} ·
+									event {event.order ?? event.seq}
+								</title>
+							</circle>
+						))}
+					</g>
+				)
+			})}
+			<line
+				x1={LEFT}
+				x2={RIGHT}
+				y1={TOP - 8}
+				y2={TOP - 8}
+				stroke="#cbd5e1"
+			/>
+			<line x1={LEFT} x2={LEFT} y1={TOP - 8} y2={BOTTOM} stroke="#cbd5e1" />
+			<line x1={LEFT} x2={RIGHT} y1={BOTTOM} y2={BOTTOM} stroke="#cbd5e1" />
+			{fractions.map((fraction) => (
+				<text
+					key={fraction}
+					x={LEFT + fraction * plotW}
+					y={BOTTOM + 16}
+					fontSize="9"
+					textAnchor="middle"
+					fill="#64748b"
+				>
+					{fmtElapsed(fraction * maxElapsed)}
+				</text>
+			))}
+			<text
+				x={(LEFT + RIGHT) / 2}
+				y={BOTTOM + 32}
+				fontSize="9"
+				textAnchor="middle"
+				fill="#64748b"
+			>
+				Elapsed time since each session started
+			</text>
 		</svg>
 	)
 }

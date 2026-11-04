@@ -1842,7 +1842,7 @@ nav {
 	background: #fff;
 	color: var(--ink);
 	font: inherit;
-	font-size: 13px;
+	font-size: 14px;
 	font-weight: 400;
 }
 .options-editor > label > select:focus-visible {
@@ -2486,18 +2486,19 @@ nav {
 .settings-field label {
 	display: block;
 	color: #6b7785;
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 600;
 	margin-bottom: 7px;
 }
 .settings-field input,
-.settings-field select {
+.settings-field select,
+.settings-field textarea {
 	width: 100%;
 	box-sizing: border-box;
 	border: 1px solid #dde6f0;
 	border-radius: 6px;
 	padding: 11px 12px;
-	font-size: 13px;
+	font-size: 14px;
 	outline-color: var(--green);
 }
 .settings-row {
@@ -2513,7 +2514,7 @@ nav {
 }
 .settings-hint {
 	color: #8a96a4;
-	font-size: 11px;
+	font-size: 12px;
 	line-height: 1.6;
 }
 .danger-button {
@@ -2786,7 +2787,16 @@ nav {
 	border: 1px solid var(--line);
 	border-radius: 6px;
 	font: inherit;
+	font-size: 14px;
 	resize: vertical;
+}
+/* Bare status/description paragraphs inside the AI key controls otherwise
+   inherit the 18px root size and clash with the compact form typography. */
+.ai-key-controls p:not(.settings-hint) {
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--text);
+	margin: 0;
 }
 @media (max-width: 600px) {
 	.ai-parameter-grid { grid-template-columns: minmax(0, 1fr); }
@@ -2832,7 +2842,7 @@ nav {
 }
 .settings-card .card-sub {
 	color: var(--muted);
-	font-size: 11px;
+	font-size: 12px;
 	margin: 0 0 14px;
 }
 .pref-row {
@@ -2857,8 +2867,22 @@ nav {
 }
 .pref-row small {
 	color: var(--muted);
-	font-size: 11px;
+	font-size: 12px;
 	line-height: 1.5;
+}
+/* Role/permission pills on the workspace settings page render as soft
+   badges instead of loose gray text (the shared .pill dot style used by
+   dashboard/admin status rows stays untouched). */
+.workspace-settings-page .pill {
+	background: var(--green-soft);
+	color: var(--navy);
+	border-radius: 999px;
+	padding: 3px 10px;
+	font-size: 12px;
+	font-weight: 600;
+}
+.workspace-settings-page .switch-label {
+	font-size: 12px;
 }
 .stat-mini {
 	display: grid;
@@ -2916,7 +2940,7 @@ nav {
 }
 .member-info small {
 	color: var(--muted);
-	font-size: 11px;
+	font-size: 12px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -3123,9 +3147,14 @@ nav {
 	--control-radius: 8px;
 	--space-unit: 8px;
 }
+/* Unified readable dropdown size across the app (options inherit it).
+   Kept as font-family/line-height inherit instead of the `font: inherit`
+   shorthand so the 14px control size is not reset to the parent text size. */
 select,
 option {
-	font: inherit;
+	font-family: inherit;
+	line-height: inherit;
+	font-size: 14px;
 	color: var(--text);
 }
 button,
@@ -3216,7 +3245,7 @@ select:focus-visible,
 	background: #fff;
 	color: var(--ink);
 	font: inherit;
-	font-size: 13px;
+	font-size: 14px;
 	font-weight: 400;
 }
 .editor-grid > .right-panel > label > textarea {

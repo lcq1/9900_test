@@ -18,7 +18,7 @@ import {
 	streamChat,
 	LlmCallError,
 } from '../src/api/participant'
-import { createStage, type Experiment } from "../src/types";
+import { createStage, type Experiment, type Stage } from "../src/types";
 import { AIChat } from "../src/participant/AIChat";
 import {
 	useTimerController,
@@ -684,10 +684,10 @@ describe('participant runtime', () => {
 			fireEvent.click(
 				screen.getByRole('button', { name: 'Finish', exact: true }),
 			)
-			expect(
-				container.querySelector('.participant-validation')
-					?.nextElementSibling?.className,
-			).toBe('step-eyebrow')
+		expect(
+			container.querySelector('.participant-validation')
+				?.nextElementSibling?.className,
+		).toBe('participant-question-layout')
 			act(() => vi.advanceTimersByTime(2000))
 			expect(screen.getByRole('alert')).toBeDefined()
 			fireEvent.click(
@@ -1555,4 +1555,69 @@ it('records integer event times when clock synchronization has a half-millisecon
 		expect(new Date(event.timestamp).getTime()).toBe(event.epochMs)
 		expect(queue.all().every(item => Number.isInteger(item.epochMs))).toBe(true)
 	} finally { now.mockRestore() }
+})
+
+describe('questionnaire question-number panel and validation', () => {
+	function qStage(id: string, name: string, required: boolean): Stage {
+		const stage = createStage('short_answer')
+		stage.id = id
+		stage.name = name
+		stage.features = {
+			...stage.features, timer: false, clock: false,
+			screenRecording: false, copyPaste: false, navigation: false,
+		}
+		stage.components = [{ id: `${id}-q`, type: 'textbox', label: `${name} question`, required }]
+		return stage
+	}
+
+	it('shows a left panel listing every question and marks answered ones green in real time', () => {
+		const experiment: Experiment = {
+			id: 'q', code: 'Q-1', name: 'Questionnaire study', status: 'Live',
+			created: '', fullScreen: false,
+			stages: [qStage('s1', 'First question', true), qStage('s2', 'Second question', true)],
+		}
+		const { container } = render(
+			<ParticipantPreview experiment={experiment} participantCode="Q-TEST" previewOnly onBack={() => {}} />,
+		)
+		const items = container.querySelectorAll('.qnav-item')
+		expect(items.length).toBe(2)
+		expect(items[0].classList.contains('done')).toBe(false)
+		expect(items[1].classList.contains('done')).toBe(false)
+		fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'done' } })
+		expect(items[0].classList.contains('done')).toBe(true)
+		expect(items[1].classList.contains('done')).toBe(false)
+	})
+
+	it('lets the participant jump between questions from the panel without enabling the navigation feature', async () => {
+		const experiment: Experiment = {
+			id: 'q', code: 'Q-1', name: 'Questionnaire study', status: 'Live',
+			created: '', fullScreen: false,
+			stages: [qStage('s1', 'First question', true), qStage('s2', 'Second question', true)],
+		}
+		const { container } = render(
+			<ParticipantPreview experiment={experiment} participantCode="Q-TEST" previewOnly onBack={() => {}} />,
+		)
+		const items = container.querySelectorAll('.qnav-item')
+		expect(items[1].disabled).toBe(false)
+		fireEvent.click(items[1])
+		await screen.findByText('Step 2 · Second question')
+		expect(items[1].classList.contains('current')).toBe(true)
+	})
+
+	it('blocks continue on missing answers with a modal and highlights the unanswered question in red', async () => {
+		const experiment: Experiment = {
+			id: 'q', code: 'Q-1', name: 'Questionnaire study', status: 'Live',
+			created: '', fullScreen: false, stages: [qStage('solo', 'Only question', true)],
+		}
+		const { container } = render(
+			<ParticipantPreview experiment={experiment} participantCode="Q-TEST" previewOnly onBack={() => {}} />,
+		)
+		expect(screen.queryByText('Some questions still need answers')).toBeNull()
+		fireEvent.click(screen.getByRole('button', { name: 'Finish', exact: true }))
+		expect(await screen.findByText('Some questions still need answers')).toBeTruthy()
+		expect(container.querySelector('.ms-question.missing-required')).not.toBeNull()
+		fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
+		fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'done' } })
+		expect(container.querySelector('.ms-question.missing-required')).toBeNull()
+	})
 })

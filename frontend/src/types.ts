@@ -22,8 +22,6 @@ export type StageComponent = {
 	required?: boolean
 	options?: string[]
 	otherOption?: string
-	// Read-only text presentation hint: 'heading' renders as a bold block title, 'li' as a tight list item.
-	variant?: 'heading' | 'li'
 }
 // Stage metadata, components, features, and countdown settings.
 export type Stage = {
@@ -105,6 +103,8 @@ export function createStage(type: string = "single_choice"): Stage {
 		id,
 		name: 'Stage name',
 		type,
+		// New consent stages default to a handwritten signature; clauses are only needed for 'name'.
+		...(consent ? { signingMethod: 'handwritten' as const } : {}),
 		duration: 0,
 		components,
 		countdownMinutes: consent ? 0 : 2,
@@ -309,94 +309,121 @@ const clientContent = {
   "If one part of your chosen approach couldn't be done as planned, what would you change, and why?"
  ],
  "instructions": {
-  "1": [
-   { kind: "p", text: "Welcome, and thank you for taking part in this study. In this session, you will work on a design task using an AI assistant, and then explain your design." },
-   { kind: "p", text: "The session takes about two hours. You can take a break if you need one, and you may stop at any time." },
-   { kind: "p", text: "You will now be shown the participant information and consent form. Please read it and confirm your consent electronically to begin. You may ask the researcher any questions first." }
-  ],
-  "3": [
-   { kind: "h", text: "Before you start, please read the following:" },
-   { kind: "li", text: "You will work on a design task, as you would in a real design activity." },
-   { kind: "li", text: "Your work will be assessed afterwards against design criteria, and you will receive feedback on your reasoning to help you improve." },
-   { kind: "li", text: "Please treat it seriously and work through it properly." },
-   { kind: "li", text: "You may use the AI assistant however you normally would, use it as much or as little as you like." },
-   { kind: "li", text: "Your work is for this research only. It will not affect any grade, and no names are attached to your answers." },
-   { kind: "p", text: "Please complete the questionnaires on the next screens before the task begins." }
-  ],
-  "5": [
-   { kind: "p", text: "The researcher will now help you put on the sensors for the study. These are comfortable and non-invasive:" },
-   { kind: "li", text: "A wristband on your wrist, which records your heart rate and skin activity." },
-   { kind: "li", text: "A headband, which records brain activity (EEG)." },
-   { kind: "li", text: "An eye-tracker on the screen, which follows where you look. You do not wear this; it sits on the computer." },
-   { kind: "p", text: "Once the sensors are fitted, we will record a short baseline for a couple of minutes while you sit and relax, before the task begins." },
-   { kind: "p", text: "Please let the researcher know if anything feels uncomfortable at any point. You can ask to adjust or remove any sensor, and you may still take part. When everything is ready, we will move on to the task." }
-  ],
-  "6": [
-   { kind: "p", text: "You will now work on the design task." },
-   { kind: "li", text: "You have 60 minutes to complete this task. A timer is shown, and you may ask for more time if you need it (maximum 30 minutes extra)." },
-   { kind: "li", text: "An AI assistant is available on the screen. You may use it as you wish." },
-   { kind: "li", text: "Write your answer in the space provided, and click Submit when you are finished." },
-   { kind: "li", text: "Work through the task the way that feels natural to you." },
-   { kind: "p", text: "When you are ready, click Start to see the task." }
-  ],
-  "8": [
-   { kind: "p", text: "Thank you for submitting your design. For the next part, the AI assistant is turned off. You will now explain your design in your own words." },
-   { kind: "p", text: "You will be shown a few questions, one at a time, and asked to record a short spoken answer to each using the camera and microphone. There are no right or wrong answers, we would just like to hear your thinking." },
-   { kind: "p", text: "Take a moment to think before you answer each question. You have a maximum of 10 minutes to answer all the questions. Click Continue when you are ready. Read the questions, and the recording will start once you are ready." }
-  ],
-  "11": [
-   { kind: "p", text: "That's the end of the session. Thank you very much for taking part." },
-   { kind: "p", text: "Please wait while the researcher removes the equipment and confirms your data is saved. Please do not close this page yet." },
-   { kind: "p", text: "You will receive feedback on your design reasoning afterwards, and you may contact the research team at any time if you have questions." }
-  ]
+  "3": `Before you start, please read the following:
+• You will work on a design task, as you would in a real design activity.
+• Your work will be assessed afterwards against design criteria, and you will receive feedback on your reasoning to help you improve.
+• Please treat it seriously and work through it properly.
+• You may use the AI assistant however you normally would, use it as much or as little as you like.
+• Your work is for this research only. It will not affect any grade, and no names are attached to your answers.
+
+Please complete the questionnaires on the next screens before the task begins.`,
+  "5": `The researcher will now help you put on the sensors for the study. These are comfortable and non-invasive:
+• A wristband on your wrist, which records your heart rate and skin activity.
+• A headband, which records brain activity (EEG).
+• An eye-tracker on the screen, which follows where you look. You do not wear this; it sits on the computer.
+
+Once the sensors are fitted, we will record a short baseline for a couple of minutes while you sit and relax, before the task begins.
+
+Please let the researcher know if anything feels uncomfortable at any point. You can ask to adjust or remove any sensor, and you may still take part. When everything is ready, we will move on to the task.`,
+  "6": `You will now work on the design task.
+• You have 60 minutes to complete this task. A timer is shown, and you may ask for more time if you need it (maximum 30 minutes extra).
+• An AI assistant is available on the screen. You may use it as you wish.
+• Write your answer in the space provided, and click Submit when you are finished.
+• Work through the task the way that feels natural to you.
+
+When you are ready, click Start to see the task.`,
+  "8": `Thank you for submitting your design. For the next part, the AI assistant is turned off. You will now explain your design in your own words.
+
+You will be shown a few questions, one at a time, and asked to record a short spoken answer to each using the camera and microphone. There are no right or wrong answers, we would just like to hear your thinking.
+
+Take a moment to think before you answer each question. You have a maximum of 10 minutes to answer all the questions. Click Continue when you are ready. Read the questions, and the recording will start once you are ready.`,
+  "11": `That's the end of the session. Thank you very much for taking part.
+
+Please wait while the researcher removes the equipment and confirms your data is saved. Please do not close this page yet.
+
+You will receive feedback on your design reasoning afterwards, and you may contact the research team at any time if you have questions.`
  },
- "consentForm": {
-  "title": "CAMPUS STUDY SPACE FINDER — CONSENT FORM",
-  "subtitle": "Project: Real-Time Campus Study Space Finder\nResearcher / System owner: Kholoud Alqattan, UNSW\nEthics approval reference: [e.g., ETH-XXXX — insert if approved]",
-  "sections": [
-   { heading: "1. What this system does (Purpose)", body: "This system helps students find a free and suitable study space on campus in real time. It shows you which study areas are currently available and matches them to your preferences (for example, quiet versus group space, power outlets, opening hours)." },
-   { heading: "2. Why your participation matters", body: "Students often lose valuable study time walking between buildings looking for a seat. By sharing anonymous availability information, you help build a live map that benefits the whole campus — and you get a faster way to find your own space." },
-   { heading: "3. What taking part involves", body: "• Opening the app or web tool on your device.\n• Allowing the app to detect your on-campus location while it is active.\n• Optionally marking a space as \"free\" or \"full\" when you leave.\nThat is the entire commitment — no surveys are required to use the core feature." },
-   { heading: "4. Data we collect", body: "• Coarse on-campus location (building / zone level), obtained via device location services only while the app is open, so we know which zone has free space.\n• Space status you report (free / full), from your taps, to keep the live map accurate.\n• Anonymous usage analytics (counts, session durations) from app logs, to measure and improve the service.\n• Email / account (optional), only if you create a profile, to save your preferences.\nWe do NOT collect your name, exact GPS movement tracks, message content, or anything outside the app." },
-   { heading: "5. How your data is used", body: "• To display live study-space availability to you and other students.\n• In aggregated, de-identified form for campus planning analysis.\n• Never sold to or shared with third parties for marketing or advertising." },
-   { heading: "6. Privacy and security", body: "Location is collected only while the app is active and you are on campus, and is reduced to zone level to avoid revealing your exact movements. All data is encrypted in transit and at rest, with access limited to the research team. We minimise retention: we keep counts and zones, not personal trails." },
-   { heading: "7. Voluntary participation and withdrawal", body: "Taking part is entirely voluntary. You can stop location sharing at any time by closing the app or toggling the setting off. To delete any data linked to you, contact us (below), and we will remove it within [X] working days." },
-   { heading: "8. Risks and benefits", body: "Benefits: less time spent hunting for a seat; better use of existing campus space.\nRisks: like any location feature, there is a small privacy risk if location data were exposed. We mitigate this by using zone-level data and encryption. No significant physical, legal, or financial risk is expected." },
-   { heading: "9. Data retention", body: "We retain aggregated, de-identified data for the duration of the project ([e.g., until end of Semester YYYY]) and then delete or fully anonymise it." },
-   { heading: "10. Contact", body: "Questions, concerns, or withdrawal requests:\n• Research contact: [researcher email]\n• Ethics office: [ethics office contact]" },
-   { heading: "CONSENT", body: "By signing below, you confirm that you have read and understood this form, that your participation is voluntary, and that you consent to the collection and use of your data as described above." }
-  ]
- },
- "design": [
-  { kind: "p", text: "Design a system that helps students find a free study space on campus in real time." },
-  { kind: "p", text: "Students often waste time walking around campus looking for somewhere suitable to study. Your task is to design a system that tells them where a free and suitable space is available, in real time." },
-  { kind: "h", text: "In your answer, please:" },
-  { kind: "li", text: "1. Explain the problem as you understand it, including who it affects, why it matters, and what makes a space \"suitable\"." },
-  { kind: "li", text: "2. Consider at least two different approaches to solving it, and explain the strengths and weaknesses of each." },
-  { kind: "li", text: "3. Choose one approach and justify why you chose it." },
-  { kind: "li", text: "4. Address the trade-offs between cost, accuracy, and privacy." },
-  { kind: "p", text: "You are not expected to build the system or write any code. You have 60 minutes to complete the task, with one 30-minute extension available with researcher approval, and you may use the AI assistant as you wish." }
- ]
+ "consentText": `Welcome, and thank you for taking part in this study. In this session, you will work on a design task using an AI assistant, and then explain your design.
+
+The session takes about two hours. You can take a break if you need one, and you may stop at any time.
+
+You will now be shown the participant information and consent form. Please read it and confirm your consent electronically to begin. You may ask the researcher any questions first.
+
+CAMPUS STUDY SPACE FINDER — CONSENT FORM
+
+Project: Real-Time Campus Study Space Finder
+Researcher / System owner: Kholoud Alqattan, UNSW
+Ethics approval reference: [e.g., ETH-XXXX — insert if approved]
+
+1. What this system does (Purpose)
+This system helps students find a free and suitable study space on campus in real time. It shows you which study areas are currently available and matches them to your preferences (for example, quiet versus group space, power outlets, opening hours).
+
+2. Why your participation matters
+Students often lose valuable study time walking between buildings looking for a seat. By sharing anonymous availability information, you help build a live map that benefits the whole campus — and you get a faster way to find your own space.
+
+3. What taking part involves
+• Opening the app or web tool on your device.
+• Allowing the app to detect your on-campus location while it is active.
+• Optionally marking a space as "free" or "full" when you leave.
+That is the entire commitment — no surveys are required to use the core feature.
+
+4. Data we collect
+• Coarse on-campus location (building / zone level), obtained via device location services only while the app is open, so we know which zone has free space.
+• Space status you report (free / full), from your taps, to keep the live map accurate.
+• Anonymous usage analytics (counts, session durations) from app logs, to measure and improve the service.
+• Email / account (optional), only if you create a profile, to save your preferences.
+We do NOT collect your name, exact GPS movement tracks, message content, or anything outside the app.
+
+5. How your data is used
+• To display live study-space availability to you and other students.
+• In aggregated, de-identified form for campus planning analysis.
+• Never sold to or shared with third parties for marketing or advertising.
+
+6. Privacy and security
+Location is collected only while the app is active and you are on campus, and is reduced to zone level to avoid revealing your exact movements. All data is encrypted in transit and at rest, with access limited to the research team. We minimise retention: we keep counts and zones, not personal trails.
+
+7. Voluntary participation and withdrawal
+Taking part is entirely voluntary. You can stop location sharing at any time by closing the app or toggling the setting off. To delete any data linked to you, contact us (below), and we will remove it within [X] working days.
+
+8. Risks and benefits
+Benefits: less time spent hunting for a seat; better use of existing campus space.
+Risks: like any location feature, there is a small privacy risk if location data were exposed. We mitigate this by using zone-level data and encryption. No significant physical, legal, or financial risk is expected.
+
+9. Data retention
+We retain aggregated, de-identified data for the duration of the project until the end of 2026 and then delete or fully anonymise it.
+
+10. Contact
+Questions, concerns, or withdrawal requests:
+• Research contact: [researcher email]
+• Ethics office: [ethics office contact]
+
+CONSENT
+
+By signing below, you confirm that you have read and understood this form, that your participation is voluntary, and that you consent to the collection and use of your data as described above.`,
+ "design": `Design a system that helps students find a free study space on campus in real time.
+
+Students often waste time walking around campus looking for somewhere suitable to study. Your task is to design a system that tells them where a free and suitable space is available, in real time.
+
+In your answer, please:
+1. Explain the problem as you understand it, including who it affects, why it matters, and what makes a space "suitable".
+2. Consider at least two different approaches to solving it, and explain the strengths and weaknesses of each.
+3. Choose one approach and justify why you chose it.
+4. Address the trade-offs between cost, accuracy, and privacy.
+
+You are not expected to build the system or write any code. You have 60 minutes to complete the task, with one 30-minute extension available with researcher approval, and you may use the AI assistant as you wish.`
 }
 
 export function createClientStages(consent: Stage): Stage[] {
  const component = (c: Omit<StageComponent, 'id'>): StageComponent => ({ ...c, id: crypto.randomUUID() })
  const make = (name: string, type: string, components: Omit<StageComponent, 'id'>[]): Stage => ({ ...createStage(type), name, components: components.map(component), countdownMinutes: 0, features: { ...createStage(type).features, timer: false, screenRecording: false, selfie: false } })
- // Structured text blocks: 'h' = section heading, 'li' = tight list item, 'p' = normal paragraph.
- type Block = { kind: string; text: string }
- const textBlock = (b: Block): Omit<StageComponent, 'id'> => ({ type: 'text', label: b.text, ...(b.kind === 'h' ? { variant: 'heading' as const } : b.kind === 'li' ? { variant: 'li' as const } : {}) })
- const blocks = (list: Block[]): StageComponent[] => list.map(textBlock).map(component)
- const info = (name: string, list: Block[]): Stage => make(name, 'instruction', list.map(textBlock))
- // The client's full consent form, loaded verbatim as heading + body blocks so it stays readable.
- const consentFormBlocks: Omit<StageComponent, 'id'>[] = [
-  { type: 'text', label: clientContent.consentForm.title, variant: 'heading' },
-  { type: 'text', label: clientContent.consentForm.subtitle },
-  ...clientContent.consentForm.sections.flatMap(s => [{ type: 'text' as const, label: s.heading, variant: 'heading' as const }, { type: 'text' as const, label: s.body }]),
- ]
- const welcome = { ...consent, name: 'Read and sign the consent form', signingMethod: 'name' as const, features: { ...consent.features, navigation: false }, components: [...blocks(clientContent.instructions['1']), ...consentFormBlocks.map(component), ...consent.components.filter(c => c.type !== 'text')] }
- const design = make('Design task', 'short_answer', [...clientContent.design.map(textBlock), { type: 'textbox' as const, label: 'Your design', required: true }].map(component))
+ const info = (name: string, content: string) => make(name, 'instruction', [{ type: 'text', label: content }])
+ // One fully editable text block per stage keeps the researcher editor complete (the consent
+ // text and question stem fields bind to it); line breaks and bullets render participant-side
+ // through the pre-wrap text style, so nothing is trimmed away or hidden in extra components.
+ const welcome = { ...consent, name: 'Read and sign the consent form', signingMethod: 'handwritten' as const, features: { ...consent.features, navigation: false }, components: [component({ type: 'text', label: clientContent.consentText }), ...consent.components.filter(c => c.type !== 'text')] }
+ const design = make('Design task', 'short_answer', [{ type: 'text', label: clientContent.design }, { type: 'textbox', label: 'Your design', required: true }])
  design.countdownMinutes = 60; design.allowExtension = true; design.features = { ...design.features, timer: true, ai: true, screenRecording: true, copyPaste: true, confirm: true }
  const oral = make('Recorded explanation', 'video_oral_answer', clientContent.oral.map(label => ({ type: 'text', label })))
  oral.countdownMinutes = 10; oral.sequentialQuestions = true; oral.recordingRequired = true; oral.recordingMode = 'manual'; oral.features = { ...oral.features, timer: true, selfie: true, ai: false }
- return [welcome, info('Before the task', clientContent.instructions['3']), make('Background questionnaire', 'single_choice', clientContent.background as Omit<StageComponent, 'id'>[]), make('Personality questionnaire (BFI-2)', 'single_choice', [{ type: 'text', label: 'I am someone who…', variant: 'heading' }, { type: 'text', label: 'BFI-2 items copyright 2015 by Oliver P. John and Christopher J. Soto. Used for non-commercial research. Soto, C. J., & John, O. P. (2017). Journal of Personality and Social Psychology, 113, 117–143.', variant: 'li' }, ...clientContent.personality as Omit<StageComponent, 'id'>[]]), info('Sensor setup and baseline', clientContent.instructions['5']), info('Task instructions', clientContent.instructions['6']), design, info('Before the explanation', clientContent.instructions['8']), oral, make('Self-report questionnaire', 'multiple_choice', clientContent.post as Omit<StageComponent, 'id'>[]), info('Finish', clientContent.instructions['11'])]
+ return [welcome, info('Before the task', clientContent.instructions['3']), make('Background questionnaire', 'single_choice', clientContent.background as Omit<StageComponent, 'id'>[]), make('Personality questionnaire (BFI-2)', 'single_choice', [{ type: 'text', label: 'I am someone who…\nBFI-2 items copyright 2015 by Oliver P. John and Christopher J. Soto. Used for non-commercial research. Soto, C. J., & John, O. P. (2017). Journal of Personality and Social Psychology, 113, 117–143.' }, ...clientContent.personality as Omit<StageComponent, 'id'>[]]), info('Sensor setup and baseline', clientContent.instructions['5']), info('Task instructions', clientContent.instructions['6']), design, info('Before the explanation', clientContent.instructions['8']), oral, make('Self-report questionnaire', 'multiple_choice', clientContent.post as Omit<StageComponent, 'id'>[]), info('Finish', clientContent.instructions['11'])]
 }

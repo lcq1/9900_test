@@ -1,4 +1,12 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+/* Global box-model reset. Without it every width+padding combination
+   (e.g. .results-page width:100% + side padding) silently renders wider
+   than its container and gets clipped at the viewport edge. */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
 /* Theme colors and typography. */
 :root {
 	--text: #1f2933;

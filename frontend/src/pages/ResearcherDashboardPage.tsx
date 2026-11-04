@@ -299,9 +299,24 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 	const visibleSessions = sessions.filter(
 		(s) => !experimentCode || s.experimentCode === experimentCode,
 	)
-	const allEvents = visibleSessions
-		.flatMap((s) => s.events)
-		.filter((event) => Number.isFinite(event.epochMs) && event.epochMs > 0)
+	// Per-session timeline anchors: elapsedMs is relative to the session's own
+	// first event (single-clock sub-second timeline), order is the 1-based
+	// sequence within the session. Elapsed against the GLOBAL first event would
+	// squash every session into one narrow band when several sessions are
+	// selected, which is what made the scatter/histogram unreadable.
+	const allEvents = visibleSessions.flatMap((s) => {
+		const valid = s.events.filter(
+			(event) => Number.isFinite(event.epochMs) && event.epochMs > 0,
+		)
+		const start = valid.length
+			? Math.min(...valid.map((e) => e.epochMs))
+			: 0
+		return valid.map((event, index) => ({
+			...event,
+			elapsedMs: start ? event.epochMs - start : 0,
+			order: index + 1,
+		}))
+	})
 	const totalEvents = allEvents.length
 	const typeCount = new Set(allEvents.map((e) => e.type)).size
 	const segments = [...new Set(allEvents.map((e) => e.type))].map((type) => ({
@@ -1261,72 +1276,178 @@ function ResultPlot({
 	segments,
 }: {
 	chart: string
-	events: ParticipantEvent[]
+	events: (ParticipantEvent & { elapsedMs?: number; order?: number })[]
 	segments: { label: string; count: number }[]
 }) {
-	const min = Math.min(...events.map((e) => e.epochMs))
-	const span = Math.max(1, Math.max(...events.map((e) => e.epochMs)) - min)
+	const elapsedOf = (event: ParticipantEvent & { elapsedMs?: number }) =>
+		Number.isFinite(event.elapsedMs) && (event.elapsedMs ?? 0) >= 0
+			? (event.elapsedMs as number)
+			: Math.max(0, event.epochMs)
+	const maxElapsed = Math.max(1, ...events.map(elapsedOf))
+	const maxOrder = Math.max(1, ...events.map((event) => event.order ?? 1))
+	// Raw millisecond bin labels ("13143656.7ms") collide into an unreadable
+	// smear; compact durations carry the same information in far less width.
+	const fmtElapsed = (ms: number) => {
+		const totalSeconds = Math.round(ms / 1000)
+		if (totalSeconds < 1) return '0s'
+		if (totalSeconds < 60) return `${totalSeconds}s`
+		const minutes = Math.floor(totalSeconds / 60)
+		const rest = totalSeconds % 60
+		if (minutes < 60) return rest ? `${minutes}m ${rest}s` : `${minutes}m`
+		const hours = Math.floor(minutes / 60)
+		const minutesRest = minutes % 60
+		return minutesRest ? `${hours}h ${minutesRest}m` : `${hours}h`
+	}
+
+	const W = 600
+	const H = 280
+	const LEFT = 55
+	const RIGHT = 590
+	const TOP = 22
+	const BOTTOM = 200
+	const plotW = RIGHT - LEFT
+	const plotH = BOTTOM - TOP
+
+	// Histogram bins over the per-session elapsed timeline (0 → last event).
 	const bins = Array.from({ length: 10 }, (_, i) => ({
-		label: `${((i * span) / 10).toFixed(1)}ms`,
+		label: fmtElapsed((i * maxElapsed) / 10),
 		count: 0,
 	}))
-	events.forEach(
-		(e) =>
-			bins[Math.min(9, Math.floor(((e.epochMs - min) / span) * 10))]
-				.count++,
-	)
+	events.forEach((event) => {
+		bins[Math.min(9, Math.floor((elapsedOf(event) / maxElapsed) * 10))]
+			.count++
+	})
 	const data = chart === 'histogram' ? bins : segments
 	const peak = Math.max(1, ...data.map((d) => d.count))
+
+	const title =
+		chart === 'scatter'
+			? 'Event sequence by elapsed time'
+			: chart === 'histogram'
+				? 'Elapsed time to each event'
+				: 'Event count'
+
+	const barX = (i: number) => LEFT + 4 + (i * plotW) / data.length
+	const barWidth = Math.max(2, plotW / data.length - 8)
+	const barTop = (count: number) => BOTTOM - (count / peak) * plotH
+	const fractions = [0.25, 0.5, 0.75, 1]
+	// Rotated 40° with an end anchor so long category names stop colliding
+	// with their neighbours (the root cause of the "garbled" axis text).
+	const tickLabel = (x: number, text: string) => (
+		<text
+			transform={`rotate(-40 ${x} ${BOTTOM + 16})`}
+			x={x}
+			y={BOTTOM + 16}
+			fontSize="9"
+			textAnchor="end"
+			fill="#475569"
+		>
+			{text}
+		</text>
+	)
+
 	return (
 		<svg
-			viewBox="0 0 600 240"
+			viewBox={`0 0 ${W} ${H}`}
 			role="img"
 			aria-label={`${chart} chart`}
 			style={{ width: '100%', maxHeight: 320 }}
 		>
-			<text x="30" y="16">
-				{chart === 'scatter'
-					? 'Event sequence by elapsed time'
-					: 'Event count'}
+			<text x={LEFT} y="14" fontSize="12" fontWeight="600" fill="#1e293b">
+				{title}
 			</text>
-			{chart === 'scatter'
-				? events.map((e, i) => (
+			{fractions.map((fraction) => (
+				<g key={fraction}>
+					<line
+						x1={LEFT}
+						x2={RIGHT}
+						y1={BOTTOM - fraction * plotH}
+						y2={BOTTOM - fraction * plotH}
+						stroke="#e8eef5"
+					/>
+					<text
+						x={LEFT - 6}
+						y={BOTTOM - fraction * plotH + 3}
+						fontSize="9"
+						textAnchor="end"
+						fill="#64748b"
+					>
+						{chart === 'scatter'
+							? Math.round(maxOrder * fraction)
+							: Math.round(peak * fraction)}
+					</text>
+				</g>
+			))}
+			<line x1={LEFT} x2={RIGHT} y1={BOTTOM} y2={BOTTOM} stroke="#cbd5e1" />
+			<line x1={LEFT} x2={LEFT} y1={TOP} y2={BOTTOM} stroke="#cbd5e1" />
+			{chart === 'scatter' ? (
+				<>
+					{events.map((event, i) => (
 						<circle
 							key={i}
-							cx={30 + ((e.epochMs - min) / span) * 540}
+							cx={LEFT + (elapsedOf(event) / maxElapsed) * plotW}
 							cy={
-								205 - (i / Math.max(1, events.length - 1)) * 170
+								BOTTOM -
+								((event.order ?? 1) / maxOrder) * plotH
 							}
 							r="3"
 							fill="#2563eb"
 						>
 							<title>
-								{e.type}: {e.timestamp}, sequence {e.seq}
+								{event.type} · {fmtElapsed(elapsedOf(event))} ·
+								event {event.order ?? event.seq}
 							</title>
 						</circle>
-					))
-				: data.map((d, i) => (
-						<g key={i}>
-							<rect
-								x={30 + (i * 540) / data.length}
-								y={205 - (d.count / peak) * 170}
-								width={Math.max(2, 500 / data.length)}
-								height={(d.count / peak) * 170}
-								fill="#2563eb"
-							>
-								<title>
-									{d.label}: {d.count}
-								</title>
-							</rect>
-							<text
-								x={30 + (i * 540) / data.length}
-								y="225"
-								fontSize="9"
-							>
-								{d.label.slice(0, 12)}
-							</text>
-						</g>
 					))}
+					{[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
+						<text
+							key={fraction}
+							x={LEFT + fraction * plotW}
+							y={BOTTOM + 16}
+							fontSize="9"
+							textAnchor="middle"
+							fill="#64748b"
+						>
+							{fmtElapsed(fraction * maxElapsed)}
+						</text>
+					))}
+					<text
+						x={(LEFT + RIGHT) / 2}
+						y={BOTTOM + 32}
+						fontSize="9"
+						textAnchor="middle"
+						fill="#64748b"
+					>
+						Elapsed time since each session started
+					</text>
+				</>
+			) : (
+				data.map((d, i) => (
+					<g key={i}>
+						<rect
+							x={barX(i)}
+							y={barTop(d.count)}
+							width={barWidth}
+							height={BOTTOM - barTop(d.count)}
+							fill="#2563eb"
+						>
+							<title>
+								{d.label}: {d.count}
+							</title>
+						</rect>
+						<text
+							x={barX(i) + barWidth / 2}
+							y={barTop(d.count) - 4}
+							fontSize="9"
+							textAnchor="middle"
+							fill="#475569"
+						>
+							{d.count > 0 ? d.count : ''}
+						</text>
+						{tickLabel(barX(i) + barWidth / 2, d.label.slice(0, 12))}
+					</g>
+				))
+			)}
 		</svg>
 	)
 }

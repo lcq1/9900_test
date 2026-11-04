@@ -257,6 +257,7 @@ it('edits and resets the common AI configuration', async () => {
 	const get = vi.spyOn(http, 'get').mockResolvedValue(status)
 	const save = vi.spyOn(http, 'patch').mockResolvedValue({ ...status, hasCustomSettings: true })
 	const remove = vi.spyOn(http, 'del').mockResolvedValue(status)
+	const testConnection = vi.spyOn(http, 'post').mockResolvedValue(undefined)
 	try {
 		render(<ExperimentAIKeySettings experiments={[]} />)
 		expect((screen.getByLabelText('Experiment') as HTMLSelectElement).value).toBe('__common__')
@@ -268,10 +269,13 @@ it('edits and resets the common AI configuration', async () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Save AI settings' }))
 		await screen.findByText('Common AI configuration saved.')
 		expect(save).toHaveBeenCalledWith('/workspace/ai-config', expect.objectContaining({ model: 'common-model' }))
+		fireEvent.click(screen.getByRole('button', { name: 'Test saved connection' }))
+		await screen.findByText('The AI provider returned a reply using the saved configuration.')
+		expect(testConnection).toHaveBeenCalledWith('/workspace/ai-config/test')
 		fireEvent.click(screen.getByRole('button', { name: 'Use server default' }))
 		await screen.findByText('Common configuration reset to server defaults.')
 		expect(remove).toHaveBeenCalledWith('/workspace/ai-config')
-	} finally { get.mockRestore(); save.mockRestore(); remove.mockRestore() }
+	} finally { get.mockRestore(); save.mockRestore(); remove.mockRestore(); testConnection.mockRestore() }
 })
 
 vi.mock('antd', () => ({

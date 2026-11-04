@@ -1433,7 +1433,7 @@ describe('recording capture and upload', () => {
 
 describe('researcher results', () => {
 	afterEach(cleanup)
-	it('switches all five chart types and requests the selected experiment', async () => {
+	it('switches all six chart types and requests the selected experiment', async () => {
 		const { ResultsPage } =
 			await import('../src/pages/ResearcherDashboardPage')
 		const { EventQueue } = await import('../src/participant/EventQueue')
@@ -1456,6 +1456,7 @@ describe('researcher results', () => {
 			['pie', 'Event mix'],
 			['scatter', 'scatter chart'],
 			['histogram', 'histogram chart'],
+			['timeline', 'timeline chart'],
 		]) {
 			fireEvent.change(screen.getByLabelText('Chart type'), {
 				target: { value },

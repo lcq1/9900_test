@@ -129,10 +129,18 @@ code {
 	--lime: #2563eb;
 	--orange: #c0564a;
 	--navy: #1e3a5f;
+	/* Shared horizontal rhythm: every workspace page (researcher overview,
+	   visualization results, participant preview) uses the same side padding
+	   so the left/right whitespace is identical across the three views. */
+	--page-pad: clamp(20px, 3vw, 56px);
 }
 .app-shell {
 	min-height: 100vh;
+	max-width: 100%;
 	background: #f6f8fb;
+	/* Hard guard: no page may ever grow wider than the viewport, so no
+	   content can be pushed past the right edge and get truncated. */
+	overflow-x: clip;
 }
 .sidebar {
 	box-sizing: border-box;
@@ -254,7 +262,7 @@ nav {
 }
 .topbar {
 	height: 70px;
-	padding: 0 42px;
+	padding: 0 var(--page-pad);
 	border-bottom: 1px solid var(--line);
 	display: flex;
 	justify-content: space-between;
@@ -306,7 +314,7 @@ nav {
 	color: var(--green);
 }
 .page {
-	padding: 46px 6vw 70px;
+	padding: 46px var(--page-pad) 70px;
 	max-width: 1400px;
 	margin: auto;
 }
@@ -337,9 +345,9 @@ nav {
 }
 .page-heading h1 {
 	font:
-		600 37px "Space Grotesk",
+		600 32px "Space Grotesk",
 		sans-serif;
-	letter-spacing: -1.3px;
+	letter-spacing: -1px;
 	margin: 9px 0 4px;
 }
 .subheading {
@@ -1021,7 +1029,9 @@ nav {
 }
 .participant-top {
 	height: 62px;
-	padding: env(safe-area-inset-top, 0px) calc(42px + env(safe-area-inset-right, 0px)) 0 42px;
+	padding: env(safe-area-inset-top, 0px)
+		calc(var(--page-pad) + env(safe-area-inset-right, 0px)) 0
+		var(--page-pad);
 	background: #fff;
 	display: flex;
 	align-items: center;
@@ -1041,7 +1051,7 @@ nav {
 .participant-body {
 	max-width: 730px;
 	margin: auto;
-	padding: 47px 20px;
+	padding: 47px var(--page-pad);
 }
 .participant-progress {
 	display: flex;
@@ -2927,7 +2937,7 @@ nav {
 }
 .chart-card h3 {
 	font:
-		600 14px "Space Grotesk",
+		600 15px "Space Grotesk",
 		sans-serif;
 	margin: 0 0 4px;
 	color: var(--navy);
@@ -3354,8 +3364,8 @@ select:focus-visible,
 /* Keep result filters, charts and counts readable across workspace widths. */
 .results-page {
 	width: 100%;
-	max-width: 1600px;
-	padding: 40px clamp(20px, 3vw, 56px) 56px;
+	max-width: 1400px;
+	padding: 40px var(--page-pad) 56px;
 }
 .results-page .page-heading {
 	margin-bottom: 28px;
@@ -3482,6 +3492,16 @@ select:focus-visible,
 .results-chart-data tbody tr:hover {
 	background: #f6f8fc;
 }
+/* Shared event-type colour key: same swatch colours the doughnut and the
+   per-session timeline dots, so a colour can be read back from this table. */
+.type-swatch {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 2px;
+	margin-right: 8px;
+	vertical-align: baseline;
+}
 .results-page .chart-doughnut {
 	flex-wrap: wrap;
 	justify-content: center;
@@ -3507,13 +3527,14 @@ select:focus-visible,
 .results-page .results-note {
 	line-height: 1.7;
 }
-@media (max-width: 1280px) {
+/* Below a 1440px viewport the two-column chart + table layout starts to
+   squeeze on a laptop screen; stack it so the results table (and its Count
+   column) is always fully visible instead of being clipped at the right
+   edge. Large monitors keep the side-by-side chart/table pairing. */
+@media (max-width: 1440px) {
 	.results-page .results-chart-card {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 20px;
-	}
-	.results-page .stats-row {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 	.results-chart-visual {
 		width: 100%;
@@ -3521,15 +3542,9 @@ select:focus-visible,
 		margin: auto;
 	}
 }
-@media (max-width: 1100px) {
-	.results-page .results-chart-card {
-		grid-template-columns: minmax(0, 1fr);
-		gap: 20px;
-	}
-	.results-chart-visual {
-		width: 100%;
-		max-width: 760px;
-		margin: auto;
+@media (max-width: 1280px) {
+	.results-page .stats-row {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 }
 @media (max-width: 760px) {
@@ -3570,14 +3585,16 @@ select:focus-visible,
 	gap: 16px;
 	background: white;
 	border-bottom: 1px solid #e5e8f0;
-	padding: calc(22px + env(safe-area-inset-top, 0px)) calc(32px + env(safe-area-inset-right, 0px)) 22px 32px;
+	padding: calc(22px + env(safe-area-inset-top, 0px))
+		calc(var(--page-pad) + env(safe-area-inset-right, 0px)) 22px
+		var(--page-pad);
 	box-sizing: border-box;
 }
 .participant-view:not(:has(form.entry-card)) .participant-body {
 	width: 100%;
 	min-width: 0;
 	max-width: 1000px;
-	padding: 32px 24px 64px;
+	padding: 32px var(--page-pad) 64px;
 }
 .participant-view:not(:has(form.entry-card)) .participant-body-wide,
 .participant-view:not(:has(form.entry-card))
@@ -3610,7 +3627,9 @@ select:focus-visible,
 .participant-view:not(:has(form.entry-card)) h1 {
 	overflow-wrap: anywhere;
 	color: #161922;
-	font-size: 28px;
+	font-size: 32px;
+	letter-spacing: -1px;
+	line-height: 1.2;
 	margin-bottom: 24px;
 }
 .participant-view:not(:has(form.entry-card)) p {

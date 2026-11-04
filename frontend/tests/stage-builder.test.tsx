@@ -875,7 +875,7 @@ it('excludes Consent from selectable stage types and locks the introductory stag
  // AI assistant available, copy-paste logging and submission confirmation on.
  expect(stages[6].countdownMinutes).toBe(60)
  expect(stages[6].allowExtension).toBe(true)
- expect(stages[6].features).toMatchObject({ ai: true, copyPaste: true, confirm: true, timer: true })
+ expect(stages[6].features).toMatchObject({ ai: true, copyPaste: true, confirm: true, timer: true, pauseAbort: true })
  // Recorded explanation runs with the AI switched off, one question at a time.
  expect(stages[8].sequentialQuestions).toBe(true)
  expect(stages[8].recordingRequired).toBe(true)
@@ -887,7 +887,7 @@ it('excludes Consent from selectable stage types and locks the introductory stag
  expect(stages[8].components).toHaveLength(4)
  expect(stages[8].recordingMode).toBe('manual')
  expect(stages[8].countdownMinutes).toBe(10)
- expect(stages[8].features.ai).toBe(false)
+ expect(stages[8].features).toMatchObject({ ai: false, confirm: true })
  stages[0].consentClauses = ['Approved clause']
  expect(getPublishErrors({ id: 'test', name: 'Study', code: 'test', status: 'Draft', created: '', fullScreen: false, stages })).toEqual([])
  })

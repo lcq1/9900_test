@@ -1933,6 +1933,21 @@ nav {
 	font-size: 13px;
 	line-height: 1.7;
 	margin-bottom: 22px;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+.participant-text-heading {
+	color: #2a3550;
+	font-size: 14px;
+	font-weight: 700;
+	margin: 18px 0 6px;
+}
+.participant-text-heading:first-child {
+	margin-top: 0;
+}
+.participant-text-li {
+	margin-bottom: 6px;
+	padding-left: 10px;
 }
 .ms-question {
 	margin-bottom: 30px;

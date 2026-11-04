@@ -164,7 +164,7 @@ export function Editor({
 			</div>
 			{/* Stage list, content editor, and feature settings. */}
 			<div className="editor-grid">
-				<div><button type="button" className="secondary-button" onClick={() => Modal.confirm({ title: 'Load Client study flow?', content: 'This replaces the stages in this draft and keeps the current consent content. Supply the approved consent document and clauses before publishing.', onOk: () => { const stages = createClientStages(experiment.stages[0]); onUpdateExperiment(current => ({ ...current, stages })); onSelectStage(stages[0].id) } })}>Load Client study flow</button><StageBuilder
+				<div><button type="button" className="secondary-button" onClick={() => Modal.confirm({ title: 'Load Client study flow?', content: 'This replaces the stages in this draft with the client example study flow, including the full consent form text. The signature input and approved consent clauses are kept. Supply the approved clauses before publishing.', onOk: () => { const stages = createClientStages(experiment.stages[0]); onUpdateExperiment(current => ({ ...current, stages })); onSelectStage(stages[0].id) } })}>Load Client study flow</button><StageBuilder
 					experiment={experiment}
 					selectedStageId={stage.id}
 					onSelectStage={onSelectStage}

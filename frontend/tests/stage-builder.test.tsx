@@ -887,3 +887,23 @@ it('excludes Consent from selectable stage types and locks the introductory stag
  stages[0].consentClauses = ['Approved clause']
  expect(getPublishErrors({ id: 'test', name: 'Study', code: 'test', status: 'Draft', created: '', fullScreen: false, stages })).toEqual([])
  })
+
+ it('loads the full client consent form as structured, readable text blocks', () => {
+ const stages = createClientStages(createStage('consent'))
+ const texts = stages[0].components.filter(c => c.type === 'text')
+ const labels = texts.map(c => c.label)
+ // Welcome paragraphs plus the complete consent form: title + 10 numbered sections + CONSENT.
+ expect(labels.some(l => l.startsWith('Welcome, and thank you for taking part'))).toBe(true)
+ expect(labels).toContain('CAMPUS STUDY SPACE FINDER — CONSENT FORM')
+ for (const heading of ['1. What this system does (Purpose)', '2. Why your participation matters', '3. What taking part involves', '4. Data we collect', '5. How your data is used', '6. Privacy and security', '7. Voluntary participation and withdrawal', '8. Risks and benefits', '9. Data retention', '10. Contact', 'CONSENT'])
+  expect(labels).toContain(heading)
+ // Headings are marked for styled rendering and every block stays short (no run-on wall of text).
+ expect(texts.filter(c => c.variant === 'heading').length).toBeGreaterThanOrEqual(12)
+ expect(texts.every(c => c.label.length < 900)).toBe(true)
+ // Non-text consent inputs (signature box, attachments) survive the load; the draft's placeholder text is replaced.
+ expect(stages[0].components.every(c => c.type !== 'text' || !c.label.includes('Please read the consent information'))).toBe(true)
+ // Instruction stages are split into heading/paragraph/bullet blocks instead of one string.
+ const beforeTask = stages[1].components.filter(c => c.type === 'text')
+ expect(beforeTask.length).toBeGreaterThan(3)
+ expect(beforeTask[0].variant).toBe('heading')
+ })

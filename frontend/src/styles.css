@@ -3804,18 +3804,47 @@ select:focus-visible,
 	scrollbar-gutter: stable;
 	overflow-wrap: anywhere;
 	background: white;
-	border: 16px solid #dce0e9;
-	border-radius: 16px;
-	padding: 30px;
+	border: 1px solid #e6e8f0;
+	border-radius: 20px;
+	box-shadow: 0 6px 24px #23304a08;
+	padding: 32px;
 	line-height: 1.8;
+}
+/* Document body text uses the same reading style as the other stage pages. */
+.participant-view:not(:has(form.entry-card)) .consent-document p {
+	font-size: 13px;
+	color: #586474;
+	margin: 0;
 }
 .participant-view:not(:has(form.entry-card)) .consent-signing {
 	min-width: 0;
 	background: white;
 	overflow-wrap: anywhere;
 	border: 1px solid #e6e8f0;
-	border-radius: 18px;
+	border-radius: 20px;
+	box-shadow: 0 6px 24px #23304a08;
 	padding: 24px;
+}
+/* Signing panel typography aligned with the question pages (ms-q-title scale). */
+.participant-view:not(:has(form.entry-card)) .consent-signing h2 {
+	font-size: 16px;
+	font-weight: 700;
+	color: #161922;
+	margin: 0 0 8px;
+}
+.participant-view:not(:has(form.entry-card)) .consent-signing p {
+	font-size: 13px;
+}
+.participant-view:not(:has(form.entry-card))
+	.consent-signing
+	> label:not(.consent-confirm) {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--ink);
+}
+.participant-view:not(:has(form.entry-card)) .consent-signing .consent-confirm {
+	font-size: 13px;
+	color: #2f3a4c;
 }
 .participant-view:not(:has(form.entry-card)) .consent-confirm {
 	display: flex;

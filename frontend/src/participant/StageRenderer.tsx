@@ -1028,7 +1028,7 @@ useEffect(() => {
 					if (component.type === 'text') {
 						return (
 							<p
-								className="participant-component participant-text"
+								className={'participant-component participant-text' + (component.variant === 'heading' ? ' participant-text-heading' : component.variant === 'li' ? ' participant-text-li' : '')}
 								key={component.id}
 							>
 								{component.label}

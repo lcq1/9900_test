@@ -865,7 +865,7 @@ it('excludes Consent from selectable stage types and locks the introductory stag
  expect(stages).toHaveLength(11)
  // Stage names follow the client's data-collection flow and example screens.
  expect(stages[0].name).toBe('Read and sign the consent form')
- expect(stages[0].signingMethod).toBe('name')
+ expect(stages[0].signingMethod).toBe('handwritten')
  expect(stages[6].name).toBe('Design task')
  // Design task: 60 minutes plus one researcher-approved 30-minute extension,
  // AI assistant available, copy-paste logging and submission confirmation on.
@@ -888,22 +888,27 @@ it('excludes Consent from selectable stage types and locks the introductory stag
  expect(getPublishErrors({ id: 'test', name: 'Study', code: 'test', status: 'Draft', created: '', fullScreen: false, stages })).toEqual([])
  })
 
- it('loads the full client consent form as structured, readable text blocks', () => {
+ it('loads the full client consent form and stage texts as single complete, multi-line blocks', () => {
  const stages = createClientStages(createStage('consent'))
  const texts = stages[0].components.filter(c => c.type === 'text')
- const labels = texts.map(c => c.label)
- // Welcome paragraphs plus the complete consent form: title + 10 numbered sections + CONSENT.
- expect(labels.some(l => l.startsWith('Welcome, and thank you for taking part'))).toBe(true)
- expect(labels).toContain('CAMPUS STUDY SPACE FINDER — CONSENT FORM')
- for (const heading of ['1. What this system does (Purpose)', '2. Why your participation matters', '3. What taking part involves', '4. Data we collect', '5. How your data is used', '6. Privacy and security', '7. Voluntary participation and withdrawal', '8. Risks and benefits', '9. Data retention', '10. Contact', 'CONSENT'])
-  expect(labels).toContain(heading)
- // Headings are marked for styled rendering and every block stays short (no run-on wall of text).
- expect(texts.filter(c => c.variant === 'heading').length).toBeGreaterThanOrEqual(12)
- expect(texts.every(c => c.label.length < 900)).toBe(true)
- // Non-text consent inputs (signature box, attachments) survive the load; the draft's placeholder text is replaced.
+ // Exactly one editable text block (the consent text field) carries the welcome paragraphs
+ // plus the complete consent form, so nothing is hidden from the researcher editor.
+ expect(texts).toHaveLength(1)
+ const label = texts[0].label
+ expect(label.startsWith('Welcome, and thank you for taking part')).toBe(true)
+ for (const heading of ['CAMPUS STUDY SPACE FINDER — CONSENT FORM', '1. What this system does (Purpose)', '2. Why your participation matters', '3. What taking part involves', '4. Data we collect', '5. How your data is used', '6. Privacy and security', '7. Voluntary participation and withdrawal', '8. Risks and benefits', '9. Data retention', '10. Contact', 'CONSENT'])
+  expect(label).toContain(heading)
+ expect(label).toContain('until the end of 2026')
+ expect(label.includes('\n')).toBe(true)
+ // Non-text consent inputs (signature box, attachments) survive the load; the draft placeholder text is replaced.
  expect(stages[0].components.every(c => c.type !== 'text' || !c.label.includes('Please read the consent information'))).toBe(true)
- // Instruction stages are split into heading/paragraph/bullet blocks instead of one string.
- const beforeTask = stages[1].components.filter(c => c.type === 'text')
- expect(beforeTask.length).toBeGreaterThan(3)
- expect(beforeTask[0].variant).toBe('heading')
+ // Every instruction stage keeps one complete multi-line text block (nothing trimmed away).
+ for (const idx of [1, 4, 5, 7, 10]) {
+  const t = stages[idx].components.filter(c => c.type === 'text')
+  expect(t).toHaveLength(1)
+  expect(t[0].label.includes('\n')).toBe(true)
+ }
+ // The design brief keeps its numbered outline in one block before the answer textbox.
+ expect(stages[6].components.filter(c => c.type === 'text')).toHaveLength(1)
+ expect(stages[6].components[0].label).toContain('In your answer, please:')
  })

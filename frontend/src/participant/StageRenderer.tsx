@@ -125,6 +125,37 @@ useEffect(() => onStorageDegraded(setStorageLimited), [])
 	const [oralStarted, setOralStarted] = useState(restored?.oralStarted ?? false)
 	const [stageIndex, setStageIndex] = useState(Math.min(restored?.stageIndex ?? 0, experiment.stages.length - 1))
 	const allowFreeOrder = Boolean(experiment.stages[0]?.features.navigation)
+
+	// Whether every required questionnaire question in a stage has been answered.
+	// Used by the left question-number panel to colour each step green/grey in
+	// real time. Consent steps are "done" once the participant has signed.
+	const isStageAnswered = (target: Experiment['stages'][number]) => {
+		if (target.type.toLowerCase() === 'consent') return consentedStageId === target.id
+		const required = target.components.filter(
+			(c) =>
+				!['text', 'button'].includes(c.type) &&
+				(target.requiredFeatures?.[
+					c.type === 'signature'
+						? 'signatureBox'
+						: c.type === 'attachment'
+							? 'attachment'
+							: 'questionnaire'
+				] ??
+					c.required),
+		)
+		return required.every((c) => {
+			const value = selections[c.id]
+			const filled = typeof value === 'string' ? value.trim() : value?.length
+			if (!filled) return false
+			if (
+				c.otherOption &&
+				(Array.isArray(value) ? value.includes(c.otherOption) : value === c.otherOption) &&
+				!String(selections[c.id + ':other'] ?? '').trim()
+			)
+				return false
+			return true
+		})
+	}
 	const stageTimes = useRef<Record<string, number>>({})
 	const [consentedStageId, setConsentedStageId] = useState<string | null>(
 		restored?.consentedStageId ?? null,
@@ -253,6 +284,11 @@ useEffect(() => onStorageDegraded(setStorageLimited), [])
 	] = useTransientNotice('')
 	const [validationError, setValidationError] = useState('')
 	const [validationAttempt, setValidationAttempt] = useState(0)
+	// Ids of required questions that were still empty on the last "Continue"
+	// attempt. Drives the red highlight on unanswered questions.
+	const [missingIds, setMissingIds] = useState<string[]>([])
+	const [missingQuestions, setMissingQuestions] = useState<string[]>([])
+	const [showMissingModal, setShowMissingModal] = useState(false)
 	useEffect(() => {
 		if (!validationError) return
 		// Hold for two seconds, then allow the CSS fade to finish.
@@ -545,6 +581,17 @@ useEffect(() => {
 		}
 	}, [recordingStatus.self, stage.id])
 
+	// Clear the red highlight from a question as soon as the participant fills
+	// it in, so the "unanswered" marker tracks their progress in real time.
+	useEffect(() => {
+		if (!missingIds.length) return
+		const remaining = missingIds.filter((id) => {
+			const value = selections[id]
+			return !(typeof value === 'string' ? value.trim() : value?.length)
+		})
+		if (remaining.length !== missingIds.length) setMissingIds(remaining)
+	}, [selections, missingIds])
+
 	const next = () => advance(false)
 
 	/**
@@ -555,12 +602,15 @@ useEffect(() => {
 	const advance = async (skipConfirm: boolean, targetIndex?: number) => {
 		if (busyRef.current) return
 		const choosingStage = targetIndex !== undefined
-		if (choosingStage && (!allowFreeOrder || stage.type.toLowerCase() === 'consent' ||
+		if (choosingStage && (stage.type.toLowerCase() === 'consent' ||
 			!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= experiment.stages.length ||
 			targetIndex === stageIndex || experiment.stages[targetIndex].type.toLowerCase() === 'consent')) return
 		if (stage.sequentialQuestions && remaining > 0 && oralIndex < stage.components.filter(c => c.type === 'text').length - 1) { setValidationError('Please answer every explanation question before submitting.'); return }
 		setValidationError('')
 		setValidationAttempt((attempt) => attempt + 1)
+		// Drop any stale red highlight / missing prompt from a previous attempt.
+		setMissingIds([])
+		setShowMissingModal(false)
 		const consentAccepted = consentedStageId === stage.id
 		if (stage.type.toLowerCase() === 'consent' && !consentAccepted) {
 			setValidationError('Please read and accept the consent form first.')
@@ -587,7 +637,7 @@ useEffect(() => {
 			value: selections[c.id] ?? '',
 		})), ...stage.components.filter(c => c.otherOption).map(c => ({ componentId: c.id + ':other', value: selections[c.id + ':other'] ?? '' }))]
 		if (stage.signingMethod === 'name') answers.push({ componentId: 'consent', value: selections.consent ?? '' })
-		const missing = stage.components
+		const missingItems: { id: string; label: string }[] = stage.components
 			.filter((c) => {
 				if (['text', 'button'].includes(c.type)) return false
 				const feature =
@@ -602,10 +652,10 @@ useEffect(() => {
 					!(typeof value === 'string' ? value.trim() : value?.length)
 				)
 			})
-			.map((c) => c.label)
+			.map((c) => ({ id: c.id, label: c.label }))
 		for (const c of stage.components) {
 			const value = selections[c.id]
-			if (c.otherOption && (Array.isArray(value) ? value.includes(c.otherOption) : value === c.otherOption) && !String(selections[c.id + ':other'] ?? '').trim()) missing.push(c.label + ' (please specify)')
+			if (c.otherOption && (Array.isArray(value) ? value.includes(c.otherOption) : value === c.otherOption) && !String(selections[c.id + ':other'] ?? '').trim()) missingItems.push({ id: c.id + ':other', label: c.label + ' (please specify)' })
 		}
 		const recording =
 			approvedRef.current?.stageId === stage.id
@@ -617,7 +667,7 @@ useEffect(() => {
 					}
 		const missingRequiredRecording = stage.recordingRequired && !recording.self
 		if (missingRequiredRecording)
-			missing.push('Camera and microphone recording')
+			missingItems.push({ id: 'recording', label: 'Camera and microphone recording' })
 		if (!choosingStage && allowFreeOrder && stageIndex === experiment.stages.length - 1) {
 			for (const other of experiment.stages) {
 				if (other.id === stage.id || other.type.toLowerCase() === 'consent') continue
@@ -626,12 +676,16 @@ useEffect(() => {
 					const feature = component.type === 'signature' ? 'signatureBox' : component.type === 'attachment' ? 'attachment' : 'questionnaire'
 					const value = selections[component.id]
 					if ((other.requiredFeatures?.[feature] ?? component.required) &&
-						!(typeof value === 'string' ? value.trim() : value?.length)) missing.push(`${other.name}: ${component.label}`)
+						!(typeof value === 'string' ? value.trim() : value?.length)) missingItems.push({ id: component.id, label: `${other.name}: ${component.label}` })
 				}
 			}
 		}
-		if ((!choosingStage && missing.length) || missingRequiredRecording) {
-			setValidationError('Required: ' + missing.join(', '))
+		if ((!choosingStage && missingItems.length) || missingRequiredRecording) {
+			const labels = missingItems.map((m) => m.label)
+			setValidationError('Required: ' + labels.join(', '))
+			setMissingIds(missingItems.map((m) => m.id))
+			setMissingQuestions(labels)
+			setShowMissingModal(true)
 			return
 		}
 		if (!skipConfirm && stage.features.confirm) { setConfirmation({ target: targetIndex }); return }
@@ -988,8 +1042,8 @@ useEffect(() => {
 							.filter((c) => c.type !== 'text').length + 1
 					const selected = selections[component.id]
 
-					return (
-						<div className="ms-question" key={component.id}>
+				return (
+					<div className={'ms-question' + (missingIds.includes(component.id) ? ' missing-required' : '')} key={component.id}>
 							<div className="ms-q-head">
 								<span className="ms-q-number">
 									{questionNumber}
@@ -1335,6 +1389,7 @@ useEffect(() => {
 
 	return (
 		<section className="participant-view"><Modal rootClassName="participant-modal" open={confirmation !== null} centered title="Submit this stage?" okText="Yes, I'm sure" cancelText="No, not sure" onCancel={() => setConfirmation(null)} onOk={() => { const target = confirmation?.target; setConfirmation(null); void advance(true, target) }}><p>Ready to submit? Once submitted, you cannot return to this stage.</p></Modal>
+			<Modal rootClassName="participant-modal" open={showMissingModal} centered title="Some questions still need answers" onCancel={() => setShowMissingModal(false)} footer={[<button key="ok" className="primary-button" onClick={() => setShowMissingModal(false)}>Got it</button>]}>{missingQuestions.length > 0 && (<><p className="missing-modal-intro">You still have {missingQuestions.length} question{missingQuestions.length === 1 ? '' : 's'} to complete before continuing:</p><ul className="missing-question-list">{missingQuestions.map((q, i) => (<li key={i}>{q}</li>))}</ul></>)}</Modal>
 			<div inert={fullscreenLocked}>
 				<div className="participant-top">
 					<button
@@ -1391,75 +1446,96 @@ useEffect(() => {
 							</select>
 						</label>
 					)}
-					<div className="step-eyebrow">
-						Step {stageIndex + 1} · {stage.name}
-					</div>
-					<div className="participant-stage-nav" role="navigation" aria-label="Study progress">
-						{experiment.stages.map((s, i) => (
-							<button
-								type="button"
-								key={s.id}
-								aria-label={s.name}
-								aria-current={i === stageIndex ? 'step' : undefined}
-								className={i < stageIndex ? 'done' : i === stageIndex ? 'current' : ''}
-								disabled={!allowFreeOrder || isConsent || s.type.toLowerCase() === 'consent' || i === stageIndex || saving || paused || interactionLocked}
-								onClick={() => void advance(false, i)}
-							>
-								{/* Completed stages get a check, upcoming ones their step number (client nav-bar example). */}
-								{i < stageIndex ? '✓ ' : `${i + 1} `}{s.name}
-							</button>
-						))}
-					</div>
-
-					{(stage.features.ai && stage.type !== 'video_oral_answer') ? (
-						<div className="participant-split">
-							<div className="participant-card">
-								{stageBody}
-								{footer}
+					<div className="participant-question-layout">
+						<aside className="question-nav-panel" aria-label="Question navigation">
+							<div className="question-nav-title">Questions</div>
+							<div className="qnav-list" role="navigation" aria-label="Study progress">
+								{experiment.stages.map((s, i) => {
+									const answered = isStageAnswered(s)
+									return (
+										<button
+											type="button"
+											key={s.id}
+											aria-label={s.name}
+											aria-current={i === stageIndex ? 'step' : undefined}
+											className={
+												'qnav-item' +
+												(answered ? ' done' : '') +
+												(i === stageIndex ? ' current' : '')
+											}
+											disabled={
+												i === stageIndex ||
+												s.type.toLowerCase() === 'consent' ||
+												isConsent ||
+												saving ||
+												paused ||
+												interactionLocked
+											}
+											onClick={() => void advance(false, i)}
+										>
+											<span className="qnav-dot" aria-hidden="true" />
+											<span className="qnav-num">{i + 1}</span>
+											<span className="qnav-name">{s.name}</span>
+										</button>
+									)
+								})}
 							</div>
-							<aside className="ai-sidebar">
-								<AIChat
-									disabled={
-										interactionLocked || paused || saving
-									}
-									key={stage.id}
-									stageId={stage.id}
+						</aside>
+						<div className="participant-question-content">
+							<div className="step-eyebrow">
+								Step {stageIndex + 1} · {stage.name}
+							</div>
+							{(stage.features.ai && stage.type !== 'video_oral_answer') ? (
+								<div className="participant-split">
+									<div className="participant-card">
+										{stageBody}
+										{footer}
+									</div>
+									<aside className="ai-sidebar">
+										<AIChat
+											disabled={
+												interactionLocked || paused || saving
+											}
+											key={stage.id}
+											stageId={stage.id}
  initialConversationId={conversations[stage.id]}
  initialMessages={queue.all().filter(event => event.stageId === stage.id && (event.type === 'ai_prompt' || event.type === 'ai_reply')).map(event => ({ id: 'event-' + event.seq, role: event.type === 'ai_prompt' ? 'user' as const : 'assistant' as const, text: String(event.detail?.text ?? '') }))}
-									getSessionId={
-										previewOnly ? undefined : ensureSession
-									}
-									onFailure={(message, partialText) =>
-										queue.record(
-											'ai_error',
-											{ message, partialText },
-											stage.id,
-										)
-									}
-									contextLabel={stage.name}
-									onUserMessage={(text) =>
-										queue.record(
-											'ai_prompt',
-											{ chars: text.length, text },
-											stage.id,
-										)
-									}
-									onAssistantReply={(text) =>
-										queue.record(
-											'ai_reply',
-											{ chars: text.length, text },
-											stage.id,
-										)
-									}
-								/>
-							</aside>
+											getSessionId={
+												previewOnly ? undefined : ensureSession
+											}
+											onFailure={(message, partialText) =>
+												queue.record(
+													'ai_error',
+													{ message, partialText },
+													stage.id,
+												)
+											}
+											contextLabel={stage.name}
+											onUserMessage={(text) =>
+												queue.record(
+													'ai_prompt',
+													{ chars: text.length, text },
+													stage.id,
+												)
+											}
+											onAssistantReply={(text) =>
+												queue.record(
+													'ai_reply',
+													{ chars: text.length, text },
+													stage.id,
+												)
+											}
+										/>
+									</aside>
+								</div>
+							) : (
+								<div className="participant-card">
+									{stageBody}
+									{footer}
+								</div>
+							)}
 						</div>
-					) : (
-						<div className="participant-card">
-							{stageBody}
-							{footer}
-						</div>
-					)}
+					</div>
 				</div>
 
 				{paused && (

@@ -40,6 +40,7 @@ export type Stage = {
 	signingMethod?: 'handwritten' | 'name'
 	consentClauses?: string[]
 	allowExtension?: boolean
+	extensionMinutes?: number
 	sequentialQuestions?: boolean
 	materials?: { id: string; name: string; reference: string }[]
 }
@@ -168,6 +169,11 @@ export function getPublishErrors(experiment: Experiment): string[] {
 			errors.push(
 				`${prefix}: countdown must be a positive whole number of minutes.`,
 			);
+		const extensionMinutes = stage.extensionMinutes ?? 30;
+		if (stage.features.timer && stage.allowExtension &&
+			(!Number.isInteger(extensionMinutes) || extensionMinutes < 1 || extensionMinutes > 1440))
+			errors.push(`${prefix}: extension must be between 1 and 1440 whole minutes.`);
+
 		if (
 			stage.features.copyPaste &&
 			!["fill_blank", "short_answer"].includes(stage.type)

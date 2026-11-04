@@ -503,6 +503,24 @@ async def upload_recording(
     return {"recordingId": recording.id, "offset": offset + len(data)}
 
 
+@router.get("/sessions/{session_id}/recordings")
+def list_recordings(
+    session_id: str,
+    db: Session = Depends(get_db),
+    researcher: Researcher = Depends(get_current_researcher),
+):
+    from app.participant.models import Recording
+
+    session = repo.get_session(db, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    check_session_owner(db, session.experiment_code, researcher)
+    recordings = db.query(Recording).filter_by(session_id=session_id).order_by(
+        Recording.created_at, Recording.id,
+    )
+    return [{"id": item.id, "filename": item.filename} for item in recordings]
+
+
 @router.get("/sessions/{session_id}/recordings/{recording_id}")
 def download_recording(session_id: str, recording_id: str, db: Session = Depends(get_db),
                        researcher: Researcher = Depends(get_current_researcher)):

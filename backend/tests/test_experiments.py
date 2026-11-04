@@ -62,6 +62,8 @@ def test_experiment_stages_shape_roundtrip(client, auth_headers):
         "components": [{"id": "c1", "type": "text", "label": "Q1", "required": True}],
         "features": {"ai": True, "timer": False},
         "countdownMinutes": 5,
+        "allowExtension": True,
+        "extensionMinutes": 12,
     }
     r = _create(client, auth_headers, stages=[stage])
     assert r.status_code == 201
@@ -71,6 +73,8 @@ def test_experiment_stages_shape_roundtrip(client, auth_headers):
     assert exp["stages"][0]["components"][0]["label"] == "Q1"
     assert exp["stages"][0]["features"]["ai"] is True
     assert exp["stages"][0]["countdownMinutes"] == 5
+    assert exp["stages"][0]["extensionMinutes"] == 12
+    assert _create(client, auth_headers, stages=[{**stage, "extensionMinutes": 0}]).status_code == 422
 
 
 def test_codes_generated_by_server_and_immutable(client, auth_headers):

@@ -14,7 +14,8 @@ import { downloadResults } from '../src/api/experiments'
 import { downloadAdminResults } from '../src/api/administrator'
 import { downloadFile, http } from '../src/api/http'
 
-vi.mock('../src/api/participant', () => ({
+vi.mock('../src/api/participant', async (original) => ({
+	...await original<typeof import('../src/api/participant')>(),
 	submitSession: vi.fn().mockResolvedValue({ id: 'test-session' }),
 	submitStage: vi.fn().mockResolvedValue({ accepted: true }),
 	uploadRecording: vi.fn(),
@@ -154,7 +155,7 @@ it('downloads one workbook from each role and keeps legacy CSV helpers', async (
 	)
 })
 
-it('offers one Excel download and reports failures', async () => {
+it('offers Excel and CSV downloads and reports failures', async () => {
 	vi.mocked(http.get).mockResolvedValue({
 		completed_count: 1,
 		incomplete_count: 1,
@@ -172,7 +173,15 @@ it('offers one Excel download and reports failures', async () => {
 	render(createElement(ExportDialog, { experiment, onClose: vi.fn() }))
 	await screen.findByText(/Completed: 1/)
 	expect(screen.getByText(/Australia\/Sydney/)).toBeDefined()
-	expect(screen.queryByRole('button', { name: /CSV/ })).toBeNull()
+	fireEvent.change(screen.getByLabelText('File format'), { target: { value: 'activity' } })
+	fireEvent.click(screen.getByRole('button', { name: 'Download CSV' }))
+	await waitFor(() => expect(downloadFile).toHaveBeenCalledWith(
+		'/experiments/study/results.csv?view=activity',
+		'experiment_activity.csv',
+	))
+	await waitFor(() => expect((screen.getByLabelText('File format') as HTMLSelectElement).disabled).toBe(false))
+	vi.mocked(downloadFile).mockClear()
+	fireEvent.change(screen.getByLabelText('File format'), { target: { value: 'workbook' } })
 	fireEvent.click(screen.getByRole('button', { name: 'Download Excel' }))
 	await waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
 	expect(downloadFile).toHaveBeenLastCalledWith(
@@ -208,4 +217,19 @@ it('offers one Excel download and reports failures', async () => {
 		'textContent',
 		'Download unavailable',
 	)
+})
+
+it('downloads participant-scoped CSV from the export dialog', async () => {
+	vi.mocked(downloadFile).mockReset().mockResolvedValue(undefined)
+	render(createElement(ExportDialog, {
+		session: { id: 'session-7', participantCode: 'P07', experimentName: 'Study' },
+		onClose: vi.fn(),
+	}))
+	expect(screen.getByText('Participant P07')).toBeDefined()
+	fireEvent.change(screen.getByLabelText('File format'), { target: { value: 'answers' } })
+	fireEvent.click(screen.getByRole('button', { name: 'Download CSV' }))
+	await waitFor(() => expect(downloadFile).toHaveBeenCalledWith(
+		'/participant/sessions/session-7/csv?view=answers',
+		'session-7_answers.csv',
+	))
 })

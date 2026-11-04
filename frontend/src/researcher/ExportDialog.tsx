@@ -2,16 +2,26 @@ import { useTransientNotice } from '../participant/TimerController'
 import type { Experiment } from '../types'
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { downloadResults, getResultsSummary } from '../api/experiments'
+import { downloadExperimentCsv, downloadResults, getResultsSummary } from '../api/experiments'
+import { downloadSessionCsv, downloadSessionWorkbook } from '../api/participant'
 
-// Show participation counts and download experiment results as Excel.
+const formats = {
+	workbook: 'Excel workbook',
+	answers: 'Raw answers (CSV)',
+	activity: 'Event timeline (CSV)',
+} as const
+
+type ExportFormat = keyof typeof formats
 export function ExportDialog({
 	experiment,
+	session,
 	onClose,
 }: {
-	experiment: Experiment
 	onClose: () => void
-}) {
+} & (
+	| { experiment: Pick<Experiment, 'id' | 'name'>; session?: never }
+	| { experiment?: never; session: { id: string; participantCode: string; experimentName: string } }
+)) {
 	const [summary, setSummary] = useState<{
 		completed_count: number
 		incomplete_count: number
@@ -19,9 +29,12 @@ export function ExportDialog({
 	const [error, setError, errorVisible, errorRevision] =
 		useTransientNotice('')
 	const [busy, setBusy] = useState(false)
+	const experimentId = experiment?.id
+	const [format, setFormat] = useState<ExportFormat>('workbook')
 	useEffect(() => {
+		if (!experimentId) return
 		let active = true
-		getResultsSummary(experiment.id)
+		getResultsSummary(experimentId)
 			.then((value) => {
 				if (active) setSummary(value)
 			})
@@ -36,26 +49,38 @@ export function ExportDialog({
 		return () => {
 			active = false
 		}
-	}, [experiment.id, setError])
+	}, [experimentId, setError])
 	return (
 		<div className="modal-backdrop" onClick={onClose}>
 			<div
 				className="modal-card"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="export-title"
+				onKeyDown={(event) => { if (event.key === 'Escape') onClose() }}
 				onClick={(event) => event.stopPropagation()}
 			>
 				<div className="panel-heading" style={{ padding: '0 0 12px' }}>
-					<span>EXPORT EXPERIMENT</span>
-					<button className="icon-button" onClick={onClose}>
+					<span>{session ? 'EXPORT PARTICIPANT SESSION' : 'EXPORT EXPERIMENT'}</span>
+					<button className="icon-button" aria-label="Close export" onClick={onClose}>
 						<X size={16} />
 					</button>
 				</div>
-				<h2>{experiment.name}</h2>
+				<h2 id="export-title">{session?.experimentName ?? experiment?.name}</h2>
+				{session && <p>Participant {session.participantCode}</p>}
+				<label className="export-format">
+					File format
+					<select autoFocus value={format} disabled={busy}
+						onChange={(event) => setFormat(event.target.value as ExportFormat)}>
+						{Object.entries(formats).map(([value, label]) =>
+							<option key={value} value={value}>{label}</option>,
+						)}
+					</select>
+				</label>
 				<p className="subheading">
-					One Excel workbook contains experiment information and a
-					sheet per published version. Each participation includes
-					answers, AI history and activity. Times use
-					Australia/Sydney. Earlier records without version tracking
-					appear in a separate unknown-version sheet.
+					{format === 'workbook' && 'Includes study information, answers, AI history and activity. Display times use Australia/Sydney.'}
+					{format === 'answers' && 'Structured answers for analysis in a spreadsheet or statistics tool.'}
+					{format === 'activity' && 'Timestamped activity, including AI messages, clipboard events and stage transitions.'}
 				</p>
 				{summary && (
 					<p>
@@ -79,12 +104,19 @@ export function ExportDialog({
 					</button>
 					<button
 						className="primary-button"
-						disabled={busy || !summary}
+						disabled={busy}
 						onClick={async () => {
 							setBusy(true)
 							setError('')
 							try {
-								await downloadResults(experiment.id)
+								if (session) {
+									if (format === 'workbook') await downloadSessionWorkbook(session.id)
+									else await downloadSessionCsv(session.id, format)
+								} else if (experiment && format === 'workbook') {
+									await downloadResults(experiment.id)
+								} else if (experiment && format !== 'workbook') {
+									await downloadExperimentCsv(experiment.id, format)
+								}
 							} catch (reason) {
 								setError(
 									reason instanceof Error
@@ -96,7 +128,7 @@ export function ExportDialog({
 							}
 						}}
 					>
-						{busy ? 'Downloading…' : 'Download Excel'}
+						{busy ? 'Downloading…' : format === 'workbook' ? 'Download Excel' : 'Download CSV'}
 					</button>
 				</div>
 			</div>

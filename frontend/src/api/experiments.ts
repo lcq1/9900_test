@@ -31,6 +31,10 @@ export const getResultsSummary = (id: string) =>
 export const downloadResults = (id: string) =>
 	downloadFile(PATH + '/' + id + '/results.xlsx', 'experiment.xlsx')
 
+export const downloadExperimentCsv = (id: string, view: 'answers' | 'activity') =>
+	downloadFile(PATH + '/' + encodeURIComponent(id) + '/results.csv?view=' + view,
+		'experiment_' + view + '.csv')
+
 export interface ExperimentAIKeyStatus {
 	hasCustomKey: boolean
 	configured: boolean

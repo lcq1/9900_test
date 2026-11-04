@@ -439,20 +439,29 @@ describe('participant runtime', () => {
 	it('requires confirmation before submission and permits only one extension', async () => {
  const experiment = study()
  experiment.stages[0].allowExtension = true
+ experiment.stages[0].extensionMinutes = 12
+ experiment.stages[0].features.timer = true
+ experiment.stages[0].features.copyPaste = true
  experiment.stages[0].features.confirm = true
  render(<ParticipantPreview experiment={experiment} participantCode="client-test" onBack={() => {}} />)
- fireEvent.click(screen.getByRole('button', { name: 'Extend by 30 minutes' }))
+ fireEvent.click(screen.getByRole('button', { name: 'Extend by 12 minutes' }))
  await screen.findAllByText('Researcher approval required')
  fireEvent.click(screen.getByRole('button', { name: 'OK', exact: true }))
- await waitFor(() => expect(screen.queryByRole('button', { name: 'Extend by 30 minutes' })).toBeNull())
- fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'My design' } })
+ await waitFor(() => expect(screen.queryByRole('button', { name: 'Extend by 12 minutes' })).toBeNull())
+ const response = screen.getByPlaceholderText('Type your response...') as HTMLTextAreaElement
+ fireEvent.change(response, { target: { value: 'My design' } })
+ response.setSelectionRange(3, 9)
+ fireEvent.copy(response)
  fireEvent.click(screen.getByRole('button', { name: 'Finish', exact: true }))
  await screen.findByText('Submit this stage?')
  expect(submitStage).not.toHaveBeenCalled()
  fireEvent.click(screen.getByRole('button', { name: "Yes, I'm sure" }))
  await waitFor(() => expect(submitStage).toHaveBeenCalled())
  const saved = vi.mocked(submitSession).mock.calls.at(-1)![0]
- expect(saved.events.filter(event => event.type === 'timer_extension')).toHaveLength(1)
+ expect(saved.events.filter(event => event.type === 'timer_extension')).toEqual([
+  expect.objectContaining({ detail: { minutes: 12, researcherApprovalConfirmed: true } }),
+ ])
+ expect(saved.events.find(event => event.type === 'copy')?.detail).toEqual({ chars: 6, text: 'design' })
  })
 	it('restores an unfinished stage and unsent text after leaving and returning', () => {
  const experiment = study()

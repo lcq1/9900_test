@@ -1259,6 +1259,17 @@ def test_recording_upload_session_roundtrip(client, auth_headers, tmp_path, monk
     download = f"/api/participant/sessions/{session['id']}/recordings/{response.json()['recordingId']}"
     assert client.get(download, headers=auth_headers).content == b"headertail"
     assert client.get(download).status_code == 401
+    listing = download.rsplit("/", 1)[0]
+    files = client.get(listing, headers=auth_headers)
+    assert files.status_code == 200
+    [recording] = files.json()
+    assert recording["id"] == response.json()["recordingId"]
+    assert recording["filename"].endswith(".webm")
+    assert set(recording) == {"id", "filename"}
+    assert client.get(listing).status_code == 401
+    from tests.conftest import register_and_login
+    other = {"Authorization": "Bearer " + register_and_login(client, email="recordings-other@example.com")}
+    assert client.get(listing, headers=other).status_code == 404
     final = client.post("/api/participant/sessions", headers=auth_headers,
         json={**payload, "sessionId": session["id"], "finishedAt": "2026-10-30T12:00:00Z",
               "events": [{"seq": 1, "type": "recording_start", "stageId": "capture", "timestamp": "2026-10-30T11:59:59Z",

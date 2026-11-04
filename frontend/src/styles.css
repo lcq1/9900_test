@@ -1181,6 +1181,7 @@ nav {
 .auth-screen {
 	min-height: 100vh;
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	place-items: center;
 	padding: 44px 22px;
 	background: #e9eef5;
@@ -1190,6 +1191,7 @@ nav {
 	z-index: 1;
 	background: #fff;
 	width: min(470px, 100%);
+	min-width: 0;
 	border-radius: 14px;
 	box-shadow: 0 18px 50px rgba(30, 58, 95, 0.14);
 	padding: 40px 44px;
@@ -1214,8 +1216,8 @@ nav {
 	margin-bottom: 26px;
 }
 .auth-panel label {
-	color: #6b7785;
-	font-size: 11px;
+	color: #526174;
+	font-size: 13px;
 	display: grid;
 	gap: 7px;
 	margin-top: 14px;
@@ -1226,7 +1228,8 @@ nav {
 	outline-color: var(--green);
 	background: white;
 	border-radius: 4px;
-	font-size: 12px;
+	font-size: 16px;
+	min-width: 0;
 }
 .wide {
 	width: 100%;
@@ -1355,15 +1358,33 @@ nav {
 	margin-bottom: 20px;
 }
 .auth-code-note {
-	color: #c0564a;
-	background: #fdeceb;
-	border: 1px solid #f3d2ce;
+	color: #42556c;
+	background: #edf4ff;
+	border: 1px solid #d4e2fa;
 	border-radius: 6px;
 	padding: 9px 11px;
-	font-size: 10px;
+	font-size: 12px;
 	line-height: 1.5;
 	margin-top: 14px;
 	text-align: center;
+}
+@media (max-width: 480px) {
+	.auth-panel {
+		padding-inline: 16px;
+	}
+	.auth-tabs {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 2px;
+	}
+	.auth-tab {
+		min-height: 44px;
+		padding-inline: 3px;
+		overflow-wrap: anywhere;
+	}
+	.auth-tab svg {
+		display: none;
+	}
 }
 @media (max-width: 1100px) {
 	.sidebar {
@@ -1525,7 +1546,7 @@ nav {
 		padding: 26px 15px;
 	}
 	.auth-panel {
-		padding: 32px 24px;
+		padding: 32px clamp(16px, 4vw, 24px);
 	}
 	.auth-panel .brand {
 		margin-bottom: 40px;
@@ -1935,6 +1956,22 @@ nav {
 }
 .modal-card .subheading {
 	margin: 0 0 16px;
+}
+.export-format {
+	display: grid;
+	gap: 6px;
+	margin: 16px 0 10px;
+	font-size: 14px;
+	font-weight: 600;
+}
+.export-format select {
+	width: 100%;
+	min-height: 40px;
+	padding: 6px 10px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--surface, white);
+	color: var(--text);
 }
 .export-actions {
 	display: flex;
@@ -2601,6 +2638,24 @@ nav {
 	font-size: 11px;
 	font-weight: 600;
 	white-space: nowrap;
+}
+.session-recordings {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	margin-bottom: 14px;
+}
+.session-recordings h4,
+.session-recordings p {
+	margin: 0;
+}
+.session-recordings p {
+	font-size: 13px;
+}
+.session-recordings button {
+	max-width: 100%;
+	overflow-wrap: anywhere;
 }
 .session-body {
 	padding: 6px 20px 18px;
@@ -4131,4 +4186,15 @@ select:focus-visible,
 	padding: 12px 14px;
 	font-size: 14px;
 	font-weight: 500;
+}
+
+.stage-extension-settings {
+	display: grid;
+	gap: 8px;
+	margin-block: 8px;
+}
+.stage-extension-settings label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }

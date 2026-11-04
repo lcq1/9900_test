@@ -59,6 +59,7 @@ class Stage(CamelModel):
     signing_method: Literal["handwritten", "name"] = "handwritten"
     consent_clauses: list[str] = []
     allow_extension: bool = False
+    extension_minutes: int = Field(default=30, ge=1, le=1440)
     sequential_questions: bool = False
 
 

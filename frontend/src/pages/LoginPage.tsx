@@ -125,6 +125,7 @@ export function AuthScreen({
 								? 'auth-tab active'
 								: 'auth-tab'
 						}
+						aria-pressed={role === 'participant'}
 						onClick={() => setRole('participant')}
 					>
 						<Play size={14} /> Participant
@@ -136,6 +137,7 @@ export function AuthScreen({
 								? 'auth-tab active'
 								: 'auth-tab'
 						}
+						aria-pressed={role === 'researcher'}
 						onClick={() => setRole('researcher')}
 					>
 						<LogIn size={14} /> Researcher
@@ -167,6 +169,8 @@ export function AuthScreen({
 										setExperimentCode(event.target.value)
 									}
 									placeholder="EXP-2026-013"
+									autoComplete="off"
+									spellCheck={false}
 								/>
 							</label>
 							<label>
@@ -177,6 +181,8 @@ export function AuthScreen({
 										setParticipantCode(event.target.value)
 									}
 									placeholder="P07"
+									autoComplete="off"
+									spellCheck={false}
 								/>
 							</label>
 						</>

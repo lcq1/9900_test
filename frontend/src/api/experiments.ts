@@ -51,6 +51,8 @@ export type ExperimentAISettingsInput = Omit<ExperimentAIKeyStatus, 'hasCustomKe
 const aiSettingsPath = (id: string) => id === '__common__' ? '/workspace/ai-config' : PATH + '/' + encodeURIComponent(id) + '/ai-key'
 export const getExperimentAIKey = (id: string) =>
 	http.get<ExperimentAIKeyStatus>(aiSettingsPath(id))
+export const testExperimentAIConnection = (id: string) =>
+	http.post<void>(aiSettingsPath(id) + '/test')
 export const saveExperimentAIKey = (id: string, apiKey: string, configuration?: ExperimentAISettingsInput) =>
 	http.patch<ExperimentAIKeyStatus>(aiSettingsPath(id),
 		{ ...configuration, ...(apiKey ? { apiKey } : {}) })

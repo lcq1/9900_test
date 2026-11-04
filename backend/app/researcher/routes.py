@@ -242,13 +242,33 @@ def common_ai_settings(db: Session = Depends(get_db), researcher: Researcher = D
     return ai_settings_status(resolve_common_config(db, researcher.id), get_experiment_config(db, common_scope(researcher.id)))
 
 
+async def check_ai_connection(configuration):
+    from app.participant import ai_proxy
+
+    # Use the participant transport without creating a study session or chat turn.
+    with ai_proxy.use_configuration(configuration):
+        async for _ in ai_proxy.stream_chat("Hi"):
+            pass
+
+
+@router.post('/workspace/ai-config/test', status_code=204)
+async def test_common_ai_connection(
+    db: Session = Depends(get_db),
+    researcher: Researcher = Depends(get_current_researcher),
+):
+    from app.researcher.ai_config import resolve_common_config
+
+    await check_ai_connection(resolve_common_config(db, researcher.id))
+
+
 @router.patch('/workspace/ai-config')
 def update_common_ai_settings(payload: ExperimentAIKey, db: Session = Depends(get_db),
                               researcher: Researcher = Depends(get_current_researcher)):
-    from app.researcher.ai_config import save_common_config, resolve_common_config
+    from app.researcher.ai_config import apply_ai_overrides, common_scope, get_experiment_config, save_common_config
     changes = ai_settings_changes(payload)
     changes.pop('use_common', None)
-    configuration = resolve_common_config(db, researcher.id).model_copy(update={'ai_' + name: value for name, value in changes.items()})
+    overrides = get_experiment_config(db, common_scope(researcher.id))
+    configuration = apply_ai_overrides({**overrides, **changes})
     validate_ai_settings(configuration)
     if changes:
         save_common_config(db, researcher.id, changes)
@@ -271,11 +291,23 @@ def experiment_ai_key(experiment_id: str, db: Session = Depends(get_db),
     return ai_settings_status(resolve_experiment_config(db, experiment.id), overrides, uses_common(overrides))
 
 
+@router.post('/experiments/{experiment_id}/ai-key/test', status_code=204)
+async def test_experiment_ai_connection(
+    experiment_id: str,
+    db: Session = Depends(get_db),
+    researcher: Researcher = Depends(get_current_researcher),
+):
+    from app.researcher.ai_config import resolve_experiment_config
+
+    experiment = owned_experiment(db, experiment_id, researcher)
+    await check_ai_connection(resolve_experiment_config(db, experiment.id))
+
+
 @router.patch('/experiments/{experiment_id}/ai-key')
 def update_experiment_ai_key(experiment_id: str, payload: ExperimentAIKey,
                              db: Session = Depends(get_db),
                              researcher: Researcher = Depends(get_current_researcher)):
-    from app.researcher.ai_config import (AI_PARAMETERS, get_experiment_config, resolve_common_config,
+    from app.researcher.ai_config import (AI_PARAMETERS, apply_ai_overrides, get_experiment_config, resolve_common_config,
                                           save_experiment_config, uses_common)
     experiment = owned_experiment(db, experiment_id, researcher)
     changes = ai_settings_changes(payload)
@@ -292,7 +324,7 @@ def update_experiment_ai_key(experiment_id: str, payload: ExperimentAIKey,
                 changes.setdefault(name, getattr(common, 'ai_' + name))
     changes['use_common'] = mode
     candidate = {**overrides, **changes}
-    configuration = settings.model_copy(update={'ai_' + name: value for name, value in candidate.items() if name in AI_PARAMETERS})
+    configuration = apply_ai_overrides(candidate)
     validate_ai_settings(configuration, validate_key=bool(parameters))
     save_experiment_config(db, experiment, changes)
     return experiment_ai_key(experiment_id, db, researcher)

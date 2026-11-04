@@ -16,12 +16,14 @@ import {
 	saveExperimentAIKey,
 	removeExperimentAIKey,
 	setExperimentAISource,
+	testExperimentAIConnection,
 	getStorageSettings,
 	saveStorageSettings,
 	type ExperimentAIKeyStatus,
 	type ExperimentAISettingsInput,
 	type StorageSettings,
 } from '../api/experiments'
+import { HttpError } from '../api/http'
 import { ExportDialog } from '../researcher/ExportDialog'
 import type { ParticipantEvent, ParticipantEventType } from '../participant/EventQueue'
 import { listSessions, downloadSessionWorkbook } from '../api/participant'
@@ -795,6 +797,8 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 	const [configuration, setConfiguration] = useState<ExperimentAISettingsInput | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [saving, setSaving] = useState(false)
+	const [testing, setTesting] = useState(false)
+	const busy = saving || testing
 	const [message, setMessage] = useState('')
 	const isCommon = experimentId === '__common__'
 	useEffect(() => {
@@ -809,7 +813,7 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 		return () => { active = false }
 	}, [experimentId])
 	const updateKey = async (remove: boolean) => {
-		if (!experimentId || saving || loading || !status || !configuration) return
+		if (!experimentId || busy || loading || !status || !configuration) return
 		setSaving(true)
 		setMessage('')
 		try {
@@ -825,7 +829,7 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 		} finally { setSaving(false) }
 	}
 	const updateSource = async (useCommon: boolean) => {
-		if (saving || loading || isCommon || !experimentId) return
+		if (busy || loading || isCommon || !experimentId) return
 		setSaving(true)
 		setApiKey('')
 		setMessage('')
@@ -837,6 +841,19 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 		} catch { setMessage('Could not change the configuration source. Please retry.') }
 		finally { setSaving(false) }
 	}
+	const testConnection = async () => {
+		if (busy || loading || !status?.configured) return
+		setTesting(true)
+		setMessage('Testing saved AI configuration…')
+		try {
+			await testExperimentAIConnection(experimentId)
+			setMessage('The AI provider returned a reply using the saved configuration.')
+		} catch (error) {
+			setMessage(error instanceof HttpError ? error.message : 'Could not test the saved AI configuration.')
+		} finally {
+			setTesting(false)
+		}
+	}
 	return <section className="settings-card ai-settings-card">
 		<div className="settings-card-heading">
 			<h3>AI API keys</h3>
@@ -845,7 +862,7 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 		<div className="ai-key-controls">
 			<div className="settings-field">
 				<label htmlFor="ai-key-experiment">Experiment</label>
-				<select id="ai-key-experiment" value={experimentId} disabled={saving} onChange={(event) => {
+				<select id="ai-key-experiment" value={experimentId} disabled={busy} onChange={(event) => {
 					setApiKey('')
 					setStatus(null)
 					setConfiguration(null)
@@ -859,56 +876,56 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 			</div>
 			{loading && <p>Loading AI key settings…</p>}
 			{status && !isCommon && <label className="ai-independent-option">
-				<input type="checkbox" checked={!status.useCommon} disabled={saving}
+				<input type="checkbox" checked={!status.useCommon} disabled={busy}
 					onChange={(event) => void updateSource(!event.target.checked)} />
 				Use independent configuration
 			</label>}
 			{status?.useCommon && !isCommon && <div className="ai-key-controls">
 				<p>This experiment follows your common configuration, including future updates.</p>
 				{!status.configured && <p>The common AI configuration is incomplete.</p>}
-				<button type="button" className="secondary-button" disabled={saving || loading} onClick={() => {
+				<button type="button" className="secondary-button" disabled={busy || loading} onClick={() => {
 					setStatus(null); setConfiguration(null); setApiKey(''); setMessage(''); setLoading(true); setExperimentId('__common__')
 				}}>Edit common configuration</button>
 			</div>}
 			{status && configuration && (isCommon || !status.useCommon) && <form className="ai-key-controls" onSubmit={(event) => { event.preventDefault(); void updateKey(false) }}>
-				<p>{status.hasCustomKey ? 'Custom API key configured' : 'Using server default API key'} · {status.provider} · {status.model}</p>
-				{!status.configured && <p>AI is not configured. Check the API key and server settings.</p>}
+				<p>{status.hasCustomKey ? 'Custom API key saved' : status.configured ? 'Using server default API key' : 'AI setup incomplete'} · {status.provider} · {status.model}</p>
+				{!status.configured && <p>Set the API key, endpoint URL and model, then save to enable a connection test.</p>}
 				<div className="ai-parameter-grid">
 					<div className="settings-field">
 						<label htmlFor="ai-provider">Provider</label>
-						<select id="ai-provider" value={configuration.provider} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, provider: event.target.value })}>
+						<select id="ai-provider" value={configuration.provider} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, provider: event.target.value })}>
 							<option value="openai_compatible">OpenAI compatible</option><option value="workbuddy">WorkBuddy</option>
 						</select>
 					</div>
 					<div className="settings-field">
 						<label htmlFor="ai-model">Model</label>
-						<input id="ai-model" required maxLength={255} value={configuration.model} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, model: event.target.value })} />
+						<input id="ai-model" required maxLength={255} value={configuration.model} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, model: event.target.value })} />
 					</div>
 				</div>
 				<div className="settings-field">
 					<label htmlFor="ai-api-base">API endpoint URL</label>
-					<input id="ai-api-base" type="url" required maxLength={2048} value={configuration.apiBase ?? ''} disabled={saving} placeholder="https://your-provider.com/v1/chat/completions" onChange={(event) => setConfiguration({ ...configuration, apiBase: event.target.value })} />
+					<input id="ai-api-base" type="url" required maxLength={2048} value={configuration.apiBase ?? ''} disabled={busy} placeholder="https://your-provider.com/v1/chat/completions" onChange={(event) => setConfiguration({ ...configuration, apiBase: event.target.value })} />
 				</div>
 				<div className="settings-field">
 					<label htmlFor="experiment-ai-key">API key</label>
-					<input id="experiment-ai-key" type="password" autoComplete="new-password" value={apiKey} disabled={saving} maxLength={4096}
+					<input id="experiment-ai-key" type="password" autoComplete="new-password" value={apiKey} disabled={busy} maxLength={4096}
 						onChange={(event) => setApiKey(event.target.value)} placeholder={status.hasCustomKey ? 'Enter a replacement key' : 'Enter API key'} />
 				</div>
-				<p className="settings-hint">Leave the key blank to keep the current key or server default. WorkBuddy requires its wbpk_ application key. Saved keys are never displayed. Saving does not send a test request.</p>
+				<p className="settings-hint">Leave the key blank to keep a saved key. The server key applies only to the server’s default provider and endpoint. WorkBuddy requires its wbpk_ application key. Save your changes before testing the connection.</p>
 				<div className="ai-parameter-grid">
 					<label className="switch-label"><span>Streaming responses</span>
-						<button type="button" role="switch" aria-label="Streaming responses" aria-checked={configuration.stream ?? true} className={configuration.stream ? 'switch on' : 'switch'} disabled={saving} onClick={() => setConfiguration({ ...configuration, stream: !configuration.stream })}><span></span></button>
+						<button type="button" role="switch" aria-label="Streaming responses" aria-checked={configuration.stream ?? true} className={configuration.stream ? 'switch on' : 'switch'} disabled={busy} onClick={() => setConfiguration({ ...configuration, stream: !configuration.stream })}><span></span></button>
 					</label>
 					<div className="settings-field"><label htmlFor="ai-timeout">Timeout (seconds)</label>
-						<input id="ai-timeout" type="number" required min="0.1" max="600" step="any" value={configuration.timeoutSeconds} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, timeoutSeconds: Number(event.target.value) })} />
+						<input id="ai-timeout" type="number" required min="0.1" max="600" step="any" value={configuration.timeoutSeconds} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, timeoutSeconds: Number(event.target.value) })} />
 					</div>
 				</div>
 				<details className="ai-advanced-settings"><summary>Advanced AI settings</summary>
 					<div className="settings-field"><label htmlFor="ai-temperature">Temperature (optional)</label>
-						<input id="ai-temperature" type="number" min="0" max="2" step="any" placeholder="Provider default" value={configuration.temperature ?? ''} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, temperature: event.target.value === '' ? null : Number(event.target.value) })} />
+						<input id="ai-temperature" type="number" min="0" max="2" step="any" placeholder="Provider default" value={configuration.temperature ?? ''} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, temperature: event.target.value === '' ? null : Number(event.target.value) })} />
 					</div>
 					<div className="settings-field"><label htmlFor="ai-system-prompt">System prompt</label>
-						<textarea id="ai-system-prompt" rows={5} maxLength={50000} placeholder="Use the built-in research assistant instructions" value={configuration.systemPrompt ?? ''} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, systemPrompt: event.target.value })} />
+						<textarea id="ai-system-prompt" rows={5} maxLength={50000} placeholder="Use the built-in research assistant instructions" value={configuration.systemPrompt ?? ''} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, systemPrompt: event.target.value })} />
 					</div>
 					<div className="ai-parameter-grid">
 						{([
@@ -917,15 +934,20 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 							['historyMessageChars', 'Characters per history message', 1, 20000],
 						] as const).map(([key, label, min, max]) => <div className="settings-field" key={key}>
 							<label htmlFor={'ai-' + key}>{label}</label>
-							<input id={'ai-' + key} type="number" required min={min} max={max} step="1" value={configuration[key]} disabled={saving} onChange={(event) => setConfiguration({ ...configuration, [key]: Number(event.target.value) })} />
+							<input id={'ai-' + key} type="number" required min={min} max={max} step="1" value={configuration[key]} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, [key]: Number(event.target.value) })} />
 						</div>)}
 					</div>
 				</details>
 				<div className="settings-actions">
-					<button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving…' : 'Save AI settings'}</button>
-					{isCommon && (status.hasCustomKey || status.hasCustomSettings) && <button type="button" className="secondary-button" disabled={saving} onClick={() => void updateKey(true)}>Use server default</button>}
+					<button type="submit" className="primary-button" disabled={busy}>{saving ? 'Saving…' : 'Save AI settings'}</button>
+					{isCommon && (status.hasCustomKey || status.hasCustomSettings) && <button type="button" className="secondary-button" disabled={busy} onClick={() => void updateKey(true)}>Use server default</button>}
 				</div>
 			</form>}
+			{status?.configured && <div className="settings-actions">
+				<button type="button" className="secondary-button" disabled={busy} onClick={() => void testConnection()}>
+					Test saved connection
+				</button>
+			</div>}
 			<p role="status">{message}</p>
 		</div>
 	</section>

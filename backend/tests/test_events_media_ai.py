@@ -70,10 +70,43 @@ def test_common_ai_settings_follow_source_and_preserve_independent_credentials(c
     assert client.patch('/api/workspace/ai-config', headers=other, json={'model': 'other-common'}).status_code == 200
     assert client.get('/api/workspace/ai-config', headers=auth_headers).json()['model'] == 'common-B'
     assert client.get(paths[0], headers=other).status_code == 404
+    assert client.post(paths[0] + '/test', headers=other).status_code == 404
+    assert client.post(paths[0] + '/test', headers=auth_headers).status_code == 204
+    assert client.post(paths[1] + '/test', headers=auth_headers).status_code == 204
+    assert captured[-2:] == [('Bearer shared-new-key', 'common-B'), ('Bearer independent-test-key', 'independent-model')]
     assert client.get('/api/workspace/ai-config').status_code == 401
     assert client.delete('/api/workspace/ai-config', headers=auth_headers).status_code == 200
     assert client.get(paths[0], headers=auth_headers).json()['model'] == settings.ai_model
     assert client.get(paths[1], headers=auth_headers).json()['model'] == 'independent-model'
+
+
+def test_ai_connection_uses_saved_credentials_without_forwarding_server_key(
+    client, auth_headers, monkeypatch, ai_transport,
+):
+    monkeypatch.setattr(settings, "ai_api_key", "server-test-key")
+    monkeypatch.setattr(settings, "ai_provider", "openai_compatible")
+    monkeypatch.setattr(settings, "ai_api_base", "https://default.example/v1/chat/completions")
+    captured = []
+
+    def upstream(request):
+        captured.append((request.url.host, request.headers["Authorization"]))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ready"}}]})
+
+    ai_transport(upstream)
+    path = "/api/workspace/ai-config"
+    assert client.post(path + "/test").status_code == 401
+    saved = client.patch(path, headers=auth_headers, json={
+        "apiBase": "https://custom.example/v1/chat/completions", "stream": False,
+    })
+    assert saved.status_code == 200 and not saved.json()["configured"]
+    assert client.post(path + "/test", headers=auth_headers).status_code == 503
+    assert captured == []
+
+    saved = client.patch(path, headers=auth_headers, json={"apiKey": "custom-test-key"})
+    assert saved.status_code == 200 and saved.json()["configured"]
+    response = client.post(path + "/test", headers=auth_headers)
+    assert response.status_code == 204 and response.content == b""
+    assert captured == [("custom.example", "Bearer custom-test-key")]
 
 
 @pytest.mark.parametrize("streaming", [False, True])

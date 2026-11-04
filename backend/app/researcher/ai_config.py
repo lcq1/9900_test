@@ -48,12 +48,18 @@ def uses_common(overrides: dict) -> bool:
 
 def resolve_common_config(db, researcher_id: str):
     overrides = get_experiment_config(db, common_scope(researcher_id))
-    return _apply_overrides(overrides)
+    return apply_ai_overrides(overrides)
 
 
-def _apply_overrides(overrides: dict):
+def apply_ai_overrides(overrides: dict):
     """Apply supported AI parameters without copying configuration-source metadata."""
-    return settings.model_copy(update={'ai_' + key: value for key, value in overrides.items() if key in AI_PARAMETERS})
+    updates = {'ai_' + key: value for key, value in overrides.items() if key in AI_PARAMETERS}
+    if (
+        updates.get('ai_api_base', settings.ai_api_base) != settings.ai_api_base
+        or updates.get('ai_provider', settings.ai_provider) != settings.ai_provider
+    ):
+        updates.setdefault('ai_api_key', None)
+    return settings.model_copy(update=updates)
 
 
 def resolve_experiment_config(db, experiment_id: str):
@@ -62,7 +68,7 @@ def resolve_experiment_config(db, experiment_id: str):
     experiment = db.get(Experiment, experiment_id)
     if experiment and experiment.owner_id and uses_common(overrides):
         return resolve_common_config(db, experiment.owner_id)
-    return _apply_overrides(overrides)
+    return apply_ai_overrides(overrides)
 
 
 def save_experiment_key(db, experiment, key: str | None) -> None:

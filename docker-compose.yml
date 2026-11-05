@@ -21,9 +21,6 @@ services:
   # Public hosting uses the separate docker-compose.production.yml.
 
   backend:
-  #       condition: service_healthy
-
-  backend:
     build: ./backend
     env_file:
       - path: .env

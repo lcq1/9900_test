@@ -43,3 +43,12 @@ frontend_build:
   artifacts:
     paths:
       - frontend/dist/
+
+compose_validation:
+  stage: test
+  image: docker:29-cli
+  script:
+    - docker compose -f docker-compose.yml config --quiet
+    - cp deploy/production.env.example /tmp/beyond-production-ci.env
+    - BEYOND_ENV_FILE=/tmp/beyond-production-ci.env docker compose --env-file /tmp/beyond-production-ci.env -f docker-compose.production.yml config --quiet
+    - RESEARCH_STORAGE_PATH=/tmp BEYOND_ENV_FILE=/tmp/beyond-production-ci.env docker compose --env-file /tmp/beyond-production-ci.env -f docker-compose.production.yml -f deploy/storage.compose.example.yml config --quiet

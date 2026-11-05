@@ -21,13 +21,20 @@ export interface Session {
 	issuedAt: string
 }
 
-// Registration name, email, and optional password.
+// Researcher registration requires a name, email and password.
 export interface RegisterInput {
 	name: string
 	email: string
 	// The backend handles and stores the password.
-	password?: string
+	password: string
 }
+
+export interface RegistrationPolicy {
+    allowSelfRegistration: boolean
+    requireResearcherApproval: boolean
+    emailRestricted: boolean
+}
+export const getRegistrationPolicy = () => http.get<RegistrationPolicy>('/auth/registration-policy')
 
 export const registerResearcher = (input: RegisterInput) => http.post<Researcher>('/auth/register', input)
 

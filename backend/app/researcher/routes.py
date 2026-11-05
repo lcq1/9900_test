@@ -31,7 +31,7 @@ from app.researcher.schemas import (
     LoginRequest,
     LoginResponse,
     Researcher as ResearcherSchema,
-    ResearcherCreate,
+    ResearcherRegistration,
     StorageSettings,
     ExperimentAIKey,
 )
@@ -39,8 +39,19 @@ from app.researcher.schemas import (
 router = APIRouter(tags=["auth", "researcher", "experiments"])
 
 
+@router.get("/auth/registration-policy")
+def registration_policy(db: Session = Depends(get_db)) -> dict:
+    from app.administrator.service import get_settings
+    from app.core.config import settings
+
+    policy = get_settings(db)
+    return {"allowSelfRegistration": policy.allow_self_registration,
+            "requireResearcherApproval": policy.require_researcher_approval,
+            "emailRestricted": settings.access_allowlist_enabled}
+
+
 @router.post("/auth/register", response_model=ResearcherSchema, status_code=201)
-def register(payload: ResearcherCreate, db: Session = Depends(get_db)) -> Researcher:
+def register(payload: ResearcherRegistration, db: Session = Depends(get_db)) -> Researcher:
     return svc.register_researcher(
         db, name=payload.name, email=payload.email, password=payload.password
     )

@@ -11,6 +11,7 @@ import {
   CircleStop,
   MessageCircle,
   MonitorPlay,
+  Eye,
   Paperclip,
   Pause,
   PenLine,
@@ -138,6 +139,8 @@ useEffect(() => onStorageDegraded(setStorageLimited), [])
 	const [extended, setExtended] = useState<Record<string, boolean>>(restored?.extended ?? {})
 	const [oralIndex, setOralIndex] = useState(restored?.oralIndex ?? 0)
 	const [oralStarted, setOralStarted] = useState(restored?.oralStarted ?? false)
+	const [inspectionMode, setInspectionMode] = useState(false)
+	const previewPosition = useRef<{ stageIndex: number; oralIndex: number; remaining: number } | null>(null)
 	const [stageIndex, setStageIndex] = useState(Math.max(0, Math.min(Number.isInteger(restored?.stageIndex) ? restored!.stageIndex : 0, experiment.stages.length - 1)))
 
 	const stageTimes = useRef<Record<string, number>>({})
@@ -390,7 +393,7 @@ useEffect(() => onStorageDegraded(setStorageLimited), [])
 	const { remaining, reset: setRemaining } = useTimerController({
 		initialSeconds: totalSeconds,
 		enabled:
-			stage.features.timer && !paused && !interactionLocked && !saving && (!stage.sequentialQuestions || oralStarted),
+			stage.features.timer && !inspectionMode && !paused && !interactionLocked && !saving && (!stage.sequentialQuestions || oralStarted),
 		stageId: stage.id,
 		storageKey: !previewOnly && initialSessionId && stage.features.timer ? 'p13-timer:' + initialSessionId + ':' + stage.id : undefined,
 	})
@@ -457,7 +460,7 @@ useEffect(() => {
 	)
 
 	const timeUpVisible = Boolean(
-		stage.features.timer &&
+		stage.features.timer && !inspectionMode &&
 			remaining === 0 &&
 			!paused &&
 			!interactionLocked &&
@@ -560,7 +563,7 @@ useEffect(() => {
 
 	useEffect(() => {
 		setRecordingStatus({})
-		if (stage.type.toLowerCase() === 'consent') return
+		if (inspectionMode || stage.type.toLowerCase() === 'consent') return
 		if (
 			requiresScreen ||
 			(stage.recordingMode === 'auto' &&
@@ -574,7 +577,7 @@ useEffect(() => {
 			void startRecording('self')
 		// Reuse only live streams retained by the previous stage.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [stage.id])
+	}, [stage.id, inspectionMode])
 
 	useEffect(() => {
 		if (paused)
@@ -602,6 +605,45 @@ useEffect(() => {
 		if (remaining.length !== missingIds.length) setMissingIds(remaining)
 	}, [selections, missingIds])
 
+	const clearPreviewGuards = () => {
+        Object.values(controllersRef.current).forEach(controller => controller?.stop())
+        controllersRef.current = {}
+        approvedRef.current = null
+        setRecordingStatus({})
+        setRecordingStageId('')
+        setRecordingError('')
+        setValidationError('')
+        setMissingIds([])
+        setShowMissingModal(false)
+        setConfirmation(false)
+        setPaused(false)
+        setOralStarted(false)
+        setTimeUpDismissed(true)
+    }
+    const inspectStage = (index: number) => {
+        if (!previewOnly || !inspectionMode || saving || !experiment.stages[index]) return
+        clearPreviewGuards()
+        setOralIndex(0)
+        setStageIndex(index)
+        setRemaining(Math.max(1, experiment.stages[index].countdownMinutes) * 60)
+    }
+    const toggleInspection = () => {
+        if (!previewOnly || saving) return
+        clearPreviewGuards()
+        if (!inspectionMode) {
+            previewPosition.current = { stageIndex, oralIndex, remaining }
+            setInspectionMode(true)
+        } else {
+            const saved = previewPosition.current
+            if (saved) {
+                setStageIndex(saved.stageIndex)
+                setOralIndex(saved.oralIndex)
+                setRemaining(saved.remaining)
+            }
+            setInspectionMode(false)
+        }
+    }
+
 	const next = () => advance(false)
 
 	/**
@@ -611,6 +653,7 @@ useEffect(() => {
 	 */
 	const advance = async (skipConfirm: boolean, triggeredBy = 'participant') => {
 		if (busyRef.current) return
+        if (inspectionMode) { inspectStage(stageIndex + 1); return }
 		if (stage.sequentialQuestions && remaining > 0 && oralIndex < stage.components.filter(c => c.type === 'text').length - 1) { setValidationError('Please answer every explanation question before submitting.'); return }
 		setValidationError('')
 		setValidationAttempt((attempt) => attempt + 1)
@@ -768,7 +811,7 @@ useEffect(() => {
 	}, [timeUpVisible, stage.id, stage.timerExpiry, extensionAvailable])
 
 	const startRecording = async (kind: RecordingKind) => {
-		if (startingRef.current[kind] || paused || busyRef.current || (stage.sequentialQuestions && remaining === 0)) return
+		if (inspectionMode || startingRef.current[kind] || paused || busyRef.current || (stage.sequentialQuestions && remaining === 0)) return
 		startingRef.current[kind] = true
 		try {
 			const controllers = controllersRef.current
@@ -1001,7 +1044,7 @@ useEffect(() => {
 					title="Browser storage is full. Progress is still saved to the study server; keep this page open."
 				/>
 			)}
-			{stage.recordingMode === 'auto' &&
+			{!inspectionMode && stage.recordingMode === 'auto' &&
 				(wantsScreen || wantsSelfVideo) && (
 					<p>
 						Recording starts after browser permission. If prompted
@@ -1032,7 +1075,6 @@ useEffect(() => {
 				/>
 			)}
 
-			{stage.sequentialQuestions && <div className="oral-progress"><p>Question {oralIndex + 1} of {stage.components.filter(c => c.type === 'text').length} · Shared time: {minutes}:{seconds}</p><button className="secondary-button" disabled={!oralStarted || saving || paused || interactionLocked || oralIndex >= stage.components.filter(c => c.type === 'text').length - 1} onClick={() => { queue.record('oral_question', { from: oralIndex + 1, to: oralIndex + 2 }, stage.id); setOralIndex(i => i + 1) }}>Next question</button></div>}
 {/* MS-Forms-style stage content */}
 			<fieldset
 				disabled={interactionLocked || paused || saving}
@@ -1260,9 +1302,21 @@ useEffect(() => {
 					)
 				})}
 			</fieldset>
+            {stage.sequentialQuestions && <div className="oral-question-controls">
+                <div className="oral-question-summary">
+                    <strong>Question {oralIndex + 1} of {stage.components.filter(c => c.type === 'text').length}</strong>
+                    <span>{inspectionMode ? 'Free browsing · timer paused' : `Shared time: ${minutes}:${seconds}`}</span>
+                    {!oralStarted && !inspectionMode && <small>Start the recording below to answer and continue.</small>}
+                </div>
+                <button type="button" className="secondary-button"
+                    disabled={(!oralStarted && !inspectionMode) || saving || paused || interactionLocked || oralIndex >= stage.components.filter(c => c.type === 'text').length - 1}
+                    onClick={() => { queue.record('oral_question', { from: oralIndex + 1, to: oralIndex + 2 }, stage.id); setOralIndex(i => i + 1) }}>
+                    Next question <ArrowRight size={15} aria-hidden="true" />
+                </button>
+            </div>}
 
 			{/* Media capture controls — self video/audio and (optional) screen. */}
-			{(wantsSelfVideo || wantsScreen) && (
+			{!inspectionMode && (wantsSelfVideo || wantsScreen) && (
 				<div className="capture-panel">
 					<div className="capture-head">
 						This stage records your activity
@@ -1343,7 +1397,15 @@ useEffect(() => {
 		</>
 	)
 
-	const footer = (
+	const footer = inspectionMode ? (
+        <div className="participant-footer">
+            <span className="participant-footer-status">Free browsing · Stage {stageIndex + 1} of {experiment.stages.length}</span>
+            <div className="participant-actions">
+                <button className="secondary-button" disabled={stageIndex === 0} onClick={() => inspectStage(stageIndex - 1)}><ArrowLeft size={15} /> Previous stage</button>
+                <button className="primary-button" disabled={stageIndex === experiment.stages.length - 1} onClick={() => inspectStage(stageIndex + 1)}>Next stage <ArrowRight size={15} /></button>
+            </div>
+        </div>
+    ) : (
 		<div className="participant-footer">
 			<span className="participant-footer-status">
 				{stage.type === 'instruction'
@@ -1429,6 +1491,15 @@ useEffect(() => {
 							: 'participant-body'
 					}
 				>
+                    {previewOnly && <div className={'preview-mode-bar' + (inspectionMode ? ' is-inspecting' : '')}>
+                        <div><strong>{inspectionMode ? 'Free stage browsing' : 'Participant experience'}</strong>
+                            <p>{inspectionMode ? 'Choose any stage below. Requirements are bypassed, recording is off and timers are paused.' : 'Follow the participant flow, with required answers and sequential stage submission.'}</p>
+                        </div>
+                        <button type="button" className="secondary-button" role="switch" aria-checked={inspectionMode}
+                            aria-label="Free stage browsing" disabled={saving} onClick={toggleInspection}>
+                            <Eye size={16} aria-hidden="true" /> {inspectionMode ? 'Return to participant experience' : 'Enable free stage browsing'}
+                        </button>
+                    </div>}
 					{recordingError &&
 						recordingErrorVisible &&
 						!fullscreenLocked && (
@@ -1453,20 +1524,21 @@ useEffect(() => {
 					<div className="participant-question-layout">
                         <StageNavigation currentStep={stageIndex + 1} total={experiment.stages.length}>
 								{experiment.stages.map((s, i) => {
-									const answered = i < stageIndex
+									const answered = !inspectionMode && i < stageIndex
 									return (
 										<button
 											type="button"
 											key={s.id}
 											aria-label={s.name}
-                                            title={i > stageIndex ? 'Complete and submit the current stage to continue.' : s.name}
+                                            title={!inspectionMode && i > stageIndex ? 'Complete and submit the current stage to continue.' : s.name}
 											aria-current={i === stageIndex ? 'step' : undefined}
 											className={
 												'qnav-item' +
 												(answered ? ' done' : '') +
 												(i === stageIndex ? ' current' : '')
 											}
-											disabled
+											disabled={!inspectionMode || saving || i === stageIndex}
+                                            onClick={() => inspectStage(i)}
 
 										>
 											<span className="qnav-dot" aria-hidden="true" />

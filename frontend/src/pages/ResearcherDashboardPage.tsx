@@ -1504,7 +1504,7 @@ function chartInterpretation(
 		groups.set(key, group)
 	}
 	const duration = [...groups.values()].map((items) => Math.max(...items.map(elapsedOfEvent)))
-	const common = `${total} timed events across ${groups.size} sessions with recorded activity.`
+	const common = `${total} timed ${total === 1 ? 'event' : 'events'} across ${groups.size} ${groups.size === 1 ? 'session' : 'sessions'} with recorded activity.`
 	if (!total) return { meaning: 'Select a study with recorded events to explore its activity.', facts: [] }
 	if (chart === 'bar') return {
 		meaning: 'Each bar shows how often an event type was recorded. Categories are sorted from most to least frequent.',
@@ -1514,9 +1514,10 @@ function chartInterpretation(
 		meaning: 'Each segment shows an event type’s share of all timed events. Segment colours match the event-count table.',
 		facts: [common, `The three largest categories account for ${percent(segments.slice(0, 3).reduce((sum, item) => sum + item.count, 0))} of events.`],
 	}
+	const earlyCount = events.filter((event) => elapsedOfEvent(event) <= span / 2).length
 	if (chart === 'line') return {
 		meaning: 'This line accumulates recorded events as elapsed time increases. Sessions share a zero point at their first event. A steep section indicates more events in that interval.',
-		facts: [common, `${events.filter((event) => elapsedOfEvent(event) <= span / 2).length} events occurred within the first half of the longest recorded event span (${fmtElapsed(span / 2)}).`],
+		facts: [common, `${earlyCount} ${earlyCount === 1 ? 'event occurred' : 'events occurred'} within the first half of the longest recorded event span (${fmtElapsed(span / 2)}).`],
 	}
 	if (chart === 'histogram') {
 		const bins = eventHistogram(events, Math.max(1, span))
@@ -1553,7 +1554,7 @@ function ResultPlot({
 	const W = 900
 	if (chart === 'bar') {
 		const L = 190, R = 835, T = 34, row = 35
-		const H = Math.max(360, T + segments.length * row + 55)
+		const H = T + segments.length * row + 55
 		const peak = niceCountMax(Math.max(...segments.map((item) => item.count), 1))
 		const x = (value: number) => L + value / peak * (R - L)
 		return <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="bar chart" className="result-plot">

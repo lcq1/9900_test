@@ -34,3 +34,13 @@ export const downloadAdminResults = (id: string) =>
 		'/admin/experiments/' + id + '/results.xlsx',
 		'experiment.xlsx',
 	)
+
+export interface WorkspaceUsage {
+    experiments: number
+    sessions: number
+    completedSessions: number
+    events: number
+    recordings: number
+    updatedAt: string
+}
+export const getWorkspaceUsage = () => http.get<WorkspaceUsage>('/workspace/usage')

@@ -36,6 +36,10 @@ export const downloadExperimentCsv = (id: string, view: 'answers' | 'activity') 
 	downloadFile(PATH + '/' + encodeURIComponent(id) + '/results.csv?view=' + view,
 		'experiment_' + view + '.csv')
 
+export const duplicateStudy = (id: string) => http.post<Experiment>(PATH + '/' + encodeURIComponent(id) + '/duplicate')
+export const importStudyTemplate = (template: unknown) => http.post<Experiment>(PATH + '/import-template', template)
+export const downloadStudyTemplate = (id: string) => downloadFile(PATH + '/' + encodeURIComponent(id) + '/template', 'study-design.json')
+
 export interface ExperimentAIKeyStatus {
 	hasCustomKey: boolean
 	configured: boolean
@@ -91,6 +95,8 @@ export function useExperiments() {
 		}) => updateExperiment(id, patch),
 		onSuccess: () => client.invalidateQueries({ queryKey: key }),
 	})
+    const duplicate = useMutation({ mutationFn: duplicateStudy, onSuccess: () => client.invalidateQueries({ queryKey: key }) })
+    const importDesign = useMutation({ mutationFn: importStudyTemplate, onSuccess: () => client.invalidateQueries({ queryKey: key }) })
 	const remove = useMutation({
 		mutationFn: removeExperiment,
 		onSuccess: () => client.invalidateQueries({ queryKey: key }),
@@ -104,6 +110,9 @@ export function useExperiments() {
 			e: Experiment & { publish?: boolean; publishRequestId?: string },
 		) => update.mutateAsync({ id: e.id, patch: e }),
 		removeExperiment: remove.mutateAsync,
+        duplicateExperiment: duplicate.mutateAsync,
+        importTemplate: importDesign.mutateAsync,
+        changeCollection: (id: string, closed: boolean) => update.mutateAsync({ id, patch: closed ? { status: 'Closed' } : { publish: true, publishRequestId: crypto.randomUUID() } }),
 	}
 }
 

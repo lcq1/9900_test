@@ -63,8 +63,13 @@ async def get_study_actor(x_participant_token: str | None = Header(default=None)
         except (jwt.PyJWTError, ValueError):
             raise HTTPException(status_code=401, detail="Participant access expired. Enter your codes again.")
         experiment = db.get(ExperimentModel, claims["experiment"])
-        if experiment is None or experiment.status != "Live":
+        if experiment is None or experiment.status not in ("Live", "Closed"):
             raise HTTPException(status_code=403, detail="Experiment is not open for participation")
+        if experiment.status == "Closed":
+            from app.participant.models import ParticipantSession
+            if not db.query(ParticipantSession.id).filter_by(experiment_code=experiment.code,
+                    participant_code=claims["participant"]).first():
+                raise HTTPException(status_code=403, detail="Recruitment is closed")
         check_code(db, experiment, claims["participant"])
         return ParticipantAccess(experiment.owner_id, experiment.id, experiment.code, claims["participant"], client_id=x_participant_client)
     if not authorization or not authorization.startswith("Bearer "):
@@ -146,13 +151,15 @@ def start_session(payload: SessionStart, db: Session = Depends(get_db),
     experiment = db.query(ExperimentModel).filter_by(id=experiment.id).populate_existing().with_for_update().one()
     issued = None
     if isinstance(actor, ParticipantAccess):
-        if experiment.status != "Live":
+        if experiment.status not in ("Live", "Closed"):
             raise HTTPException(status_code=403, detail="Experiment is not open for participation")
         issued = check_code(db, experiment, payload.participant_code)
     session = db.get(ParticipantSession, str(payload.session_id))
     if session is None:
         session = db.query(ParticipantSession).filter_by(experiment_code=experiment.code,
             participant_code=payload.participant_code, finished_at=None).order_by(ParticipantSession.started_at.desc()).first()
+    if session is None and isinstance(actor, ParticipantAccess) and experiment.status == "Closed":
+        raise HTTPException(status_code=403, detail="Recruitment is closed; no new session can be started")
     if session is not None:
         visible = versions.session_experiment(db, session.id, experiment, payload.participant_code)
         if session.finished_at:

@@ -1,9 +1,10 @@
-import { Modal } from 'antd'
+import { Modal, Dropdown } from 'antd'
 import { useTransientNotice } from '../participant/TimerController'
-import { useState, useEffect, useId, useRef } from 'react'
+import { useState, useEffect, useId, useRef, lazy, Suspense } from 'react'
 import type { Experiment } from '../types'
 import {
 	ChevronDown,
+	MoreHorizontal,
 	Download,
 	FileText,
 	Plus,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 import {
 	getExperimentAIKey,
+	downloadStudyTemplate,
 	saveExperimentAIKey,
 	removeExperimentAIKey,
 	setExperimentAISource,
@@ -30,8 +32,10 @@ import { ExportDialog } from '../researcher/ExportDialog'
 import type { ParticipantEvent, ParticipantEventType } from '../participant/EventQueue'
 import { downloadSessionRecording, listSessionRecordings, listSessions, type SessionRecording } from '../api/participant'
 import { getCurrentResearcher } from '../auth/sessionStore'
-import { getWorkspaceSettings, getWorkspaceMembers, type PlatformSettings } from '../api/administrator'
+import { getWorkspaceSettings, getWorkspaceMembers, getWorkspaceUsage, type WorkspaceUsage, type PlatformSettings } from '../api/administrator'
 import type { Researcher } from '../api/auth'
+
+const StudyQRCode = lazy(() => import('antd/es/qr-code'))
 
 // Researcher dashboard with statistics, experiment search, editing, and export.
 export function Dashboard({
@@ -41,6 +45,7 @@ export function Dashboard({
 	onCreate,
 	onEdit,
 	onDelete,
+    onDuplicate, onCollection, onImport, busy = false,
 }: {
 	experiments: Experiment[]
 	query: string
@@ -48,6 +53,10 @@ export function Dashboard({
 	onCreate: () => void
 	onEdit: (id: string) => void
 	onDelete: (id: string) => void
+    onDuplicate?: (study: Experiment) => void
+    onCollection?: (study: Experiment) => void
+    onImport?: (file: File) => void
+    busy?: boolean
 }) {
 	const [filtersOpen, setFiltersOpen] = useState(false)
 	const [statusFilter, setStatusFilter] = useState<Experiment['status'] | ''>('')
@@ -59,6 +68,11 @@ export function Dashboard({
 			(experiment.name.toLowerCase().includes(query.toLowerCase()) ||
 			experiment.code.toLowerCase().includes(query.toLowerCase())),
 	)
+    const importInput = useRef<HTMLInputElement>(null)
+    const [sharing, setSharing] = useState<Experiment | null>(null)
+    const [actionError, setActionError] = useState('')
+    const [copyNotice, setCopyNotice] = useState('')
+    const participantLink = sharing ? window.location.origin + '/participant?experiment=' + encodeURIComponent(sharing.code) : ''
 	// Track the experiment selected for export.
 	const [exporting, setExporting] = useState<Experiment | null>(null)
 	return (
@@ -72,9 +86,11 @@ export function Dashboard({
 						Design, run and inspect your data collection studies.
 					</p>
 				</div>
-				<button className="primary-button" onClick={onCreate}>
-					<Plus size={17} /> New experiment
-				</button>
+                <div className="settings-actions">
+                    {onImport && <><input ref={importInput} type="file" accept=".json,application/json" hidden aria-label="Study design file" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onImport(file) }} />
+                    <button className="secondary-button" type="button" disabled={busy} onClick={() => importInput.current?.click()}>Import study design</button></>}
+                    <button className="primary-button" disabled={busy} onClick={onCreate}><Plus size={17} /> New experiment</button>
+                </div>
 			</div>
 			{/* Summary statistics. */}
 			<div className="stats-row">
@@ -85,7 +101,7 @@ export function Dashboard({
 					</strong>
 				</div>
 				<div>
-					<span className="stat-label">Active this week</span>
+					<span className="stat-label">Open for participation</span>
 					<strong>
 						{experiments
 							.filter(
@@ -147,6 +163,7 @@ export function Dashboard({
 					<button type="button" className="secondary-button" disabled={!statusFilter} onClick={() => setStatusFilter('')}>Reset filters</button>
 				</div>
 			)}
+            {actionError && <p className="entry-error" role="alert">{actionError}</p>}
 			{/* Records and row actions. */}
 			<div className="experiment-table">
 				<div className="table-head">
@@ -186,6 +203,21 @@ export function Dashboard({
 							{experiment.stages.length} stages
 						</span>
 						<div className="row-actions">
+                            <Dropdown trigger={['click']} menu={{ items: [
+                                { key: 'share', label: 'Share participant link', disabled: experiment.status !== 'Live' },
+                                { key: 'duplicate', label: 'Duplicate as draft', disabled: busy || !onDuplicate },
+                                { key: 'design', label: 'Download study design', disabled: busy },
+                                ...(experiment.status !== 'Draft' ? [{ key: 'collection', label: experiment.status === 'Live' ? 'Close recruitment' : 'Reopen recruitment', disabled: busy || !onCollection }] : []),
+                            ], onClick: ({key, domEvent}) => {
+                                domEvent.stopPropagation()
+                                if (key === 'share') { setSharing(experiment); setCopyNotice('') }
+                                if (key === 'duplicate') onDuplicate?.(experiment)
+                                if (key === 'collection') onCollection?.(experiment)
+                                if (key === 'design') { setActionError(''); void downloadStudyTemplate(experiment.id).catch(error => setActionError(error instanceof Error ? error.message : 'Could not download study design.')) }
+                            } }}>
+                                <button type="button" className="row-menu" aria-label={`Actions for ${experiment.name}`} onClick={event => event.stopPropagation()}><MoreHorizontal size={16} /></button>
+                            </Dropdown>
+
 							<button
 								className="row-menu"
 								title="Export experiment"
@@ -217,6 +249,17 @@ export function Dashboard({
 					</div>
 				)}
 			</div>
+            {sharing && <Modal title="Share participant access" open onCancel={() => setSharing(null)} footer={null}>
+                {sharing && <div className="study-share-panel">
+                    <p>Share this link or QR code. Participants still need an assigned participant code; the link does not grant access by itself.</p>
+                    <label>Participant link<input value={participantLink} readOnly onFocus={event => event.target.select()} /></label>
+                    <button type="button" className="primary-button" onClick={async () => { try { await navigator.clipboard.writeText(participantLink); setCopyNotice('Participant link copied.') } catch { setCopyNotice('Select and copy the link above manually.') } }}>Copy participant link</button>
+                    <Suspense fallback={<p>Loading QR code…</p>}><StudyQRCode value={participantLink} size={160} /></Suspense>
+                    {['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname) && <p className="settings-hint" role="note">This link points to this computer only. Use the deployed HTTPS website address before sharing with participants on other devices.</p>}
+                    <p className="settings-hint">To test participant access while signed in as a researcher, use a private browser window.</p>
+                    {copyNotice && <p role="status">{copyNotice}</p>}
+                </div>}
+            </Modal>}
 			{exporting && (
 				<ExportDialog
 					experiment={exporting}
@@ -1236,6 +1279,17 @@ export function WorkspaceSettingsPage({
 		}
 	}, [])
 
+    const [usage, setUsage] = useState<WorkspaceUsage | null>(null)
+    const [usageFailure, setUsageFailure] = useState(false)
+    const [usageLoading, setUsageLoading] = useState(true)
+    const [usageRefresh, setUsageRefresh] = useState(0)
+    useEffect(() => {
+        let active = true
+        getWorkspaceUsage().then(value => { if (active) { setUsage(value); setUsageFailure(false) } })
+            .catch(() => { if (active) setUsageFailure(true) })
+            .finally(() => { if (active) setUsageLoading(false) })
+        return () => { active = false }
+    }, [usageRefresh])
 	// Count local workspace sessions, events, and stored characters.
 	let sessionCount = 0
 	let eventCount = 0
@@ -1377,31 +1431,25 @@ export function WorkspaceSettingsPage({
 					)}
 				</section>
 
-				{/* Local session, event, and stored character counts. */}
-				<section className="settings-card">
-					<h3>Usage statistics</h3>
-					<p className="card-sub">
-						Your experiments and this device’s cached activity. Browser cache is not a server backup.
-					</p>
-					<div className="stat-mini">
-						<div>
-							<span>Experiments</span>
-							<strong>{experiments.length}</strong>
-						</div>
-						<div>
-							<span>Cached sessions</span>
-							<strong>{sessionCount}</strong>
-						</div>
-						<div>
-							<span>Cached events</span>
-							<strong>{eventCount}</strong>
-						</div>
-						<div>
-							<span>Browser cache (estimate)</span>
-							<strong>{storageKb} KB</strong>
-						</div>
-					</div>
-				</section>
+                <section className="settings-card">
+                    <h3>Usage statistics</h3>
+                    <p className="card-sub">Saved server data for your own experiments, across browsers and devices.</p>
+                    {usageLoading && <p role="status">Refreshing server counts…</p>}
+                    {usageFailure && <p role="alert" className="entry-error">Server counts could not be refreshed. Previously loaded counts may be out of date.</p>}
+                    {usage && <>
+                        <div className="stat-mini">
+                            <div><span>Experiments</span><strong>{usage.experiments}</strong></div>
+                            <div><span>Saved sessions</span><strong>{usage.sessions}</strong></div>
+                            <div><span>Completed sessions</span><strong>{usage.completedSessions}</strong></div>
+                            <div><span>Saved events</span><strong>{usage.events}</strong></div>
+                            <div><span>Recordings</span><strong>{usage.recordings}</strong></div>
+                            <div><span>In progress</span><strong>{usage.sessions - usage.completedSessions}</strong></div>
+                        </div>
+                        <p className="settings-hint">Updated {new Date(usage.updatedAt).toLocaleTimeString()}. Counts exclude private system records.</p>
+                    </>}
+                    <button type="button" className="secondary-button" disabled={usageLoading} onClick={() => { setUsageLoading(true); setUsageRefresh(value => value + 1) }}>Refresh statistics</button>
+                    <p className="settings-hint">This device separately holds {sessionCount} cached sessions, {eventCount} cached events and approximately {storageKb} KB of browser cache. Unsynchronised browser work is not included above.</p>
+                </section>
 
                 <section className="settings-card study-preparation-card">
                     <h3>Study preparation</h3>

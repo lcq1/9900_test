@@ -66,6 +66,14 @@ Click the signed-in avatar/name in the sidebar for **Your account**: server-save
 
 For the client's requested demonstration, create/save/preview/publish a study, enter as a participant with a unique code, complete consent, questions, AI and permitted recording, finish, then inspect charts, play media and download Excel. Use the material supplied by the client and record target-browser acceptance. The client's email states that ethical approval is under review; the application does not grant that approval.
 
+### Research management workflows
+
+The experiment action menu provides **Duplicate as draft**, **Download study design**, **Share participant link** (with a locally generated QR code), and **Close/Reopen recruitment**. **Import study design** creates an owner-scoped draft from a Beyond version 1 JSON file (maximum 2 MB). Designs transfer configuration only: no responses, API keys, participant codes or uploaded materials. Stage/question IDs are regenerated. Review and re-upload study materials before publishing.
+
+Closing recruitment blocks fresh participant access but lets already-started sessions continue using valid existing credentials. Expired/revoked access is still rejected. Reopening uses publication validation. Workspace usage is aggregated from saved server records for the signed-in researcher, with local browser caches separately labelled.
+
+See the [client workflow guide](docs/client/user-guide.md#reuse-transfer-and-recruit-participants) and [source-backed product benchmark](docs/client/07-product-benchmark.md) for comparison evidence, delivered improvements and remaining capabilities.
+
 ## Configurable Hosting
 
 The reference approach is a single Docker host running **Caddy HTTPS → built Nginx frontend → FastAPI → PostgreSQL**, with persistent local storage. No particular cloud vendor is required. Docker supports local operation on Windows/macOS/Linux; use a continuously running approved server for public hosting. Rebuild Linux images for the destination architecture and validate the actual browser/OS, particularly recording.

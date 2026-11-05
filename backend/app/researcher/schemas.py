@@ -110,7 +110,7 @@ class ExperimentCreate(CamelModel):
     id: Optional[str] = None
     name: str
     code: Optional[str] = None
-    status: str = "Draft"
+    status: Literal["Draft", "Live", "Closed"] = "Draft"
     full_screen: bool = False
     storage_notice: str = Field(default="", max_length=8000)
     stages: list[Stage] = []
@@ -121,7 +121,7 @@ class ExperimentUpdate(CamelModel):
     publish_request_id: Optional[str] = None
     name: Optional[str] = None
     code: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[Literal["Draft", "Live", "Closed"]] = None
     full_screen: Optional[bool] = None
     storage_notice: str = Field(default="", max_length=8000)
     stages: Optional[list[Stage]] = None

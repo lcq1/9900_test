@@ -331,11 +331,39 @@ function WorkspacePage({ view }: { view: 'preview' | 'results' | 'settings' }) {
 }
 function Workspace() {
 	const navigate = useNavigate(),
-		{ experiments, loading, error, addExperiment, removeExperiment } =
+		{ experiments, loading, error, addExperiment, removeExperiment, duplicateExperiment, importTemplate, changeCollection } =
 			useExperiments()
 	const [query, setQuery] = useState(''),
 		[failure, setFailure, failureVisible, failureRevision] =
 			useTransientNotice('')
+    const [working, setWorking] = useState(false)
+    const runAction = async (action: () => Promise<unknown>) => {
+        if (working) return
+        setWorking(true)
+        try { await action() }
+        catch (error) { setFailure(error instanceof Error ? error.message : 'Could not complete this action.') }
+        finally { setWorking(false) }
+    }
+    const duplicate = (study: Experiment) => Modal.confirm({
+        title: `Duplicate ${study.name}?`,
+        content: 'Creates a new draft with new stage/question IDs. Responses, API keys, participant codes and uploaded files are not copied. Re-upload materials and review before publishing.',
+        onOk: () => runAction(async () => { const copy = await duplicateExperiment(study.id); navigate('/researcher/experiment/' + copy.id) }),
+    })
+    const collection = (study: Experiment) => Modal.confirm({
+        title: study.status === 'Live' ? 'Close recruitment?' : 'Reopen recruitment?',
+        content: study.status === 'Live' ? 'New participants cannot enter. Existing participants with valid access can finish or resume their already-started session. Saved data remains available.' : 'The current study design will be validated and published again. New participants can then enter.',
+        onOk: () => runAction(() => changeCollection(study.id, study.status === 'Live')),
+    })
+    const importFile = async (file: File) => {
+        try {
+            if (file.size > 2 * 1024 * 1024) throw new Error('Study design files must be at most 2 MB.')
+            const design = JSON.parse(await file.text())
+            if (design?.format !== 'beyond-study-template' || design.version !== 1 || typeof design.name !== 'string' || !Array.isArray(design.stages)) throw new Error('Choose a Beyond version 1 study-design JSON file.')
+            Modal.confirm({ title: `Import ${design.name}?`, content: `${design.stages.length} stages will be imported as a new draft. No responses, private AI keys or uploaded files are included. Review and upload materials before publishing.`,
+                onOk: () => runAction(async () => { const study = await importTemplate(design); navigate('/researcher/experiment/' + study.id) }),
+            })
+        } catch (error) { setFailure(error instanceof Error ? error.message : 'Could not read this design file.') }
+    }
 	const create = async () => {
 		const name = window.prompt('Experiment name')
 		if (!name?.trim()) return
@@ -395,6 +423,10 @@ function Workspace() {
 					onCreate={() => void create()}
 					onEdit={(id) => navigate('/researcher/experiment/' + id)}
 					onDelete={remove}
+                    onDuplicate={duplicate}
+                    onCollection={collection}
+                    onImport={file => void importFile(file)}
+                    busy={working}
 				/>
 			)}
 		</WorkspaceLayout>
@@ -677,7 +709,7 @@ function Participant() {
 				clear()
 				navigate('/login', { replace: true })
 			}}
-			initialExperimentCode={access.experimentCode}
+			initialExperimentCode={access.experimentCode ?? new URLSearchParams(location.search).get('experiment') ?? undefined}
 			initialParticipantCode={access.participantCode}
 		/>
 	)

@@ -4869,3 +4869,9 @@ button.profile:focus-visible { outline: 2px solid #8bb8ff; outline-offset: 4px; 
 	.ai-response-delivery { flex-direction: column; align-items: stretch; gap: 16px; }
 	.ai-response-delivery .switch-label { justify-content: space-between; }
 }
+
+.study-share-panel { display: grid; gap: 16px; padding-top: 12px; }
+.study-share-panel p { margin: 0; line-height: 1.6; }
+.study-share-panel label { display: grid; gap: 8px; font-weight: 600; }
+.study-share-panel input { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 400; }
+.study-share-panel .ant-qrcode { justify-self: center; }

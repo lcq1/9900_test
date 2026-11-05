@@ -59,6 +59,19 @@ The registration page, sign-in page and password-change form have a **Show passw
 
 Editing a published experiment creates changes that need to be published. Existing sessions use their stored experiment version. Check the version sheets when comparing exported responses across publications. **Load Client study flow** replaces the current draft's stages after confirmation; do not use it casually on an established study.
 
+## Reuse, transfer and recruit participants
+
+On the experiment dashboard, open the **Actions for [study name]** menu:
+
+- **Duplicate as draft** creates a separate study with new IDs. Responses, private AI settings, participant codes and uploaded files are not copied. The new study follows your common AI configuration unless you configure it independently. Review it and upload materials before publishing.
+- **Download study design** exports a versioned JSON design. Share only after reviewing the study wording. This is not a database/media backup.
+- Use **Import study design** above the list to choose a Beyond version 1 JSON file (maximum 2 MB). Confirm the name and stage count; it becomes a new draft in your account. Questions and stages receive new IDs, and uploaded files must be provided again.
+- **Share participant link** is available for published studies. Copy the link or share its QR code; it prefills the experiment code. Participants must still enter their assigned participant code. Use a private browser window to test the participant view while logged in as a researcher.
+- **Close recruitment** stops new participant entry while preserving existing data. Already-started participants with valid access credentials can finish or resume the existing session. Token expiry and revoked participant codes still apply; closed studies do not issue fresh access tokens.
+- **Reopen recruitment** runs publication validation again before allowing entry. Check the current design before confirming.
+
+Workspace Usage statistics now reads server counts for your own experiments, including sessions, completions, events and recordings. Use **Refresh statistics** to update them. Browser-cache counts are shown separately and are not a backup. An administrator's personal workspace statistics are still scoped to their own experiments; use Administration for platform oversight.
+
 ## 4. Configure the AI assistant
 
 Open **Workspace settings → AI API keys**.
@@ -78,7 +91,7 @@ A blank key field can mean a saved key is being retained; it does not prove that
 
 In Advanced settings, **Streaming responses** is in the Response delivery panel. Enabled: the assistant shows text progressively while it is being generated. Disabled: it waits and displays the complete reply. Streaming lets participants start reading earlier; it does not improve answer quality. Turn it off for a provider that only supports complete JSON replies. Save the configuration after changing it. Timeout is beside Characters per history message, below History messages on a wide screen; these controls stack on a narrow screen.
 
-The **Study preparation** card beside Usage statistics shows counts of your published, draft, AI-enabled and recording-enabled studies, with links to review experiments, preview a study and view results. These are configuration counts, not proof that AI or recording was tested. Usage statistics combines your experiment count with this device's cached sessions/events and an approximate browser-cache size; it excludes server recordings and is not a backup.
+The **Study preparation** card beside Usage statistics shows counts of your published, draft, AI-enabled and recording-enabled studies, with links to review experiments, preview a study and view results. These are configuration counts, not proof that AI or recording was tested. Usage statistics shows server counts for the current researcher, while a separate note describes this device's cached sessions/events and approximate cache size. Neither is a backup.
 
 ## 5. Choose storage
 

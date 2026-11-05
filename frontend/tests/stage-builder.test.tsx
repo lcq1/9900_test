@@ -279,6 +279,7 @@ it('edits and resets the common AI configuration', async () => {
 })
 
 vi.mock('antd', () => ({
+    Dropdown: ({ children }: { children: import('react').ReactNode }) => <>{children}</>,
 	Alert: ({
 		title,
 		description,

@@ -1,4 +1,4 @@
-import { getParticipantToken } from '../auth/sessionStore'// Shared HTTP layer for authentication, errors, and response parsing.
+import { getParticipantClientId, getParticipantToken } from '../auth/sessionStore'// Shared HTTP layer for authentication, errors, and response parsing.
 import axios from 'axios'
 import { clear, getSession } from '../auth/sessionStore'
 export class HttpError extends Error {
@@ -20,8 +20,10 @@ apiClient.interceptors.request.use((config) => {
 		(config.url?.startsWith('/participant/') || config.url?.split('?')[0] === '/ai/config')
 			? getParticipantToken()
 			: null
-	if (participantToken)
+	if (participantToken) {
 		config.headers['X-Participant-Token'] = participantToken
+		config.headers['X-Participant-Client'] = getParticipantClientId()
+	}
 	if (token) config.headers.Authorization = 'Bearer ' + token
 	config.headers['X-Request-Id'] = crypto.randomUUID()
 	return config
@@ -80,7 +82,10 @@ export async function openApiStream(
 		!token && path.startsWith('/participant/')
 			? getParticipantToken()
 			: null
-	if (participantToken) headers['X-Participant-Token'] = participantToken
+	if (participantToken) {
+		headers['X-Participant-Token'] = participantToken
+		headers['X-Participant-Client'] = getParticipantClientId()
+	}
 	if (token) headers.Authorization = 'Bearer ' + token
 	const base = (import.meta.env.VITE_API_BASE ?? '/api').replace(/\/$/, '')
 	const response = await fetch(base + path, {

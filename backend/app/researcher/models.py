@@ -32,6 +32,16 @@ class Researcher(Base, TimestampMixin):
     storage_location: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
+class RevokedAccessToken(Base):
+    __tablename__ = "revoked_access_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    researcher_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("researchers.id", ondelete="CASCADE"), nullable=False,
+    )
+    expires_at: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+
+
 class Experiment(Base):
     __tablename__ = "experiments"
     owner_id: Mapped[Optional[str]] = mapped_column(

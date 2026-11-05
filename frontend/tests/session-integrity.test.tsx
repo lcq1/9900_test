@@ -212,3 +212,20 @@ describe('resumed session integrity', () => {
 		).toBe(large)
 	})
 })
+
+it('restores a paused countdown without consuming time while the page was closed', () => {
+	const experiment = study()
+	const stage = experiment.stages[0]
+	stage.features.timer = true
+	const sessionId = 'paused-session'
+	const progress = {
+		...checkpoint(sessionId, {}, Date.now() - 60000),
+		paused: true,
+		remainingSeconds: 120,
+		deadlines: { [stage.id]: Date.now() - 60000 },
+	}
+	render(<ParticipantPreview experiment={experiment} participantCode="P01"
+		initialSessionId={sessionId} initialProgress={progress} onBack={() => {}} />)
+	expect(screen.getByText('Session paused')).toBeDefined()
+	expect(Number(localStorage.getItem('p13-timer:' + sessionId + ':' + stage.id))).toBeGreaterThan(Date.now() + 118000)
+})

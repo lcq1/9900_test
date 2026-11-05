@@ -13,6 +13,7 @@ from app.core.models import gen_uuid
 from app.core.security import get_current_researcher
 from app.participant import ai_proxy
 from app.participant import export_csv
+from app.participant.consent import record_consent, require_session_consent
 from app.participant import repository as repo
 from app.participant import service as svc
 from app.participant.schemas import (
@@ -42,6 +43,7 @@ class ParticipantAccess:
     experiment_code: str
     participant_code: str
     role: str = "participant"
+    client_id: str | None = None
 
 def issue_access(experiment, participant):
     now = clock.now()
@@ -50,7 +52,8 @@ def issue_access(experiment, participant):
         settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 async def get_study_actor(x_participant_token: str | None = Header(default=None),
-                          authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+                          authorization: str | None = Header(default=None),
+                          x_participant_client: str | None = Header(default=None), db: Session = Depends(get_db)):
     if x_participant_token:
         try:
             claims = jwt.decode(x_participant_token, settings.jwt_secret, algorithms=[settings.jwt_algorithm],
@@ -63,7 +66,7 @@ async def get_study_actor(x_participant_token: str | None = Header(default=None)
         if experiment is None or experiment.status != "Live":
             raise HTTPException(status_code=403, detail="Experiment is not open for participation")
         check_code(db, experiment, claims["participant"])
-        return ParticipantAccess(experiment.owner_id, experiment.id, experiment.code, claims["participant"])
+        return ParticipantAccess(experiment.owner_id, experiment.id, experiment.code, claims["participant"], client_id=x_participant_client)
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Participant access required")
     return get_current_researcher(authorization[7:], db)
@@ -157,7 +160,7 @@ def start_session(payload: SessionStart, db: Session = Depends(get_db),
         # Two tabs otherwise fold onto one unfinished session and number events
         # from separate queues, so autosaves silently overwrite each other (B3).
         # Reject a second live client; an expired lease allows a takeover.
-        if payload.client_id and session.active_client_id != payload.client_id and svc.lease_is_live(session):
+        if session.active_client_id and session.active_client_id != payload.client_id and (not payload.client_id or svc.lease_is_live(session)):
             raise HTTPException(status_code=409,
                 detail="This study is already open in another browser tab. Close that tab or wait a moment and try again.")
         if payload.client_id:
@@ -205,12 +208,45 @@ def submit_stage(stage_id: str, payload: StageSubmit, db: Session = Depends(get_
         experiment = versions.session_experiment(db, payload.session_id, experiment, payload.participant_code)
     elif isinstance(researcher, ParticipantAccess):
         raise HTTPException(status_code=422, detail="Start a participation session first")
+    if isinstance(researcher, ParticipantAccess) and payload.session_id:
+        from app.participant.models import ParticipantSession
+        session = db.get(ParticipantSession, str(payload.session_id))
+        svc.check_session_client(session, researcher.client_id or payload.client_id)
+        if session.finished_at:
+            raise HTTPException(status_code=409, detail="Session is already complete")
     stage = next((s for s in experiment.stages if s["id"] == stage_id), None)
     if stage is None:
         raise HTTPException(status_code=404, detail="Stage not found")
     if stage.get("type", "").lower() == "consent" and not payload.consent_accepted:
         raise HTTPException(status_code=422, detail="Consent must be accepted before continuing")
     svc.validate_stage(stage, payload.answers, payload.recording)
+    if isinstance(researcher, ParticipantAccess) and payload.session_id:
+        if stage.get("type", "").lower() == "consent":
+            from app.participant.models import Consent
+            values = {answer.component_id: answer.value for answer in payload.answers}
+            signature = values.get("consent")
+            if not isinstance(signature, str) or not signature:
+                raise HTTPException(status_code=422, detail="A signed consent record is required.")
+            typed = stage.get("signingMethod") == "name"
+            if not typed:
+                import base64
+                try:
+                    encoded = signature.removeprefix("data:image/png;base64,")
+                    valid_signature = signature.startswith("data:image/png;base64,") and base64.b64decode(encoded, validate=True).startswith(b"\x89PNG\r\n\x1a\n")
+                except ValueError:
+                    valid_signature = False
+                if not valid_signature:
+                    raise HTTPException(status_code=422, detail="A valid signature image is required.")
+            if not db.query(Consent).filter_by(session_id=str(payload.session_id)).first():
+                document = [item["label"] for item in stage.get("components", []) if item.get("type") == "text"]
+                record_consent(db, session_id=str(payload.session_id),
+                    name=json.loads(signature)["name"] if typed else "",
+                    payload={"stageId": stage_id, "document": document, "record": signature})
+        else:
+            consent_index = next((index for index, item in enumerate(experiment.stages) if item.get("type", "").lower() == "consent"), None)
+            stage_index = next(index for index, item in enumerate(experiment.stages) if item["id"] == stage_id)
+            if consent_index is not None and stage_index > consent_index:
+                require_session_consent(db, str(payload.session_id), experiment)
     db.commit()
     return {"accepted": True}
 
@@ -251,6 +287,11 @@ def submit_session(
     check_session_owner(db, payload.experiment_code, researcher)
     if isinstance(researcher, ParticipantAccess) and not payload.session_id:
         raise HTTPException(status_code=422, detail="Start a participation session first")
+    if isinstance(researcher, ParticipantAccess) and payload.session_id:
+        from app.participant.models import ParticipantSession
+        session = db.query(ParticipantSession).filter_by(id=str(payload.session_id)).with_for_update().first()
+        if session:
+            svc.check_session_client(session, researcher.client_id or payload.client_id)
     return svc.submit_session(db, payload)
 
 
@@ -307,6 +348,8 @@ def chat_context(db, stage_id, payload, actor):
         raise HTTPException(status_code=404, detail="Session not found")
     check_participant(actor, session.experiment_code, session.participant_code)
     check_session_owner(db, session.experiment_code, actor)
+    if isinstance(actor, ParticipantAccess):
+        svc.check_session_client(session, actor.client_id)
     if session.finished_at:
         raise HTTPException(status_code=409, detail="Session is already complete")
     experiment = repo.find_experiment_by_code(db, session.experiment_code)
@@ -314,6 +357,8 @@ def chat_context(db, stage_id, payload, actor):
     stage = next((s for s in experiment.stages if s["id"] == stage_id), None)
     if stage is None or stage.get("type", "").lower() in ("consent", "video_oral_answer") or not stage.get("features", {}).get("ai"):
         raise HTTPException(status_code=403, detail="AI is not enabled for this stage")
+    if isinstance(actor, ParticipantAccess):
+        require_session_consent(db, session.id, experiment)
     conversation_id = str(uuid5(NAMESPACE_URL, f"session:{session.id}:{payload.conversation_id}"))
     # Release the session row before model generation so recordings can continue.
     db.commit()
@@ -479,6 +524,8 @@ async def upload_recording(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     check_participant(researcher, session.experiment_code, session.participant_code)
+    if isinstance(researcher, ParticipantAccess):
+        svc.check_session_client(session, researcher.client_id)
     check_session_owner(db, session.experiment_code, researcher)
     experiment = repo.find_experiment_by_code(db, session.experiment_code)
     experiment = versions.session_experiment(db, session.id, experiment, session.participant_code)
@@ -488,6 +535,8 @@ async def upload_recording(
     feature = "selfie" if kind == "self" else "screenRecording"
     if stage.get("type", "").lower() == "consent" or not ((kind == "self" and stage.get("recordingRequired")) or stage.get("features", {}).get(feature)):
         raise HTTPException(status_code=403, detail="Recording is disabled for this stage")
+    if isinstance(researcher, ParticipantAccess):
+        require_session_consent(db, session.id, experiment)
     if session.finished_at:
         raise HTTPException(status_code=409, detail="Session is already complete")
     extension = "mp4" if mime.split(";")[0] == "video/mp4" else "webm"
@@ -510,8 +559,11 @@ async def upload_recording(
     if recording is None:
         recording = create_recording(db, session_id=session.id, filename=filename, path=path)
         from app.participant.models import ParticipantEvent
+        from app.participant.time_sync import anchor
+        recorded_time = anchor()
         db.add(ParticipantEvent(session_id=session.id, type="recording_media", stage_id=stage_id,
-            detail={"recordingId": recording.id, "kind": kind, "path": path}, timestamp=now_iso()))
+            detail={"recordingId": recording.id, "kind": kind, "path": path},
+            timestamp=recorded_time["iso"], epoch_ms=recorded_time["epochMs"], perf_ms=0))
     db.commit()
     return {"recordingId": recording.id, "offset": offset + len(data)}
 

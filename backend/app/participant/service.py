@@ -45,6 +45,11 @@ def lease_is_live(session: ParticipantSession) -> bool:
         return False
 
 
+def check_session_client(session: ParticipantSession, client_id: str | None) -> None:
+    if session.active_client_id and session.active_client_id != client_id:
+        raise HTTPException(status_code=409, detail="This session belongs to another browser tab. Re-enter your study codes to continue.")
+
+
 async def generate_ai_turn(db: Session, prepared: repo.PreparedAITurn, api_key: str | None = None, configuration=None):
     """Keep context server-side; replay retries and commit only completed turns."""
     with ai_proxy.use_configuration(configuration):
@@ -145,6 +150,26 @@ def submit_session(
     experiment = lookup_experiment(db, payload.experiment_code, payload.participant_code)
     if payload.session_id:
         experiment = versions.session_experiment(db, payload.session_id, experiment, payload.participant_code)
+    existing = db.query(ParticipantSession).filter_by(id=str(payload.session_id)).with_for_update().first() if payload.session_id else None
+    if payload.session_id and (existing is None or existing.experiment_code != payload.experiment_code or existing.participant_code != payload.participant_code):
+        raise HTTPException(status_code=404, detail="Session not found")
+    if existing and existing.finished_at and not payload.finished_at:
+        raise HTTPException(status_code=409, detail="Completed session cannot be reopened")
+    if existing and existing.finished_at:
+        saved = get_session_result(db, existing.id)
+        submitted_events = [event.model_dump() for event in payload.events if event.type != "recording_media"]
+        saved_events = [event.model_dump() for event in saved.events if event.type != "recording_media"]
+        submitted_answers = sorted((answer.component_id, answer.value) for answer in payload.answers)
+        saved_answers = sorted((answer.component_id, answer.value) for answer in saved.answers)
+        if (payload.finished_at != existing.finished_at or submitted_events != saved_events
+                or submitted_answers != saved_answers):
+            raise HTTPException(status_code=409, detail="Completed sessions cannot be changed.")
+        return saved
+    if existing and existing.active_client_id:
+        previous_events = [event for event in repo.get_events(db, existing.id)
+                           if event.type != "recording_media" and not event.type.startswith("server.")]
+        if max((event.seq for event in previous_events), default=-1) > max(by_sequence, default=-1):
+            raise HTTPException(status_code=409, detail="A newer progress snapshot is already saved. Reload to resume it.")
     if payload.finished_at:
         for stage in experiment.stages:
             if stage.get("type", "").lower() == "consent" and not any(event.stage_id == stage["id"] and event.type == "consent" and (event.detail or {}).get("accepted") is True for event in payload.events):
@@ -158,11 +183,6 @@ def submit_session(
                         break
                     recording[detail.get("kind")] = event.type == "recording_start" and detail.get("status") == "active"
             validate_stage(stage, payload.answers, recording)
-    existing = db.query(ParticipantSession).filter_by(id=str(payload.session_id)).with_for_update().first() if payload.session_id else None
-    if payload.session_id and (existing is None or existing.experiment_code != payload.experiment_code or existing.participant_code != payload.participant_code):
-        raise HTTPException(status_code=404, detail="Session not found")
-    if existing and existing.finished_at and not payload.finished_at:
-        raise HTTPException(status_code=409, detail="Completed session cannot be reopened")
     session_id = existing.id if existing else gen_uuid()
     started_at = existing.started_at if existing else clock.now_iso()
     if existing:

@@ -1,3 +1,4 @@
+import { getParticipantClientId } from '../auth/sessionStore'
 import type { RuntimeProgress } from '../participant/ProgressStore'
 import type { ParticipantEvent } from '../participant/EventQueue'
 import { useTransientNotice } from '../participant/TimerController'
@@ -173,18 +174,7 @@ export function ParticipantEntry({
  * holder of the session lease so two tabs cannot silently share one unfinished
  * session and overwrite each other's autosaves.
  */
-function tabClientId(): string {
-	const key = 'p13-client-id'
-	try {
-		const existing = sessionStorage.getItem(key)
-		if (existing) return existing
-		const id = crypto.randomUUID()
-		sessionStorage.setItem(key, id)
-		return id
-	} catch {
-		return crypto.randomUUID()
-	}
-}
+
 
 export function ParticipantAccessPage({
 	initialExperimentCode = '',
@@ -292,7 +282,7 @@ export function ParticipantAccessPage({
 				experiment: Experiment
 			}>('/participant/sessions/start', {
 				sessionId: startId.current,
-				clientId: tabClientId(),
+				clientId: getParticipantClientId(),
 				experimentCode: active.experiment.code,
 				participantCode: active.participant,
 			})

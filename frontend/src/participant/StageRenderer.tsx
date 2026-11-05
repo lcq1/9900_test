@@ -451,6 +451,26 @@ useEffect(() => {
 	// dismissed it must remain hidden for this stage; a new stage resets it so
 	// its own timer can show the overlay again. Validation failures are copied
 	// into the dialog because the inline Alert is covered by the overlay.
+	const extensionMinutes = stage.extensionMinutes ?? 30
+	const extensionButton = stage.features.timer && stage.allowExtension && !extended[stage.id] && (
+		<button className="secondary-button" disabled={saving || paused || interactionLocked}
+			onClick={() => Modal.confirm({
+				rootClassName: 'participant-modal',
+				centered: true,
+				title: 'Researcher approval required',
+				content: `Confirm only after the researcher agrees to add ${extensionMinutes} minutes.`,
+				onOk: () => {
+					if (extensionUsed.current.has(stage.id)) return
+					extensionUsed.current.add(stage.id)
+					setExtended((current) => ({ ...current, [stage.id]: true }))
+					setRemaining((value) => value + extensionMinutes * 60)
+					queue.record('timer_extension', { minutes: extensionMinutes, researcherApprovalConfirmed: true }, stage.id)
+				},
+			})}>
+			Extend by {extensionMinutes} {extensionMinutes === 1 ? 'minute' : 'minutes'}
+		</button>
+	)
+
 	const timeUpVisible = Boolean(
 		stage.features.timer &&
 			remaining === 0 &&
@@ -518,8 +538,13 @@ useEffect(() => {
 	// Real copy/paste logging while this stage has the feature enabled.
 	useEffect(() => {
 		if (!stage.features.copyPaste || paused) return
-		const handleCopy = () => {
-			const text = window.getSelection()?.toString() ?? ''
+		const handleCopy = (event: ClipboardEvent) => {
+			const field = event.target
+			if (field instanceof HTMLInputElement && field.type === 'password') return
+			const text = (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)
+				&& field.selectionStart !== null && field.selectionEnd !== null
+				? field.value.slice(field.selectionStart, field.selectionEnd)
+				: window.getSelection()?.toString() ?? ''
 			queue.record('copy', { chars: text.length, text }, stage.id)
 		}
 		const handlePaste = (event: ClipboardEvent) => {
@@ -1336,7 +1361,7 @@ useEffect(() => {
 					: 'No copy-paste capture on this stage'}{' '}
 				· {queue.count()} events captured this session
 			</span>
-			<div className="participant-actions">{stage.allowExtension && !extended[stage.id] && <button className="secondary-button" disabled={saving || paused || interactionLocked} onClick={() => Modal.confirm({ rootClassName: 'participant-modal', centered: true, title: 'Researcher approval required', content: 'Confirm only after the researcher agrees to a 30-minute extension.', onOk: () => { if (extensionUsed.current.has(stage.id)) return; extensionUsed.current.add(stage.id); setExtended(current => ({ ...current, [stage.id]: true })); setRemaining(value => value + 1800); queue.record('timer_extension', { minutes: 30, researcherApprovalConfirmed: true }, stage.id) } })}>Extend by 30 minutes</button>}
+			<div className="participant-actions">{extensionButton}
 				{stage.features.pauseAbort && (
 					<>
 						<button
@@ -1565,7 +1590,7 @@ useEffect(() => {
 					<div className="pause-overlay">
 						<div className="pause-dialog">
 							<TimerReset size={25} />
-							<h2>Time is up</h2>{stage.allowExtension && !extended[stage.id] && <button className="secondary-button" disabled={saving || paused || interactionLocked} onClick={() => Modal.confirm({ rootClassName: 'participant-modal', centered: true, title: 'Researcher approval required', content: 'Confirm only after the researcher agrees to a 30-minute extension.', onOk: () => { if (extensionUsed.current.has(stage.id)) return; extensionUsed.current.add(stage.id); setExtended(current => ({ ...current, [stage.id]: true })); setRemaining(value => value + 1800); queue.record('timer_extension', { minutes: 30, researcherApprovalConfirmed: true }, stage.id) } })}>Extend by 30 minutes</button>}
+							<h2>Time is up</h2>{extensionButton}
 							<p>
 								The countdown for “{stage.name}” has
 								finished. Submit your work below to save it.

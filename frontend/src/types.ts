@@ -40,6 +40,7 @@ export type Stage = {
 	signingMethod?: 'handwritten' | 'name'
 	consentClauses?: string[]
 	allowExtension?: boolean
+	extensionMinutes?: number
 	sequentialQuestions?: boolean
 	materials?: { id: string; name: string; reference: string }[]
 }
@@ -168,6 +169,11 @@ export function getPublishErrors(experiment: Experiment): string[] {
 			errors.push(
 				`${prefix}: countdown must be a positive whole number of minutes.`,
 			);
+		const extensionMinutes = stage.extensionMinutes ?? 30;
+		if (stage.features.timer && stage.allowExtension &&
+			(!Number.isInteger(extensionMinutes) || extensionMinutes < 1 || extensionMinutes > 1440))
+			errors.push(`${prefix}: extension must be between 1 and 1440 whole minutes.`);
+
 		if (
 			stage.features.copyPaste &&
 			!["fill_blank", "short_answer"].includes(stage.type)
@@ -422,8 +428,8 @@ export function createClientStages(consent: Stage): Stage[] {
  // through the pre-wrap text style, so nothing is trimmed away or hidden in extra components.
  const welcome = { ...consent, name: 'Read and sign the consent form', signingMethod: 'handwritten' as const, features: { ...consent.features, navigation: false }, components: [component({ type: 'text', label: clientContent.consentText }), ...consent.components.filter(c => c.type !== 'text')] }
  const design = make('Design task', 'short_answer', [{ type: 'text', label: clientContent.design }, { type: 'textbox', label: 'Your design', required: true }])
- design.countdownMinutes = 60; design.allowExtension = true; design.features = { ...design.features, timer: true, ai: true, screenRecording: true, copyPaste: true, confirm: true }
+ design.countdownMinutes = 60; design.allowExtension = true; design.features = { ...design.features, timer: true, ai: true, screenRecording: true, copyPaste: true, confirm: true, pauseAbort: true }
  const oral = make('Recorded explanation', 'video_oral_answer', clientContent.oral.map(label => ({ type: 'text', label })))
- oral.countdownMinutes = 10; oral.sequentialQuestions = true; oral.recordingRequired = true; oral.recordingMode = 'manual'; oral.features = { ...oral.features, timer: true, selfie: true, ai: false }
+ oral.countdownMinutes = 10; oral.sequentialQuestions = true; oral.recordingRequired = true; oral.recordingMode = 'manual'; oral.features = { ...oral.features, timer: true, selfie: true, ai: false, confirm: true }
  return [welcome, info('Before the task', clientContent.instructions['3']), make('Background questionnaire', 'single_choice', clientContent.background as Omit<StageComponent, 'id'>[]), make('Personality questionnaire (BFI-2)', 'single_choice', [{ type: 'text', label: 'Here are a number of characteristics that may or may not apply to you. For example, do you agree that you are someone who likes to spend time with others? Please write a number next to each statement to indicate the extent to which you agree or disagree with that statement.\n1 = Disagree strongly\n2 = Disagree a little\n3 = Neutral no opinion\n4 = Agree a little\n5 = Agree strongly' }, ...clientContent.personality as Omit<StageComponent, 'id'>[]]), info('Sensor setup and baseline', clientContent.instructions['5']), info('Task instructions', clientContent.instructions['6']), design, info('Before the explanation', clientContent.instructions['8']), oral, make('Self-report questionnaire', 'multiple_choice', clientContent.post as Omit<StageComponent, 'id'>[]), info('Finish', clientContent.instructions['11'])]
 }

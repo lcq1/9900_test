@@ -65,7 +65,21 @@ export function StageFeatureEditor({
 						/{availableFeatures.length}
 					</span>
 				</div>
-			<label><input type="checkbox" checked={stage.allowExtension ?? false} onChange={event => onUpdateStage(current => ({ ...current, allowExtension: event.target.checked }))} /> Allow one 30-minute extension</label>
+				{stage.features.timer && (
+					<div className="stage-extension-settings">
+						<label>
+							<input type="checkbox" checked={stage.allowExtension ?? false}
+								onChange={(event) => onUpdateStage((current) => ({ ...current, allowExtension: event.target.checked }))} />
+							Allow one extension
+						</label>
+						{stage.allowExtension && <label>
+							Extra minutes
+							<input className="minutes-input" type="number" min={1} max={1440} step={1}
+								value={stage.extensionMinutes ?? 30}
+								onChange={(event) => onUpdateStage((current) => ({ ...current, extensionMinutes: Number(event.target.value) }))} />
+						</label>}
+					</div>
+				)}
 {stage.type === 'video_oral_answer' && <label><input type="checkbox" checked={stage.sequentialQuestions ?? false} onChange={event => onUpdateStage(current => ({ ...current, sequentialQuestions: event.target.checked, recordingMode: 'manual', countdownMinutes: 10, features: { ...current.features, ai: false, timer: true } }))} /> Show questions one at a time (shared 10 minutes)</label>}
 				<div className="feature-row">
 					<span className="feature-label">Questionnaire required</span>

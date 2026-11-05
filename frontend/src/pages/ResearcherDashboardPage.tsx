@@ -26,7 +26,7 @@ import {
 import { HttpError } from '../api/http'
 import { ExportDialog } from '../researcher/ExportDialog'
 import type { ParticipantEvent, ParticipantEventType } from '../participant/EventQueue'
-import { listSessions, downloadSessionWorkbook } from '../api/participant'
+import { downloadSessionRecording, listSessionRecordings, listSessions, type SessionRecording } from '../api/participant'
 import { getCurrentResearcher } from '../auth/sessionStore'
 import { getWorkspaceSettings, getWorkspaceMembers, type PlatformSettings } from '../api/administrator'
 import type { Researcher } from '../api/auth'
@@ -244,6 +244,7 @@ const TYPE_META: Partial<
 
 interface SessionData {
 	id: string
+	participantCode: string
 	events: ParticipantEvent[]
 	experimentName: string
 	experimentCode: string
@@ -260,7 +261,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 	const [loading, setLoading] = useState(true)
 	const [error, setError, errorVisible, errorRevision] =
 		useTransientNotice('')
-	const [downloading, setDownloading] = useState<string | null>(null)
+	const [exportSession, setExportSession] = useState<SessionData | null>(null)
 
 	// Read captured sessions from the backend. The participant runtime submits
 	// here on finish/abort, so the server is the authoritative source.
@@ -275,6 +276,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 				const mapped: SessionData[] = backend
 					.map((s) => ({
 						id: s.id,
+						participantCode: s.participantCode,
 						experimentCode: s.experimentCode,
 						events: s.events,
 						experimentName:
@@ -500,7 +502,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 										<strong>
 											{session.experimentName}
 										</strong>
-										<small>{session.id}</small>
+										<small>Participant {session.participantCode}</small>
 									</div>
 									<div className="session-chips">
 										<span className="session-chip">
@@ -523,31 +525,15 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 										</button>
 										<button
 											className="secondary-button"
-											disabled={downloading !== null}
-											onClick={() => {
-												setDownloading(session.id)
-												setError('')
-												void downloadSessionWorkbook(
-													session.id,
-												)
-													.catch(() =>
-														setError(
-															'Could not download the experiment workbook. Please retry.',
-														),
-													)
-													.finally(() =>
-														setDownloading(null),
-													)
-											}}
+											onClick={() => setExportSession(session)}
 										>
-											{downloading === session.id
-												? 'Downloading…'
-												: 'Download Excel'}
+											Export session
 										</button>
 									</div>
 								</div>
 								{open && (
 									<div className="session-body">
+										<SessionRecordings sessionId={session.id} />
 										<div className="timeline">
 											{session.events.map((event) => (
 												<div
@@ -601,8 +587,53 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 				authoritative capture. Exports are Excel workbooks with
 				versioned answers, AI history and activity.
 			</p>
+			{exportSession && (
+				<ExportDialog
+					session={exportSession}
+					onClose={() => setExportSession(null)}
+				/>
+			)}
 		</section>
 	)
+}
+
+function SessionRecordings({ sessionId }: { sessionId: string }) {
+	const [recordings, setRecordings] = useState<SessionRecording[] | null>(null)
+	const [error, setError] = useState('')
+	const [busyId, setBusyId] = useState('')
+	useEffect(() => {
+		let active = true
+		void listSessionRecordings(sessionId)
+			.then((items) => { if (active) setRecordings(items) })
+			.catch(() => { if (active) setError('Could not load recordings. Reopen the timeline to retry.') })
+		return () => { active = false }
+	}, [sessionId])
+
+	const download = async (recording: SessionRecording) => {
+		setError('')
+		setBusyId(recording.id)
+		try {
+			await downloadSessionRecording(sessionId, recording)
+		} catch (reason) {
+			setError(reason instanceof Error ? reason.message : 'Could not download the recording.')
+		} finally {
+			setBusyId('')
+		}
+	}
+
+	return <div className="session-recordings">
+		<h4>Recordings</h4>
+		{error && <p role="alert">{error}</p>}
+		{!recordings && !error && <p role="status">Loading recordings…</p>}
+		{recordings?.length === 0 && <p>No recordings saved for this session.</p>}
+		{recordings?.map((recording) => (
+			<button type="button" className="secondary-button" key={recording.id}
+				disabled={Boolean(busyId)} onClick={() => void download(recording)}>
+				<Download size={14} aria-hidden="true" />
+				{busyId === recording.id ? 'Downloading…' : recording.filename}
+			</button>
+		))}
+	</div>
 }
 
 /** Dependency-free doughnut chart (stroke-dasharray segments on one circle). */

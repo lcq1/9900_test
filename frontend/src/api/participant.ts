@@ -217,6 +217,17 @@ export async function streamChat(
 	}
 }
 
+export type SessionRecording = { id: string; filename: string }
+
+export const listSessionRecordings = (sessionId: string) =>
+	http.get<SessionRecording[]>(PATH + '/' + encodeURIComponent(sessionId) + '/recordings')
+
+export const downloadSessionRecording = (sessionId: string, recording: SessionRecording) =>
+	downloadFile(
+		PATH + '/' + encodeURIComponent(sessionId) + '/recordings/' + encodeURIComponent(recording.id),
+		recording.filename,
+	)
+
 export async function uploadRecording(
 	sessionId: string,
 	stageId: string,

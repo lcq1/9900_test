@@ -188,6 +188,19 @@ def start_session(payload: SessionStart, db: Session = Depends(get_db),
     db.commit()
     result = svc.get_session_result(db, session.id)
     progress = next(((e.detail or {}).get("progress") for e in reversed(result.events) if e.type == "progress_checkpoint"), None)
+    # A browser checkpoint may come from the old freely navigable UI. It cannot
+    # unlock stages: resume at the first stage without a confirmed submission.
+    unlocked = min(svc.next_stage_index(db, session.id, visible.stages), max(0, len(visible.stages) - 1))
+    submitted = svc.submitted_stage_ids(db, session.id)
+    if progress and progress.get("stageIndex") != unlocked:
+        progress = {**progress, "oralIndex": 0, "oralStarted": False, "paused": False}
+        progress.pop("remainingSeconds", None)
+    progress = {"sessionId": session.id, "updatedAt": 0, "answers": {},
+                "consentedStageId": None, "attachments": {}, "extended": {},
+                "oralIndex": 0, "oralStarted": False, "deadlines": {}, **(progress or {}),
+                "stageIndex": unlocked, "unlockedStageIndex": unlocked,
+                "consentedStageId": next((item["id"] for item in visible.stages
+                    if item.get("type", "").lower() == "consent" and item["id"] in submitted), None)}
     return {"sessionId": session.id, "experiment": Experiment.model_validate(visible).model_dump(by_alias=True),
             "progress": progress, "events": [e.model_dump(by_alias=True) for e in result.events if not e.type.startswith("server.")]}
 
@@ -224,6 +237,11 @@ def submit_stage(stage_id: str, payload: StageSubmit, db: Session = Depends(get_
     stage = next((s for s in experiment.stages if s["id"] == stage_id), None)
     if stage is None:
         raise HTTPException(status_code=404, detail="Stage not found")
+    if isinstance(researcher, ParticipantAccess) and payload.session_id:
+        submitted = svc.submitted_stage_ids(db, str(payload.session_id))
+        index = next(i for i, item in enumerate(experiment.stages) if item["id"] == stage_id)
+        if any(item["id"] not in submitted for item in experiment.stages[:index]):
+            raise HTTPException(status_code=409, detail="Complete and submit each earlier stage before continuing")
     if stage.get("type", "").lower() == "consent" and not payload.consent_accepted:
         raise HTTPException(status_code=422, detail="Consent must be accepted before continuing")
     svc.validate_stage(stage, payload.answers, payload.recording)
@@ -254,6 +272,8 @@ def submit_stage(stage_id: str, payload: StageSubmit, db: Session = Depends(get_
             stage_index = next(index for index, item in enumerate(experiment.stages) if item["id"] == stage_id)
             if consent_index is not None and stage_index > consent_index:
                 require_session_consent(db, str(payload.session_id), experiment)
+    if isinstance(researcher, ParticipantAccess) and payload.session_id and stage_id not in submitted:
+        versions.server_event(db, str(payload.session_id), "server.stage_submitted", {"stageId": stage_id})
     db.commit()
     return {"accepted": True}
 

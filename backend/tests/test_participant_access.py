@@ -70,12 +70,14 @@ def test_resume_unfinished_session_by_experiment_and_participant(client, auth_he
     resumed = client.post("/api/participant/sessions/start", headers=headers, json={**payload, "sessionId": str(uuid.uuid4())})
     assert resumed.status_code == 200
     assert resumed.json()["sessionId"] == session_id
-    assert resumed.json()["progress"] == progress
+    assert all(resumed.json()["progress"][key] == value for key, value in progress.items())
+    assert resumed.json()["progress"]["unlockedStageIndex"] == 0
     assert resumed.json()["experiment"] == first.json()["experiment"]
     other = client.post("/api/participant/sessions/start", headers=login(client, "RESUME1", "RESUME-P02"), json={**payload, "participantCode": "RESUME-P02", "sessionId": str(uuid.uuid4())})
     assert other.status_code == 200
     assert other.json()["sessionId"] != session_id
-    assert other.json()["progress"] is None
+    assert other.json()["progress"]["stageIndex"] == 0
+    assert other.json()["progress"]["answers"] == {}
 
 
 def test_issued_codes_are_scoped_and_revocable(client, auth_headers):
@@ -149,3 +151,40 @@ def test_participant_capture_waits_for_persisted_consent(client, auth_headers, m
     assert accepted.status_code == 200, accepted.text
     assert client.post("/api/participant/stages/consent-task/ai-stream", headers=headers, json=chat).status_code == 200
     assert client.post(upload, headers=headers, params=params, content=b"header").status_code == 200
+
+
+def test_stage_order_uses_server_submissions_and_repairs_skipped_resume(client, auth_headers):
+    import uuid
+    exp = live_experiment(client, auth_headers, "ORDER1")
+    with database.SessionLocal() as db:
+        record = db.get(Experiment, exp["id"])
+        record.stages = [{"id": name, "name": name, "type": "task", "features": {"navigation": True},
+                          "components": [{"id": name + "-q", "type": "textbox", "label": "Answer", "required": True}]}
+                         for name in ("first", "second", "third")]
+        db.commit()
+    headers = login(client, "ORDER1")
+    payload = {"experimentCode": "ORDER1", "participantCode": "P01", "sessionId": str(uuid.uuid4())}
+    started = client.post("/api/participant/sessions/start", headers=headers, json=payload)
+    assert started.status_code == 200
+    assert started.json()["progress"]["stageIndex"] == 0
+    forged = {"sessionId": payload["sessionId"], "updatedAt": 999, "stageIndex": 2, "answers": {"draft": "kept"}}
+    assert client.post("/api/participant/sessions", headers=headers, json={**payload, "finishedAt": None,
+        "answers": [], "events": [{"seq": 0, "type": "progress_checkpoint", "timestamp": "2026-11-06T00:00:00Z",
+        "epochMs": 1793923200000, "perfMs": 0, "detail": {"progress": forged}}]}).status_code == 201
+    repaired = client.post("/api/participant/sessions/start", headers=headers, json=payload).json()["progress"]
+    assert repaired["stageIndex"] == 0
+    assert repaired["answers"] == {"draft": "kept"}
+    def submit(stage, answered=True):
+        return client.post(f"/api/participant/stages/{stage}/submit", headers=headers, json={
+            **payload, "answers": [{"componentId": stage + "-q", "value": "answer" if answered else ""}]})
+    assert submit("third").status_code == 409
+    assert submit("first", False).status_code == 422
+    assert submit("second").status_code == 409
+    assert submit("first").status_code == 200
+    assert submit("first").status_code == 200  # Retry after an interrupted upload.
+    resumed = client.post("/api/participant/sessions/start", headers=headers, json=payload).json()
+    assert resumed["progress"]["stageIndex"] == 1
+    assert resumed["progress"]["unlockedStageIndex"] == 1
+    assert submit("third").status_code == 409
+    assert submit("second").status_code == 200
+    assert submit("third").status_code == 200

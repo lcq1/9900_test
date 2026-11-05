@@ -33,9 +33,9 @@ docker compose up -d --build
 
 | Service | Default address | Notes |
 | --- | --- | --- |
-| Frontend | `http://localhost:5173` | Researcher sign-in, experiment builder and participant runtime. |
-| Backend API | `http://localhost:8000/api` | Health probe: `http://localhost:8000/api/healthz`. |
-| PostgreSQL | `localhost:5432` | Change `POSTGRES_PORT` (for example to `5433`) when the host port is already in use; the container port stays `5432`. |
+| **Frontend** | `http://localhost:5173` | Researcher sign-in, experiment builder and participant runtime. |
+| **Backend API** | `http://localhost:8000/api` | Health probe: `http://localhost:8000/api/healthz`. |
+| **PostgreSQL** | `localhost:5432` | Change `POSTGRES_PORT` (for example to `5433`) when the host port is already in use; the container port stays `5432`. |
 
 Verify the stack, then open the frontend and register the first researcher account:
 
@@ -88,7 +88,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml confi
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build --wait
 ```
 
-A real domain must resolve to the server and public TCP ports 80/443 must reach Caddy for the usual automatic HTTPS setup. Persistent Caddy volumes retain certificate state. Starting containers alone does not establish public certificate issuance. Camera/microphone/screen capture needs a secure browser context for hosted use. See [Caddy HTTPS](https://caddyserver.com/docs/automatic-https) and the [hosting procedure](docs/client/deployment-and-data-migration.md#7-configurable-single-server-hosting).
+A real domain must resolve to the server and public TCP ports `80`/`443` must reach Caddy for the usual automatic HTTPS setup. Persistent Caddy volumes retain certificate state. Starting containers alone does not establish public certificate issuance. Camera/microphone/screen capture needs a secure browser context for hosted use. See [Caddy HTTPS](https://caddyserver.com/docs/automatic-https) and the [hosting procedure](docs/client/deployment-and-data-migration.md#7-configurable-single-server-hosting).
 
 Domain, public origin, ports, credentials, database connection, volume names, storage mounts and AI settings are configurable without application-code changes. A separate server/cloud remains a **planned migration**: back up database/files, restore and verify the target, switch DNS, and retain rollback data. This does not provide automatic zero-downtime switching. Recreate services with `up -d` after environment changes; `restart` alone does not apply new environment values. Use the same env-file/Compose flags for subsequent commands. The production default project is `beyond-production`; it deliberately does not attach the development data volumes.
 
@@ -103,7 +103,7 @@ The client currently requests local storage; OneDrive is not a current-phase req
 - Browser: progress not yet synchronised is not included in server backups. Synchronise/finish sessions before copying data.
 - Excel/CSV/SVG: analysis/report outputs, not backups that can restore the website.
 
-Database backups can include saved AI keys; restrict/encrypt transfer and agree credential ownership. Do not commit data dumps, real `.env` files or recordings. Changing JWT_SECRET requires sign-in again; application password hashes remain valid after a full restore. Changing `POSTGRES_PASSWORD` in an env file does not reset an existing PostgreSQL role.
+Database backups can include saved AI keys; restrict/encrypt transfer and agree credential ownership. Do not commit data dumps, real `.env` files or recordings. Changing `JWT_SECRET` requires sign-in again; application password hashes remain valid after a full restore. Changing `POSTGRES_PASSWORD` in an env file does not reset an existing PostgreSQL role.
 
 ## File Tree and Responsibilities
 
@@ -249,7 +249,7 @@ project/
 
 ### Downloading and Opening Files
 
-Use an experiment's export action on the Dashboard and select **Download Excel**. The **Visualization results** page also provides **Download Excel** on each session card. That session-card action exports the entire experiment containing the session, rather than only that session.
+Use an experiment's export action on the **Dashboard** and select **Download Excel**. The **Visualization results** page also provides **Download Excel** on each session card. That session-card action exports the entire experiment containing the session, rather than only that session.
 
 The workbook is named after the experiment code, for example `EXP-12345678.xlsx`. The frontend uses the server-provided filename and falls back to `experiment.xlsx` when that header is unavailable. Open the workbook in Excel or another compatible spreadsheet application. Enable cell wrapping to read long AI histories and activity timelines.
 
@@ -272,9 +272,9 @@ Omitting `view` selects `answers`. CSV files use UTF-8 with a byte-order mark an
 | `V1`, `V2`, ... | One sheet per published version, with one row per participation session bound to that version. A version without sessions still has its header row. |
 | `Unknown legacy version` | Sessions whose original published version cannot be established. Appears only when needed. |
 
-The first publication creates `V1`. A later Publish creates the next version only when the experiment name, stage configuration, or full-screen setting differs from the immediately preceding publication. Saving Draft does not create a version. Repeated publication, or unpublishing and republishing unchanged content, reuses the existing version. Draft changes reverted before publication do not create a version. Returning to an older configuration after a different publication does create a new version because it differs from the latest publication.
+The first publication creates `V1`. A later **Publish** creates the next version only when the experiment name, stage configuration, or full-screen setting differs from the immediately preceding publication. Saving `Draft` does not create a version. Repeated publication, or unpublishing and republishing unchanged content, reuses the existing version. `Draft` changes reverted before publication do not create a version. Returning to an older configuration after a different publication does create a new version because it differs from the latest publication.
 
-Sessions remain bound to their captured publication snapshot. Later edits do not move their data to a newer sheet. Existing historical versions are retained; the current rule does not merge older sheets retroactively. Draft saves update the current editable experiment but do not write configuration-history snapshots. Unchanged republications do not write new history records. The workbook excludes draft-change and unchanged-republication records from older installations. Experiment API key changes are separate from experiment content and do not create publication versions.
+Sessions remain bound to their captured publication snapshot. Later edits do not move their data to a newer sheet. Existing historical versions are retained; the current rule does not merge older sheets retroactively. `Draft` saves update the current editable experiment but do not write configuration-history snapshots. Unchanged republications do not write new history records. The workbook excludes draft-change and unchanged-republication records from older installations. Experiment API key changes are separate from experiment content and do not create publication versions.
 
 ### Excel Field Reference
 
@@ -298,7 +298,7 @@ Version and legacy sheets have these columns:
 | `Completion status` | `Completed` when a completion timestamp exists; otherwise `In progress`. This field does not separately label aborted sessions. |
 | `Started at (Australia/Sydney)` | Session start time, displayed to the second. |
 | `Completed at (Australia/Sydney)` | Completion time, displayed to the second; blank if no completion timestamp exists. |
-| Dynamic question columns | Published stage/question text followed by the component ID in square brackets. Each cell contains the saved response, updated by captured answer-change events when available. |
+| `Dynamic question columns` | Published stage/question text followed by the component ID in square brackets. Each cell contains the saved response, updated by captured answer-change events when available. |
 | `Successful AI turns` | Number of explicitly linked, successfully saved AI request/reply pairs. Legacy counts may be `Unknown (legacy record)`. |
 | `AI history` | Chronological linked AI turns, including time, stage, provider/model, request ID, user prompt, and AI reply. Unconfirmed legacy browser events are marked accordingly. |
 | `Activity timeline` | Chronological activity records stored as formatted JSON blocks. Fields follow the activity CSV reference below. |
@@ -429,11 +429,11 @@ Exact-address matching ignores case and surrounding whitespace. `ALLOWED_DOMAINS
 | `AI_HISTORY_MESSAGES` | Maximum retained user/assistant history messages; default `8`, range `0`-`100`. Counts messages, not conversation pairs. |
 | `AI_HISTORY_MESSAGE_CHARS` | Maximum characters per retained history message; default `2000`, range `1`-`20000`. |
 
-Workspace settings > AI API keys supports all AI parameters in the table above. Select Common configuration (all my experiments) to edit the signed-in researcher's shared provider, completion URL, model, API key, streaming, timeout, prompt, and context limits. For a specific experiment, check Use independent configuration to display and edit that experiment's own settings. Leave it unchecked to follow the common configuration and its future updates, with the experiment's configuration fields hidden. Switching sources retains the saved independent settings and key. New experiments use common configuration; previously configured experiments retain independent mode. Common configurations are isolated between researchers.
+**Workspace settings → AI API keys** supports all AI parameters in the table above. Select **Common configuration (all my experiments)** to edit the signed-in researcher's shared provider, completion URL, model, API key, streaming, timeout, prompt, and context limits. For a specific experiment, check **Use independent configuration** to display and edit that experiment's own settings. Leave it unchecked to follow the common configuration and its future updates, with the experiment's configuration fields hidden. Switching sources retains the saved independent settings and key. New experiments use common configuration; previously configured experiments retain independent mode. Common configurations are isolated between researchers.
 
-The main form presents the provider/key and preset information; custom endpoint/model controls are relevant to compatible services, while Advanced settings contains optional controls. Independent parameter fields initially copy common values when no independent settings exist; the common key is not copied. A blank key input keeps the existing key or the server default. Unconfigured independent fields inherit server defaults, not subsequent common changes. A blank temperature omits that parameter; a blank system prompt uses the built-in research assistant instructions. In common configuration, Use server default removes the custom common settings and key and reloads `.env` defaults without changing independent experiments. Saving settings does not perform a live provider test. Keys are never returned to the browser, and AI configuration is not included in published experiment snapshots or exports.
+The main form presents the provider/key and preset information; custom endpoint/model controls are relevant to compatible services, while **Advanced settings** contains optional controls. Independent parameter fields initially copy common values when no independent settings exist; the common key is not copied. A blank key input keeps the existing key or the server default. Unconfigured independent fields inherit server defaults, not subsequent common changes. A blank temperature omits that parameter; a blank system prompt uses the built-in research assistant instructions. In common configuration, **Use server default** removes the custom common settings and key and reloads `.env` defaults without changing independent experiments. Saving settings does not perform a live provider test. Keys are never returned to the browser, and AI configuration is not included in published experiment snapshots or exports.
 
-For Google, select Google in Workspace settings and enter a Google API key, or set `AI_PROVIDER=google` for server defaults. The current Google adapter applies its endpoint/model preset from `backend/app/researcher/ai_config.py`; custom compatible services use the OpenAI-compatible option. A key authenticates an account/project, while provider, endpoint and model determine how and where requests are sent. Save and test the actual configuration; no free quota or model availability is guaranteed by this repository.
+For Google, select **Google** in **Workspace settings** and enter a Google API key, or set `AI_PROVIDER=google` for server defaults. The current Google adapter applies its endpoint/model preset from `backend/app/researcher/ai_config.py`; custom compatible services use the **OpenAI-compatible** option. A key authenticates an account/project, while provider, endpoint and model determine how and where requests are sent. Save and test the actual configuration; no free quota or model availability is guaranteed by this repository.
 
 ### Storage Variables
 
@@ -446,7 +446,7 @@ For Google, select Google in Workspace settings and enter a Google API key, or s
 | `ONEDRIVE_CLIENT_SECRET` | Optional Microsoft Graph client secret. |
 | `ONEDRIVE_TENANT_ID` | Optional Microsoft Graph tenant ID. |
 
-Researchers select a configured location or create a named workspace folder in Workspace settings → Storage. Workspace folders live under the existing server storage root; they do not attach a disk, connect a cloud account or change capacity. Additional server directories are configured by the operator. The choice is stored per researcher and validated against the server configuration, and the backend probes it for writability before accepting it (422 for an unknown name, 507 when the directory is not writable). Only new files use the new location; previously saved files stay where they are. A directory outside the default storage volume needs its own persistent mount in a container deployment. For a second local disk/host directory, see `deploy/storage.compose.example.yml` and the [local storage mount procedure](docs/client/deployment-and-data-migration.md#researcher-selectable-local-storage). Paths entered for Docker are container paths; the operator mounts the real Windows/macOS/Linux host folder. The optional Graph helper is not an accepted OneDrive integration and is not required for the client's current local-storage phase.
+Researchers select a configured location or create a named workspace folder in **Workspace settings → Storage**. Workspace folders live under the existing server storage root; they do not attach a disk, connect a cloud account or change capacity. Additional server directories are configured by the operator. The choice is stored per researcher and validated against the server configuration, and the backend probes it for writability before accepting it (`422` for an unknown name, `507` when the directory is not writable). Only new files use the new location; previously saved files stay where they are. A directory outside the default storage volume needs its own persistent mount in a container deployment. For a second local disk/host directory, see `deploy/storage.compose.example.yml` and the [local storage mount procedure](docs/client/deployment-and-data-migration.md#researcher-selectable-local-storage). Paths entered for Docker are container paths; the operator mounts the real Windows/macOS/Linux host folder. The optional Graph helper is not an accepted OneDrive integration and is not required for the client's current local-storage phase.
 
 ### Frontend Variables
 

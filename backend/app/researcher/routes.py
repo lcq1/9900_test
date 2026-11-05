@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Header
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.core.database import get_db
 from app.core.models import gen_uuid
 from app.core.security import (
     create_access_token,
+    revoke_access_token,
     get_current_researcher,
     get_current_administrator,
 )
@@ -62,7 +63,17 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/auth/logout", status_code=200)
-def logout() -> dict:
+def logout(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+        try:
+            researcher = get_current_researcher(token, db)
+        except HTTPException:
+            return {"status": "ok"}
+        revoke_access_token(db, token, researcher)
     return {"status": "ok"}
 
 

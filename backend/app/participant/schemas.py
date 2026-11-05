@@ -62,12 +62,21 @@ class ParticipantSessionResult(CamelModel):
 class ParticipantSessionSubmit(CamelModel):
     """Body for submitting a session (server assigns id + startedAt)."""
 
+    client_id: str | None = Field(default=None, min_length=1, max_length=64)
     experiment_code: str
     session_id: Optional[UUID] = None
     participant_code: str
     finished_at: Optional[str] = None
     answers: list[ParticipantAnswer] = []
     events: list[ParticipantEvent] = []
+
+    @field_validator("answers")
+    @classmethod
+    def unique_answer_ids(cls, value):
+        ids = [answer.component_id for answer in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Each answer component must appear only once.")
+        return value
 
 
 class StageSubmit(ParticipantSessionSubmit):

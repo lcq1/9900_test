@@ -561,6 +561,11 @@ def test_versioned_export_and_session_snapshot(client, auth_headers, monkeypatch
         yield {"type": "done", "model": "test"}
     monkeypatch.setattr(ai_proxy, "stream_chat", fake_chat)
     monkeypatch.setattr(settings, "ai_api_key", "test-only")
+    import base64
+    signature = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\nlegacy-test-image").decode()
+    accepted = client.post("/api/participant/stages/consent/submit", headers=actor, json={
+        **payload, "consentAccepted": True, "answers": [{"componentId": "consent", "value": signature}]})
+    assert accepted.status_code == 200, accepted.text
     chat = {"sessionId": sid, "content": "Hello", "conversationId": str(uuid4()), "requestId": str(uuid4())}
     for _ in range(2):
         result = client.post("/api/participant/stages/task/ai-stream", headers=actor, json=chat)

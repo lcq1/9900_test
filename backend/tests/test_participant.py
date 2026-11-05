@@ -130,3 +130,16 @@ def test_publication_requires_consent_and_content():
     with pytest.raises(HTTPException): validate_publication([])
     with pytest.raises(HTTPException): validate_publication([{"id": "a", "type": "short_answer"}] * 2)
     validate_publication([{"id": "c", "type": "consent", "name": "Consent", "components": [{"type": "text", "label": "Consent text"}]}, {"id": "t", "type": "short_answer", "name": "Task", "components": [{"type": "text", "label": "Task text"}]}])
+
+
+def test_completed_session_is_immutable_but_identical_retry_succeeds(client, auth_headers):
+    study = _make_experiment(client, auth_headers).json()
+    payload = {**_submit_payload(study["code"]), "finishedAt": "2026-11-05T01:00:00Z"}
+    saved = client.post("/api/participant/sessions", headers=auth_headers, json=payload)
+    assert saved.status_code == 201
+    payload["sessionId"] = saved.json()["id"]
+    assert client.post("/api/participant/sessions", headers=auth_headers, json=payload).status_code == 201
+    assert client.post("/api/participant/sessions", headers=auth_headers, json={
+        **payload, "answers": [{"componentId": "c1", "value": "changed"}],
+    }).status_code == 409
+    assert client.get("/api/participant/sessions/" + payload["sessionId"], headers=auth_headers).json()["answers"] == saved.json()["answers"]

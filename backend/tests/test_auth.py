@@ -41,7 +41,7 @@ def test_database_uses_postgresql_and_real_migrations(client):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "8d8d8d8d8d8d"
+            == "9e9e9e9e9e9e"
         )
         inspector = inspect(connection)
         columns = {
@@ -182,7 +182,7 @@ def test_upgrade_from_original_head_preserves_existing_experiments(
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "8d8d8d8d8d8d"
+            == "9e9e9e9e9e9e"
         )
 
 
@@ -223,7 +223,7 @@ def test_upgrade_adopts_unversioned_create_all_database(client, auth_headers):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "8d8d8d8d8d8d"
+            == "9e9e9e9e9e9e"
         )
         command.upgrade(config, "head")
         assert (
@@ -304,3 +304,24 @@ def test_client_allowlist_admits_only_the_configured_client_address(monkeypatch,
         with pytest.raises(HTTPException) as error: require_allowed_email(email)
         assert error.value.status_code == 403
 
+
+
+def test_logout_revokes_only_the_submitted_token(client, auth_headers):
+    current = auth_headers["Authorization"].split(" ", 1)[1]
+    from app.core.config import settings
+    import jwt
+    claims = jwt.decode(current, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    claims["jti"] = "other-browser"
+    other = {"Authorization": "Bearer " + jwt.encode(claims, settings.jwt_secret, algorithm=settings.jwt_algorithm)}
+    assert client.post("/api/auth/logout", headers=auth_headers).status_code == 200
+    assert client.get("/api/experiments", headers=auth_headers).status_code == 401
+    assert client.get("/api/experiments", headers=other).status_code == 200
+    assert client.post("/api/auth/logout", headers=auth_headers).status_code == 200
+
+
+def test_registration_rejects_blank_names_and_oversized_passwords(client):
+    for name, password in ((" ", "test-password"), ("Researcher", "a" * 73), ("Researcher", "中" * 25)):
+        response = client.post("/api/auth/register", json={
+            "name": name, "email": "validation@example.com", "password": password,
+        })
+        assert response.status_code == 422

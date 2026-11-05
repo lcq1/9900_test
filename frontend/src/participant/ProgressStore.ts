@@ -90,6 +90,8 @@ export class ProgressStore {
 
 /** A resumable runtime checkpoint, stored in existing browser and event storage. */
 export interface RuntimeProgress {
+	paused?: boolean
+	remainingSeconds?: number
 	sessionId: string
 	updatedAt: number
 	stageIndex: number

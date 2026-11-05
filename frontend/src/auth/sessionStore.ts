@@ -48,3 +48,19 @@ export const setParticipantToken = (token: string) =>
 	sessionStorage.setItem(PARTICIPANT_KEY, token)
 export const clearParticipantToken = () =>
 	sessionStorage.removeItem(PARTICIPANT_KEY)
+
+let fallbackParticipantClientId: string | undefined
+/** Stable in this tab, including when browser storage is unavailable. */
+export function getParticipantClientId(): string {
+	try {
+		const existing = sessionStorage.getItem('p13-client-id')
+		if (existing) return existing
+		const id = fallbackParticipantClientId ?? crypto.randomUUID()
+		fallbackParticipantClientId = id
+		sessionStorage.setItem('p13-client-id', id)
+		return id
+	} catch {
+		fallbackParticipantClientId ??= crypto.randomUUID()
+		return fallbackParticipantClientId
+	}
+}

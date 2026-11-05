@@ -6,6 +6,7 @@ from app.core import clock
 
 from datetime import timedelta
 from typing import Any
+from uuid import uuid4
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -48,6 +49,7 @@ def create_access_token(subject: str, auth_version: int = 0) -> str:
     expire = now + timedelta(minutes=settings.jwt_expire_minutes)
     payload: dict[str, Any] = {
         "sub": subject,
+        "jti": uuid4().hex,
         "ver": auth_version,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
@@ -70,6 +72,25 @@ def decode_access_token(token: str) -> str | None:
     return (_access_claims(token) or {}).get("sub")
 
 
+def revoked_token_id(token: str) -> str:
+    from uuid import uuid5, NAMESPACE_URL
+    return str(uuid5(NAMESPACE_URL, "revoked-researcher-token:" + token))
+
+
+def revoke_access_token(db: Session, token: str, researcher: Researcher) -> None:
+    from sqlalchemy.dialects.postgresql import insert
+    from app.researcher.models import RevokedAccessToken
+
+    claims = _access_claims(token)
+    if not claims:
+        return
+    db.query(RevokedAccessToken).filter(RevokedAccessToken.expires_at <= int(clock.now().timestamp())).delete()
+    db.execute(insert(RevokedAccessToken).values(
+        id=revoked_token_id(token), researcher_id=researcher.id, expires_at=claims["exp"],
+    ).on_conflict_do_nothing(index_elements=["id"]))
+    db.commit()
+
+
 def get_current_researcher(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
@@ -81,6 +102,9 @@ def get_current_researcher(
         raise CREDENTIALS_EXC
     researcher = db.get(Researcher, subject)
     if researcher is None or researcher.account_status != "active" or claims.get("ver", 0) != researcher.auth_version:
+        raise CREDENTIALS_EXC
+    from app.researcher.models import RevokedAccessToken
+    if db.get(RevokedAccessToken, revoked_token_id(token)) is not None:
         raise CREDENTIALS_EXC
     from app.core.config import require_allowed_email
     require_allowed_email(researcher.email)

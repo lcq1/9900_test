@@ -108,7 +108,12 @@ export function ParticipantPreview({
  if (previewOnly || !initialSessionId) return undefined
  const local = readRuntimeProgress(initialSessionId)
  const saved = local && (!initialProgress || local.updatedAt > initialProgress.updatedAt) ? local : initialProgress
- if (saved) for (const [id, deadline] of Object.entries(saved.deadlines ?? {})) safeSetItem('p13-timer:' + initialSessionId + ':' + id, String(deadline))
+ if (saved) for (const [id, deadline] of Object.entries(saved.deadlines ?? {})) {
+  const remaining = saved.remainingSeconds
+  const frozen = saved.paused && experiment.stages[saved.stageIndex]?.id === id &&
+    typeof remaining === 'number' && Number.isFinite(remaining) && remaining >= 0
+  safeSetItem('p13-timer:' + initialSessionId + ':' + id, String(frozen ? Date.now() + remaining * 1000 : deadline))
+ }
  return saved
 })
 const [conversations] = useState<Record<string, string>>(() => restored?.conversations ?? Object.fromEntries(experiment.stages.map(item => [item.id, crypto.randomUUID()])))
@@ -123,7 +128,7 @@ useEffect(() => onStorageDegraded(setStorageLimited), [])
 	const [extended, setExtended] = useState<Record<string, boolean>>(restored?.extended ?? {})
 	const [oralIndex, setOralIndex] = useState(restored?.oralIndex ?? 0)
 	const [oralStarted, setOralStarted] = useState(restored?.oralStarted ?? false)
-	const [stageIndex, setStageIndex] = useState(Math.min(restored?.stageIndex ?? 0, experiment.stages.length - 1))
+	const [stageIndex, setStageIndex] = useState(Math.max(0, Math.min(Number.isInteger(restored?.stageIndex) ? restored!.stageIndex : 0, experiment.stages.length - 1)))
 	const consentStage = experiment.stages.find((item) => item.type.toLowerCase() === 'consent')
 	const allowFreeOrder = Boolean(experiment.stages[0]?.features.navigation)
 
@@ -162,7 +167,7 @@ useEffect(() => onStorageDegraded(setStorageLimited), [])
 		restored?.consentedStageId ?? null,
 	)
 	const canJump = allowFreeOrder && (!consentStage || consentedStageId === consentStage.id)
-	const [paused, setPaused] = useState(false)
+	const [paused, setPaused] = useState(restored?.paused ?? false)
 	const [selections, setSelections] = useState<
 		Record<string, string | string[]>
 	>(() => {
@@ -429,10 +434,10 @@ useEffect(() => {
  if (previewOnly || !initialSessionId || finishingRef.current) return
  const deadlines: Record<string, number> = {}
  for (const item of experiment.stages) { const value = Number(safeGetItem('p13-timer:' + initialSessionId + ':' + item.id)); if (value) deadlines[item.id] = value }
- const progress: RuntimeProgress = { sessionId: initialSessionId, updatedAt: Date.now(), stageIndex, answers: selections, consentedStageId, attachments, extended, oralIndex, oralStarted, deadlines, conversations }
+ const progress: RuntimeProgress = { sessionId: initialSessionId, updatedAt: Date.now(), stageIndex, answers: selections, consentedStageId, attachments, extended, oralIndex, oralStarted, deadlines, conversations, paused, remainingSeconds: remaining }
  checkpointRef.current = progress
  saveRuntimeProgress(progress)
-}, [previewOnly, initialSessionId, experiment.stages, stageIndex, selections, consentedStageId, attachments, extended, oralIndex, oralStarted, remaining, conversations])
+}, [previewOnly, initialSessionId, experiment.stages, stageIndex, selections, consentedStageId, attachments, extended, oralIndex, oralStarted, remaining, conversations, paused])
 useEffect(() => {
  if (previewOnly || !initialSessionId) return
  const save = () => {
@@ -664,7 +669,7 @@ useEffect(() => {
 			componentId: c.id,
 			value: selections[c.id] ?? '',
 		})), ...stage.components.filter(c => c.otherOption).map(c => ({ componentId: c.id + ':other', value: selections[c.id + ':other'] ?? '' }))]
-		if (stage.signingMethod === 'name') answers.push({ componentId: 'consent', value: selections.consent ?? '' })
+		if (stage.type.toLowerCase() === 'consent') answers.push({ componentId: 'consent', value: selections.consent ?? '' })
 		const missingItems: { id: string; label: string }[] = stage.components
 			.filter((c) => {
 				if (['text', 'button'].includes(c.type)) return false

@@ -100,3 +100,52 @@ def test_issued_codes_are_scoped_and_revocable(client, auth_headers):
     assert client.delete(path + "/" + code, headers=auth_headers).status_code == 204
     assert client.post(access, json={"experimentCode": experiment["code"], "participantCode": code}).status_code == 403
     assert client.get("/api/ai/config", headers={"X-Participant-Token": opened.json()["token"]}).status_code == 403
+
+
+def test_participant_capture_waits_for_persisted_consent(client, auth_headers, monkeypatch, tmp_path):
+    import json
+    import uuid
+    from app.participant import ai_proxy
+    from app.core.config import settings
+    from app.core import storage
+    monkeypatch.setattr(settings, "ai_api_key", "consent-test-key")
+    monkeypatch.setattr(settings, "ai_api_base", "https://consent.example/v1/chat/completions")
+    monkeypatch.setattr(settings, "ai_stream", False)
+    monkeypatch.setattr(storage, "STORAGE_DIR", str(tmp_path))
+    async def fake_chat(*args):
+        yield {"type": "delta", "text": "ready", "model": "test"}
+        yield {"type": "done", "model": "test"}
+    monkeypatch.setattr(ai_proxy, "stream_chat", fake_chat)
+    study = client.post("/api/experiments", headers=auth_headers, json={
+        "name": "Consent gate", "status": "Live", "stages": [
+            {"id": "consent-gate", "type": "consent", "name": "Consent",
+             "signingMethod": "name", "consentClauses": ["Approved clause"],
+             "components": [{"id": "information", "type": "text", "label": "Approved information"}]},
+            {"id": "consent-task", "type": "short_answer", "name": "Task",
+             "features": {"ai": True, "screenRecording": True},
+             "components": [{"id": "task-text", "type": "text", "label": "Task"}]},
+        ],
+    })
+    assert study.status_code == 201, study.text
+    code = study.json()["code"]
+    headers = login(client, code)
+    payload = {"experimentCode": code, "participantCode": "P01", "sessionId": str(uuid.uuid4())}
+    started = client.post("/api/participant/sessions/start", headers=headers, json=payload)
+    assert started.status_code == 200
+    payload["sessionId"] = started.json()["sessionId"]
+    chat = {"sessionId": payload["sessionId"], "content": "hello",
+            "conversationId": str(uuid.uuid4()), "requestId": str(uuid.uuid4())}
+    upload = f"/api/participant/sessions/{payload['sessionId']}/recordings/{uuid.uuid4()}"
+    params = {"stage_id": "consent-task", "kind": "screen", "offset": 0}
+    assert client.post("/api/participant/stages/consent-task/ai-stream", headers=headers, json=chat).status_code == 403
+    assert client.post(upload, headers=headers, params=params, content=b"header").status_code == 403
+    consent = {"method": "name", "name": "Test Participant", "readToEnd": True,
+               "signedAt": "2026-11-05T01:00:00Z", "document": ["Approved information"],
+               "clauses": [{"text": "Approved clause", "accepted": True}]}
+    accepted = client.post("/api/participant/stages/consent-gate/submit", headers=headers, json={
+        **payload, "consentAccepted": True,
+        "answers": [{"componentId": "consent", "value": json.dumps(consent)}],
+    })
+    assert accepted.status_code == 200, accepted.text
+    assert client.post("/api/participant/stages/consent-task/ai-stream", headers=headers, json=chat).status_code == 200
+    assert client.post(upload, headers=headers, params=params, content=b"header").status_code == 200

@@ -19,14 +19,31 @@ class Researcher(CamelORMModel):
 
 
 class ResearcherCreate(CamelModel):
-    name: str
-    email: str
+    name: str = Field(min_length=1, max_length=255)
+    email: str = Field(min_length=3, max_length=255)
     password: Optional[str] = None
+
+    @field_validator("name", "email", mode="before")
+    @classmethod
+    def trim_identity(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_length(cls, value):
+        if value is not None and (not value or len(value.encode("utf-8")) > 72):
+            raise ValueError("Use a password between 1 and 72 UTF-8 bytes.")
+        return value
 
 
 class LoginRequest(CamelModel):
     email: str
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_length(cls, value):
+        return ResearcherCreate.validate_password_length(value)
 
 
 class LoginResponse(CamelModel):

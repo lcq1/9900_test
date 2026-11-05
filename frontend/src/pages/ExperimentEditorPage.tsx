@@ -166,7 +166,7 @@ export function Editor({
 				</label>
 				</div>
 			</div>
-			{showCodes && <Modal open title="Participant codes" footer={null} onCancel={() => setShowCodes(false)}>
+			{showCodes && <Modal open centered width={620} rootClassName="participant-codes-modal" title="Participant codes" footer={null} onCancel={() => setShowCodes(false)}>
 				<ParticipantCodes key={experiment.id} experimentId={experiment.id} experimentCode={experiment.code} />
 			</Modal>}
 			<details className="study-storage-editor">

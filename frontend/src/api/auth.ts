@@ -50,3 +50,8 @@ export async function signOut(): Promise<void> {
 
 // Promote a researcher to admin and return the updated account.
 export const promoteToAdministrator = (id: string) => http.patch<Researcher>('/researchers/' + id + '/promote')
+
+export const getProfile = () => http.get<Researcher>('/researchers/me')
+export const updateProfile = (name: string) => http.patch<Researcher>('/researchers/me', { name })
+export const changePassword = (currentPassword: string, newPassword: string) =>
+    http.post<Session>('/auth/password', { currentPassword, newPassword })

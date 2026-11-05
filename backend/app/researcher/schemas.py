@@ -40,6 +40,26 @@ class ResearcherRegistration(ResearcherCreate):
     password: str = Field(min_length=6)
 
 
+class ProfileUpdate(CamelModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=255)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def trim_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class PasswordChange(CamelModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=6)
+
+    @field_validator("current_password", "new_password")
+    @classmethod
+    def password_length(cls, value):
+        return ResearcherCreate.validate_password_length(value)
+
+
 class LoginRequest(CamelModel):
     email: str
     password: str

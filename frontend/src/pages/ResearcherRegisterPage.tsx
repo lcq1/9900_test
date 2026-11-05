@@ -12,6 +12,7 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 	const [email, setEmail] = useState('')
 	const [password, setPassword] = useState('')
 	const [confirm, setConfirm] = useState('')
+	const [showPasswords, setShowPasswords] = useState(false)
 	const [error, setError] = useState('')
 	const [done, setDone] = useState<auth.Researcher | null>(null)
 	const [busy, setBusy] = useState(false)
@@ -64,7 +65,7 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 
 	if (done) {
 		const pending = done.accountStatus === 'pending'
-		return <section className="page"><div className="register-done" role="status">
+		return <section className="page registration-page"><div className="register-done" role="status">
 			<span className="register-done-icon">{pending ? <Clock size={28} /> : <Check size={28} />}</span>
 			<h1>{pending ? 'Account awaiting approval' : 'Your researcher account is ready'}</h1>
 			<p className="subheading">Your account for {done.email} has been created.</p>
@@ -75,7 +76,7 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 		</div></section>
 	}
 
-	return <section className="page">
+	return <section className="page registration-page">
 		<button type="button" className="back-link" onClick={() => onBack?.()}><ArrowLeft size={16} /> Back to sign in</button>
 		<div className="register-card">
 			<p className="eyebrow">RESEARCHER SIGN-UP</p>
@@ -99,12 +100,13 @@ export function ResearcherRegisterPage({ onRegistered, onBack }: ResearcherRegis
 						<input type="email" value={email} onChange={event => setEmail(event.target.value)} required maxLength={255} autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="you@university.edu" disabled={busy} />
 					</label>
 					<label className="entry-label">Password
-						<input type="password" value={password} onChange={event => setPassword(event.target.value)} required minLength={6} autoComplete="new-password" placeholder="At least 6 characters" disabled={busy} aria-describedby="registration-password-help" />
+						<input type={showPasswords ? "text" : "password"} value={password} onChange={event => setPassword(event.target.value)} required minLength={6} autoComplete="new-password" placeholder="At least 6 characters" disabled={busy} aria-describedby="registration-password-help" />
 					</label>
 					<p id="registration-password-help">Use at least 6 characters and no more than 72 UTF-8 bytes.</p>
 					<label className="entry-label">Confirm password
-						<input type="password" value={confirm} onChange={event => setConfirm(event.target.value)} required autoComplete="new-password" placeholder="Re-enter password" disabled={busy} />
+						<input type={showPasswords ? "text" : "password"} value={confirm} onChange={event => setConfirm(event.target.value)} required autoComplete="new-password" placeholder="Re-enter password" disabled={busy} />
 					</label>
+					<label className="password-visibility"><input type="checkbox" checked={showPasswords} onChange={event => setShowPasswords(event.target.checked)} /> Show passwords</label>
 					{error && <p className="entry-error" role="alert">{error}</p>}
 					<button className="primary-button entry-button" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
 				</form>

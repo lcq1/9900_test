@@ -26,6 +26,7 @@ export function AuthScreen({
 	const [registering, setRegistering] = useState(false)
 	const [email, setEmail] = useState(initialEmail ?? '')
 	const [password, setPassword] = useState('')
+	const [showPassword, setShowPassword] = useState(false)
 	const [experimentCode, setExperimentCode] = useState('')
 	const [participantCode, setParticipantCode] = useState('')
 	const [error, setError, errorVisible, errorRevision] =
@@ -205,7 +206,7 @@ export function AuthScreen({
 							<label>
 								Password
 								<input
-									type="password"
+									type={showPassword ? "text" : "password"}
 									value={password}
 									onChange={(event) =>
 										setPassword(event.target.value)
@@ -215,6 +216,10 @@ export function AuthScreen({
 							</label>
 						</>
 					)}
+
+                    {role !== 'participant' && <label className="password-visibility">
+                        <input type="checkbox" checked={showPassword} onChange={event => setShowPassword(event.target.checked)} /> Show password
+                    </label>}
 
 					{error && errorVisible && (
 						<p

@@ -89,6 +89,20 @@ describe('researcher registration', () => {
   expect(screen.getByRole('button', { name: 'Researcher log in' })).toBeDefined()
  })
 
+ it('shows and masks both registration passwords using the checkbox', async () => {
+  render(<ResearcherRegisterPage />)
+  await screen.findByLabelText('Password')
+  const password = screen.getByLabelText('Password') as HTMLInputElement
+  const confirm = screen.getByLabelText('Confirm password') as HTMLInputElement
+  expect(password.type).toBe('password')
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Show passwords' }))
+  expect(password.type).toBe('text')
+  expect(confirm.type).toBe('text')
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Show passwords' }))
+  expect(password.type).toBe('password')
+  expect(confirm.type).toBe('password')
+ })
+
  it('opens researcher login when routed back with the registered email', () => {
   render(<AuthScreen initialEmail={account.email} onSignIn={vi.fn()} onParticipant={vi.fn()} />)
   expect(screen.getByRole('button', { name: 'Researcher', exact: true }).getAttribute('aria-pressed')).toBe('true')

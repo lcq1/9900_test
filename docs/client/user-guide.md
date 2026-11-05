@@ -34,6 +34,16 @@ If registration is closed, request an account from the administrator. Duplicate 
 
 Choose the matching role at sign-in. Administrator status is assigned to an account; selecting the Administrator button does not grant that role.
 
+## Personal account and password visibility
+
+Click your avatar/name at the bottom of the workspace sidebar to open **Your account**. The sidebar uses the current signed-in account's saved name; names entered in earlier browser-only workspace settings are no longer used.
+
+- **Personal details:** edit and save your full name. The change is saved on the server and updates the sidebar. Your sign-in email, role, status and joining date are shown; this page cannot change your role or email.
+- **Change password:** enter the current password, then the new password twice. A successful update keeps this browser signed in with a renewed session and invalidates previously issued account sessions. Other browsers must sign in again.
+- **Workspace and session:** return to experiments, open AI/storage settings or sign out.
+
+The registration page, sign-in page and password-change form have a **Show password(s)** checkbox. Check it to show the currently entered text, and uncheck it to mask the text again. This does not retrieve an existing stored password. Passwords are masked by default.
+
 ## 3. Create and publish an experiment
 
 1. Sign in as a researcher and open the experiment dashboard.

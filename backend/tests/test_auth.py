@@ -78,7 +78,7 @@ def test_register_returns_researcher(client):
 
 
 def test_register_duplicate_email(client):
-    payload = {"name": "C", "email": "c@example.com", "password": "pw"}
+    payload = {"name": "C", "email": "c@example.com", "password": "pw12345"}
     assert client.post("/api/auth/register", json=payload).status_code == 201
     assert client.post("/api/auth/register", json=payload).status_code == 409
 
@@ -102,7 +102,7 @@ def test_login_success_returns_session_shape(client):
 def test_login_wrong_password(client):
     client.post(
         "/api/auth/register",
-        json={"name": "Eve", "email": "eve@example.com", "password": "pw"},
+        json={"name": "Eve", "email": "eve@example.com", "password": "pw12345"},
     )
     r = client.post(
         "/api/auth/login", json={"email": "eve@example.com", "password": "nope"}
@@ -325,3 +325,49 @@ def test_registration_rejects_blank_names_and_oversized_passwords(client):
             "name": name, "email": "validation@example.com", "password": password,
         })
         assert response.status_code == 422
+
+
+def test_registration_requires_a_usable_password(client):
+    for password in (None, "", "short"):
+        body = {"name": "Researcher", "email": "new@example.com"}
+        if password is not None:
+            body["password"] = password
+        assert client.post("/api/auth/register", json=body).status_code == 422
+
+
+def test_registration_policy_and_approval_lifecycle(client, admin_headers):
+    from app.core.config import settings
+    assert client.get("/api/auth/registration-policy").json() == {
+        "allowSelfRegistration": True, "requireResearcherApproval": False,
+        "emailRestricted": settings.access_allowlist_enabled,
+    }
+    assert client.patch("/api/admin/settings", headers=admin_headers,
+                        json={"requireResearcherApproval": True}).status_code == 200
+    assert client.get("/api/auth/registration-policy").json()["requireResearcherApproval"] is True
+    body = {"name": "  New Researcher  ", "email": "  NEW@example.com  ", "password": "secure-password", "role": "administrator"}
+    created = client.post("/api/auth/register", json=body)
+    assert created.status_code == 201
+    assert created.json()["email"] == "new@example.com"
+    assert created.json()["name"] == "New Researcher"
+    assert created.json()["role"] == "researcher"
+    assert created.json()["accountStatus"] == "pending"
+    credentials = {"email": body["email"], "password": body["password"]}
+    denied = client.post("/api/auth/login", json=credentials)
+    assert denied.status_code == 403 and "awaiting" in denied.json()["detail"]
+    assert client.patch("/api/admin/researchers/" + created.json()["id"], headers=admin_headers,
+                        json={"status": "active"}).status_code == 200
+    assert client.post("/api/auth/login", json=credentials).status_code == 200
+    assert client.patch("/api/admin/settings", headers=admin_headers,
+                        json={"allowSelfRegistration": False}).status_code == 200
+    policy = client.get("/api/auth/registration-policy").json()
+    assert policy["allowSelfRegistration"] is False
+    assert "allowedEmails" not in policy
+    assert client.post("/api/auth/register", json={**body, "email": "closed@example.com"}).status_code == 403
+
+
+def test_simultaneous_registration_returns_conflict(client):
+    from concurrent.futures import ThreadPoolExecutor
+    body = {"name": "Concurrent", "email": "concurrent@example.com", "password": "secure-password"}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: client.post("/api/auth/register", json=body), range(2)))
+    assert sorted(response.status_code for response in responses) == [201, 409]

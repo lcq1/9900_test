@@ -16,6 +16,14 @@ For a local installation, start Docker Desktop and the installed application sta
 
 For a hosted installation, use the supplied HTTPS address. The server must stay running; participants do not install Docker. Test recording on the desktop browser and operating system you will actually use. Screen capture and captured audio differ between browsers; a phone is not an assumed replacement for a desktop recording session.
 
+## Researcher registration
+
+On the sign-in page choose **Researcher → Create an account**. Enter your full name, email, password and matching confirmation. Registration passwords require at least 6 characters and at most 72 UTF-8 bytes. The page checks platform availability and shows any email restrictions before you submit.
+
+If administrator approval is required, the account is created as pending; the success page explains that you must wait for approval before signing in. The administrator approves the account from account management. Otherwise you can return to researcher sign-in immediately, with your email already filled in. Registration never grants administrator access.
+
+If registration is closed, request an account from the administrator. Duplicate emails and invalid passwords are rejected. Email allowlists still apply even when self-registration is open. Creating an account does not verify ownership of the email by sending an email; self-service email verification/password recovery are separate capabilities not provided by this registration flow.
+
 ## 2. Roles
 
 | Role | Typical responsibilities |

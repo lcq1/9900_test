@@ -2,6 +2,7 @@ import { useTransientNotice } from '../participant/TimerController'// Code-based
 import { useState } from 'react'
 import { ArrowRight, LogIn, Play, ShieldCheck, UserPlus, UserRound } from 'lucide-react'
 import * as auth from '../api/auth'
+import { ResearcherRegisterPage } from './ResearcherRegisterPage'
 import { setSession } from '../auth/sessionStore'
 import type React from 'react'
 
@@ -21,9 +22,8 @@ export function AuthScreen({
 	onParticipant: (experimentCode?: string, participantCode?: string) => void
 }) {
 	// Track login role, registration mode, form fields, and request state.
-	const [role, setRole] = useState<Role>('participant')
-	const [mode, setMode] = useState<'signin' | 'register'>('signin')
-	const [name, setName] = useState('')
+	const [role, setRole] = useState<Role>(initialEmail ? 'researcher' : 'participant')
+	const [registering, setRegistering] = useState(false)
 	const [email, setEmail] = useState(initialEmail ?? '')
 	const [password, setPassword] = useState('')
 	const [experimentCode, setExperimentCode] = useState('')
@@ -53,20 +53,9 @@ export function AuthScreen({
 			setError('Email and password are required.')
 			return
 		}
-		if (mode === 'register' && !name.trim()) {
-			// Require a researcher name for registration.
-			setError('Please enter your name.')
-			return
-		}
 		setBusy(true)
 		try {
 			// Authenticate, save the session, and notify the parent.
-			if (mode === 'register') {
-				await auth.registerResearcher({ name, email, password })
-				setMode('signin')
-				setPassword('')
-				return
-			}
 			const session = await auth.signIn(email, password)
 			if (role === 'administrator' && session.researcher.role !== 'administrator') {
 				setError('Use an administrator account to sign in here.')
@@ -86,6 +75,15 @@ export function AuthScreen({
 			setBusy(false)
 		}
 	}
+
+    if (registering) return <ResearcherRegisterPage
+        onBack={() => setRegistering(false)}
+        onRegistered={(researcher) => {
+            setEmail(researcher.email)
+            setPassword('')
+            setRole('researcher')
+            setRegistering(false)
+        }} />
 
 	return (
 		<div className="auth-screen">
@@ -154,7 +152,7 @@ export function AuthScreen({
 								: 'auth-tab'
 						}
 						aria-pressed={role === 'administrator'}
-						onClick={() => { setMode('signin'); setError(''); setRole('administrator') }}
+						onClick={() => { setError(''); setRole('administrator') }}
 					>
 						<ShieldCheck size={14} /> Administrator
 					</button>
@@ -189,19 +187,6 @@ export function AuthScreen({
 								/>
 							</label>
 						</>
-					)}
-
-					{role !== 'participant' && mode === 'register' && (
-						<label>
-							Full name
-							<input
-								value={name}
-								onChange={(event) =>
-									setName(event.target.value)
-								}
-								placeholder="Jane Researcher"
-							/>
-						</label>
 					)}
 
 					{role !== 'participant' && (
@@ -251,9 +236,7 @@ export function AuthScreen({
 								? 'Start / Continue'
 								: role === 'administrator'
 									? 'Administrator sign in'
-									: mode === 'register'
-										? 'Create account'
-										: 'Researcher log in'}{' '}
+									: 'Researcher log in'}{' '}
 						<ArrowRight size={16} />
 					</button>
 				</form>
@@ -264,37 +247,16 @@ export function AuthScreen({
 						you left off.
 					</p>
 				)}
-				{role === 'researcher' && (
-					<p className="auth-foot">
-						{mode === 'register' ? (
-							<>
-								Already have an account?{' '}
-								<button
-									type="button"
-									className="consent-clear"
-									onClick={() => setMode('signin')}
-								>
-									Sign in
-								</button>
-							</>
-						) : (
-							<>
-								New researcher?{' '}
-								<button
-									type="button"
-									className="consent-clear"
-									onClick={() =>
-										onRegister
-											? onRegister()
-											: setMode('register')
-									}
-								>
-									<UserPlus size={12} /> Create an account
-								</button>
-							</>
-						)}
-					</p>
-				)}
+
+                {role === 'researcher' && (
+                    <p className="auth-foot">
+                        New researcher?{' '}
+                        <button type="button" className="consent-clear"
+                            onClick={() => onRegister ? onRegister() : setRegistering(true)}>
+                            <UserPlus size={12} /> Create an account
+                        </button>
+                    </p>
+                )}
 				{role === 'administrator' && (
 					<p className="auth-foot">
 						Administrator accounts are promoted by an existing

@@ -52,6 +52,8 @@ The backend image runs `alembic upgrade head` before serving, so the schema is c
 - [Client requirements / acceptance status](docs/client/06-delivery-readiness.md): what is implemented, what still needs target-environment acceptance, and what is outside the current phase.
 - [Session runbook](docs/client/05-nov06-session-runbook.md): researcher-to-participant demonstration and material checks.
 
+Researchers sign up through **Researcher → Create an account** on the login page. The registration page checks platform policy, validates name/email/password confirmation and shows pending-approval or ready-to-sign-in status. Passwords are required (6 or more characters, up to 72 UTF-8 bytes). Administrators can close self-registration or require approval; email allowlists also apply. Registration creates a researcher, never an administrator. See the [registration guide](docs/client/user-guide.md#researcher-registration).
+
 A fresh installation has no existing developer-side accounts or studies. Register the first permitted researcher, then grant the first administrator role from the operator's terminal:
 
 ```bash

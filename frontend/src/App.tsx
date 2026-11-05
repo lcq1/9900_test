@@ -88,7 +88,7 @@ function Register() {
 	const navigate = useNavigate();
 	return (
 		<ResearcherRegisterPage
-			onRegistered={(r) => navigate("/login", { state: { email: r.email } })}
+			onRegistered={(r) => navigate("/login", { replace: true, state: { email: r.email } })}
 			onBack={() => navigate("/login")}
 		/>
 	);

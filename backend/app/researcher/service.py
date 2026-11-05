@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from fastapi import HTTPException, status as http_status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import require_allowed_email
 from app.core.security import hash_password, verify_password
@@ -28,10 +29,16 @@ def register_researcher(
             detail="Email already registered",
         )
     password_hash = hash_password(password) if password else ""
-    return repo.create_researcher(
-        db, name=name, email=email, password_hash=password_hash,
-        account_status="pending" if policy.require_researcher_approval and not administrator else "active",
-    )
+    try:
+        return repo.create_researcher(
+            db, name=name, email=email, password_hash=password_hash,
+            account_status="pending" if policy.require_researcher_approval and not administrator else "active",
+        )
+    except IntegrityError:
+        db.rollback()
+        if repo.get_researcher_by_email(db, email):
+            raise HTTPException(status_code=409, detail="Email already registered")
+        raise
 
 
 def authenticate(db: Session, email: str, password: str) -> Optional[Researcher]:
@@ -41,8 +48,10 @@ def authenticate(db: Session, email: str, password: str) -> Optional[Researcher]
         return None
     if not verify_password(password, researcher.password_hash):
         return None
+    if researcher.account_status == "pending":
+        raise HTTPException(status_code=403, detail="Your researcher account is awaiting administrator approval.")
     if researcher.account_status != "active":
-        raise HTTPException(status_code=403, detail="This account requires administrator approval or has been disabled.")
+        raise HTTPException(status_code=403, detail="This account has been disabled. Contact an administrator.")
     return researcher
 
 

@@ -19,10 +19,11 @@ DEFAULTS: dict[str, Any] = {
 def get_settings(db: Session) -> PlatformSettings:
     settings = db.get(PlatformSettings, 1)
     if settings is None:
-        settings = PlatformSettings(id=1, **DEFAULTS)
-        db.add(settings)
+        from sqlalchemy.dialects.postgresql import insert
+        db.execute(insert(PlatformSettings).values(id=1, **DEFAULTS)
+                   .on_conflict_do_nothing(index_elements=["id"]))
         db.commit()
-        db.refresh(settings)
+        settings = db.get(PlatformSettings, 1)
     return settings
 
 

@@ -36,6 +36,10 @@ class ResearcherCreate(CamelModel):
         return value
 
 
+class ResearcherRegistration(ResearcherCreate):
+    password: str = Field(min_length=6)
+
+
 class LoginRequest(CamelModel):
     email: str
     password: str

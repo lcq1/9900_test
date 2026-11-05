@@ -250,6 +250,18 @@ interface SessionData {
 	experimentCode: string
 }
 
+function normalizeResultEvents(events: ParticipantEvent[]): ParticipantEvent[] {
+	return events
+		.map((event) => {
+			if (Number.isFinite(event.epochMs) && event.epochMs > 0) return event
+			// Some server-generated events carry ISO time but leave epochMs at zero.
+			const parsed = Date.parse(event.timestamp)
+			return { ...event, epochMs: parsed > 0 ? parsed : Number.NaN }
+		})
+		.sort((a, b) => (Number.isFinite(a.epochMs) ? a.epochMs : Infinity) -
+			(Number.isFinite(b.epochMs) ? b.epochMs : Infinity))
+}
+
 export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 	// `null` means the researcher has not picked a scope yet: charts then default
 	// to the first experiment so the counts never mix sessions from two studies.
@@ -279,7 +291,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 						id: s.id,
 						participantCode: s.participantCode,
 						experimentCode: s.experimentCode,
-						events: s.events,
+						events: normalizeResultEvents(s.events),
 						experimentName:
 							experiments.find((e) => e.code === s.experimentCode)
 								?.name ?? s.experimentCode,
@@ -499,8 +511,9 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 			) : (
 				<div className="results-list">
 					{visibleSessions.map((session) => {
-						const first = session.events[0]
-						const last = session.events[session.events.length - 1]
+						const timedEvents = session.events.filter((event) => Number.isFinite(event.epochMs))
+						const first = timedEvents[0]
+						const last = timedEvents[timedEvents.length - 1]
 						const durationMs =
 							first && last ? last.epochMs - first.epochMs : 0
 						const open = openId === session.id
@@ -517,7 +530,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 										<span className="session-chip">
 											{session.events.length} events
 										</span>
-										<span className="session-chip">
+										<span className="session-chip" title="Time between the first and last recorded events">
 											{formatDuration(durationMs)}
 										</span>
 										<button
@@ -817,6 +830,7 @@ function ActivityLine({ events }: { events: ParticipantEvent[] }) {
 }
 
 function formatClock(epochMs: number): string {
+  if (!Number.isFinite(epochMs)) return '—'
   const d = new Date(epochMs)
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
@@ -829,8 +843,9 @@ function formatDuration(ms: number): string {
   if (!ms || ms < 0) return '—'
   const seconds = Math.round(ms / 100) / 10
   if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const remainder = Math.round(seconds - minutes * 60)
+  const rounded = Math.round(ms / 1000)
+  const minutes = Math.floor(rounded / 60)
+  const remainder = rounded % 60
   return `${minutes}m ${remainder}s`
 }
 

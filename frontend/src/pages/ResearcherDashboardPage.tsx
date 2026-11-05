@@ -242,6 +242,16 @@ const TYPE_META: Partial<
 	timer_milestone: { label: 'Timer milestone', color: '#aebfce' },
 	navigation: { label: 'Navigation', color: '#1e3a5f' },
 	abort: { label: 'Abort', color: '#c0564a' },
+	stage_exit: { label: 'Stage exit', color: '#475569' },
+	consent: { label: 'Consent', color: '#16856b' },
+	oral_question: { label: 'Oral question', color: '#7955b4' },
+	clock_sync: { label: 'Clock sync', color: '#94a3b8' },
+	progress_checkpoint: { label: 'Progress saved', color: '#a3b8cc' },
+	recording_media: { label: 'Recording saved', color: '#258c99' },
+	ai_error: { label: 'AI error', color: '#b64871' },
+	timer_extension: { label: 'Time extension', color: '#c78628' },
+	pause: { label: 'Pause', color: '#b58437' },
+	resume: { label: 'Resume', color: '#45866b' },
 }
 
 interface SessionData {
@@ -735,83 +745,72 @@ function SessionRecordings({ sessionId }: { sessionId: string }) {
 	</div>
 }
 
-/** Dependency-free doughnut chart (stroke-dasharray segments on one circle). */
+/** Filled ring sectors give each event category its own pointer target. */
 function Doughnut({
-	segments,
-	total,
+	segments, total,
 }: {
 	segments: { label: string; color: string; count: number }[]
 	total: number
 }) {
-	// Percentages and stroke offsets computed without mutation (pure derivations).
-	const pcts = segments.map((segment) =>
-		total > 0 ? (segment.count / total) * 100 : 0,
-	)
-	const offsets = pcts.map(
-		(_, index) =>
-			25 - pcts.slice(0, index).reduce((sum, pct) => sum + pct, 0),
-	)
-	return (
-		<div className="chart-doughnut">
-			<svg
-				viewBox="0 0 42 42"
-				className="doughnut-svg"
-				role="img"
-				aria-label="Event mix"
-			>
-				<circle
-					cx="21"
-					cy="21"
-					r="15.9155"
-					fill="none"
-					stroke="#eef2f7"
-					strokeWidth="7"
-				/>
-				{segments.map((segment, index) => {
-					const pct = pcts[index]
-					if (pct <= 0) return null
-					return (
-						<circle
-							key={segment.label}
-							cx="21"
-							cy="21"
-							r="15.9155"
-							fill="none"
-							stroke={segment.color}
-							strokeWidth="7"
-							strokeDasharray={`${pct} ${100 - pct}`}
-							strokeDashoffset={offsets[index]}
-						><title>{segment.label}: {segment.count} ({Math.round(pct)}%)</title></circle>
-					)
-				})}
-				<text
-					x="21"
-					y="20"
-					textAnchor="middle"
-					className="doughnut-total"
-				>
-					{total}
-				</text>
-				<text
-					x="21"
-					y="26"
-					textAnchor="middle"
-					className="doughnut-sub"
-				>
-					events
-				</text>
+	const [active, setActive] = useState<string | null>(null)
+	const [hovered, setHovered] = useState(false)
+	const tooltipId = useId()
+	const selected = segments.find((segment) => segment.label === active) ?? segments[0]
+	const share = selected ? (100 * selected.count / Math.max(1, total)).toFixed(1) : '0'
+	let offset = -90
+	const point = (angle: number, radius: number) => {
+		const radians = angle * Math.PI / 180
+		return `${160 + radius * Math.cos(radians)} ${150 + radius * Math.sin(radians)}`
+	}
+	const arcs: { label: string; color: string; count: number; path: string }[] = []
+	for (const segment of segments) {
+		const start = offset
+		offset += 360 * segment.count / Math.max(1, total)
+		const end = offset
+		const middle = (start + end) / 2
+		const path = `M ${point(start, 120)} A 120 120 0 0 1 ${point(middle, 120)} A 120 120 0 0 1 ${point(end, 120)}
+			L ${point(end, 80)} A 80 80 0 0 0 ${point(middle, 80)} A 80 80 0 0 0 ${point(start, 80)} Z`
+		arcs.push({ ...segment, path })
+	}
+	const select = (label: string) => { setActive(label); setHovered(true) }
+	return <div className="chart-doughnut">
+		<div className="event-mix-focus" onMouseLeave={() => setHovered(false)}>
+			<div className="event-mix-heading">
+				<strong>{total.toLocaleString()} timed events</strong>
+				<span>{segments.length} event categories · hover to inspect</span>
+			</div>
+			<svg viewBox="0 0 320 300" className="doughnut-svg" role="img" aria-label="Event mix">
+				<title>Share of recorded events by category</title>
+				{arcs.map((segment) => <path key={segment.label} d={segment.path} fill={segment.color}
+					className="event-mix-sector" stroke="#fff" strokeWidth="1"
+					fillOpacity={hovered && selected?.label !== segment.label ? .35 : 1}
+					onMouseEnter={() => select(segment.label)} onFocus={() => select(segment.label)}
+					onBlur={() => setHovered(false)} tabIndex={0}
+					aria-label={`${segment.label}, ${segment.count} events, ${(100 * segment.count / Math.max(1, total)).toFixed(1)} percent`}
+					aria-describedby={hovered && selected?.label === segment.label ? tooltipId : undefined}>
+					<title>{segment.label}: {segment.count} events</title>
+				</path>)}
+				<text x="160" y="145" textAnchor="middle" className="event-mix-share">{share}%</text>
+				<text x="160" y="170" textAnchor="middle" className="event-mix-centre-label">{selected?.label}</text>
 			</svg>
-			<ul className="chart-legend">
-				{segments.map((segment) => (
-					<li key={segment.label}>
-						<i style={{ background: segment.color }}></i>
-						{segment.label}
-						<b>{segment.count} · {(100 * segment.count / Math.max(1, total)).toFixed(1)}%</b>
-					</li>
-				))}
-			</ul>
+			<div className="event-mix-detail" id={tooltipId} role={hovered ? 'tooltip' : undefined}>
+				<i style={{ background: selected?.color }} />
+				<span><strong>{selected?.label}</strong><small>{selected?.count.toLocaleString() ?? 0} of {total.toLocaleString()} events · {share}%</small></span>
+			</div>
 		</div>
-	)
+		<ul className="chart-legend" aria-label="Event categories">
+			{segments.map((segment) => <li key={segment.label}>
+				<button type="button" className={selected?.label === segment.label ? 'event-legend-button selected' : 'event-legend-button'}
+					onMouseEnter={() => select(segment.label)} onMouseLeave={() => setHovered(false)}
+					onFocus={() => select(segment.label)} onBlur={() => setHovered(false)}
+					onClick={() => select(segment.label)}>
+					<i style={{ background: segment.color }} />
+					<span>{segment.label}</span>
+					<b>{segment.count} <small>{(100 * segment.count / Math.max(1, total)).toFixed(1)}%</small></b>
+				</button>
+			</li>)}
+		</ul>
+	</div>
 }
 
 /** Cumulative counts aligned to each session's first recorded event. */
@@ -838,7 +837,7 @@ function ActivityLine({ events }: { events: TimelineEvent[] }) {
 		</g>)}
 		<polygon points={`${L},${B} ${coordinates} ${R},${B}`} fill="#dceafb" opacity=".65" />
 		<polyline points={coordinates} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinejoin="round" />
-		{points.slice(1).map((point, index) => <circle key={index} cx={x(point.elapsed)} cy={y(point.count)} r="4" fill="#2563eb" stroke="#fff" strokeWidth="1.5">
+		{points.slice(1).filter((point, index) => point.count !== points[index].count).map((point, index) => <circle key={index} cx={x(point.elapsed)} cy={y(point.count)} r="4" fill="#2563eb" stroke="#fff" strokeWidth="1.5">
 			<title>{fmtElapsed(point.elapsed)}: {point.count} cumulative events</title>
 		</circle>)}
 		<text x={L} y="18" className="plot-axis-title">Cumulative events</text>
@@ -1553,7 +1552,7 @@ function ResultPlot({
 }) {
 	const W = 900
 	if (chart === 'bar') {
-		const L = 190, R = 835, T = 34, row = 35
+		const L = 170, R = 790, T = 34, row = 30
 		const H = T + segments.length * row + 55
 		const peak = niceCountMax(Math.max(...segments.map((item) => item.count), 1))
 		const x = (value: number) => L + value / peak * (R - L)
@@ -1565,10 +1564,10 @@ function ResultPlot({
 			</g>)}
 			{segments.map((item, index) => <g key={item.label}>
 				<text x={L - 14} y={T + index * row + 18} textAnchor="end" className="plot-tick">{item.label}</text>
-				<rect x={L} y={T + index * row} width={Math.max(1, x(item.count) - L)} height="26" rx="5" fill={item.color}>
+				<rect x={L} y={T + index * row} width={Math.max(1, x(item.count) - L)} height="22" rx="4" fill={item.color}>
 					<title>{item.label}: {item.count}</title>
 				</rect>
-				<text x={x(item.count) + 8} y={T + index * row + 18} className="plot-value">{item.count}</text>
+				<text x={x(item.count) + 8} y={T + index * row + 18} className="plot-value">{item.count} · {(100 * item.count / Math.max(1, events.length)).toFixed(1)}%</text>
 			</g>)}
 		</svg>
 	}
@@ -1595,7 +1594,7 @@ function ResultPlot({
 		)) : bins.map((bin, index) => <g key={index}>
 			<rect x={x(bin.start) + 3} y={y(bin.count)} width={(R - L) / bins.length - 6}
 				height={B - y(bin.count)} rx="5" fill={bin.count === Math.max(...bins.map((item) => item.count)) ? '#2563eb' : '#93b4e5'}>
-				<title>{fmtElapsed(bin.start)}–{fmtElapsed(bin.end)}: {bin.count} events</title>
+				<title>{fmtElapsed(bin.start)}–{fmtElapsed(bin.end)}: {bin.count} events ({(100 * bin.count / Math.max(1, events.length)).toFixed(1)}%)</title>
 			</rect>
 			{bin.count > 0 && <text x={x((bin.start + bin.end) / 2)} y={y(bin.count) - 8} textAnchor="middle" className="plot-value">{bin.count}</text>}
 		</g>)}
@@ -1632,99 +1631,53 @@ function SessionTimeline({ events }: { events: TimelineEvent[] }) {
 	)
 	const maxElapsed = Math.max(1, ...events.map(elapsedOfEvent))
 
-	const W = 900
-	const LEFT = 215
-	const RIGHT = 870
-	const TOP = 34
-	const rowH = 38
+	const W = 930
+	const LEFT = 130
+	const RIGHT = 745
+	const TOP = 55
+	const rowH = 32
 	const BOTTOM = TOP + sessions.length * rowH
-	const H = Math.max(260, BOTTOM + 64)
+	const H = BOTTOM + 55
 	const plotW = RIGHT - LEFT
 	const fractions = [0, 0.25, 0.5, 0.75, 1]
 
 	return (
-		<svg
-			viewBox={`0 0 ${W} ${H}`}
-			role="img"
-			aria-label="timeline chart"
-			className="result-plot timeline-plot"
-		>
-			<text x={LEFT} y="14" fontSize="14" fontWeight="600" fill="#1e293b">
-				Session timelines
-			</text>
+		<svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="timeline chart" className="result-plot timeline-plot">
+			<title>Participant session timelines with event counts and recorded spans</title>
+			<text x={W / 2} y="18" textAnchor="middle" className="plot-axis-title">Session activity and recorded spans</text>
+			<text x="10" y="42" className="plot-tick">Participant</text>
+			<text x="806" y="42" textAnchor="end" className="plot-tick">Events</text>
+			<text x="916" y="42" textAnchor="end" className="plot-tick">Span</text>
+			{fractions.map((fraction) => <line key={fraction}
+				x1={LEFT + fraction * plotW} x2={LEFT + fraction * plotW} y1={TOP} y2={BOTTOM}
+				className="chart-grid-line" />)}
 			{sessions.map((session, row) => {
 				const cy = TOP + row * rowH + rowH / 2
-				return (
-					<g key={session.id}>
-						<rect x="0" y={TOP + row * rowH} width={W} height={rowH} rx="5" fill={row % 2 ? "#fff" : "#f3f7fc"} />
-						<text
-							x={LEFT - 8}
-							y={cy + 3}
-							fontSize="12"
-							textAnchor="end"
-							fill="#475569"
-						>
-							{session.label}
-						</text>
-						<line
-							x1={LEFT}
-							x2={RIGHT}
-							y1={cy}
-							y2={cy}
-							stroke="#eef2f7"
-						/>
-						{session.events.map((event, i) => (
-							<circle
-								key={i}
-								cx={
-									LEFT +
-									(elapsedOfEvent(event) / maxElapsed) * plotW
-								}
-								cy={cy}
-								r="3"
-								fill={
-									TYPE_META[event.type]?.color ?? '#64748b'
-								}
-							>
-								<title>
-									{TYPE_META[event.type]?.label ?? event.type}{' '}
-									· {fmtElapsed(elapsedOfEvent(event))} ·
-									event {event.order ?? event.seq}
-								</title>
-							</circle>
-						))}
-					</g>
-				)
+				const duration = Math.max(0, ...session.events.map(elapsedOfEvent))
+				const participant = session.label.split(' · ')[0]
+				return <g key={session.id}>
+					<text x="10" y={cy + 4} className="plot-tick">
+						{participant.length > 15 ? participant.slice(0, 14) + '…' : participant}
+						<title>{session.label}</title>
+					</text>
+					<line x1={LEFT} x2={RIGHT} y1={cy} y2={cy} stroke="#e8eef5" />
+					<line x1={LEFT} x2={LEFT + duration / maxElapsed * plotW} y1={cy} y2={cy} stroke="#cbd9eb" strokeWidth="3" />
+					{session.events.map((event, index) => <circle key={index}
+						cx={LEFT + elapsedOfEvent(event) / maxElapsed * plotW} cy={cy} r="2.8"
+						fill={TYPE_META[event.type]?.color ?? '#64748b'} fillOpacity=".8">
+						<title>{session.label} · {TYPE_META[event.type]?.label ?? event.type} · {fmtElapsed(elapsedOfEvent(event))} · event {event.order ?? event.seq}</title>
+					</circle>)}
+					<text x="806" y={cy + 4} textAnchor="end" className="plot-value">{session.events.length}</text>
+					<text x="916" y={cy + 4} textAnchor="end" className="plot-value">{fmtElapsed(duration)}</text>
+				</g>
 			})}
-			<line
-				x1={LEFT}
-				x2={RIGHT}
-				y1={TOP - 8}
-				y2={TOP - 8}
-				stroke="#cbd5e1"
-			/>
-			<line x1={LEFT} x2={LEFT} y1={TOP - 8} y2={BOTTOM} stroke="#cbd5e1" />
 			<line x1={LEFT} x2={RIGHT} y1={BOTTOM} y2={BOTTOM} stroke="#cbd5e1" />
-			{fractions.map((fraction) => (
-				<text
-					key={fraction}
-					x={LEFT + fraction * plotW}
-					y={BOTTOM + 16}
-					fontSize="12"
-					textAnchor="middle"
-					fill="#64748b"
-				>
-					{fmtElapsed(fraction * maxElapsed)}
-				</text>
-			))}
-			<text
-				x={(LEFT + RIGHT) / 2}
-				y={BOTTOM + 32}
-				fontSize="12"
-				textAnchor="middle"
-				fill="#64748b"
-			>
-				Elapsed time since each session started
+			{fractions.map((fraction) => <text key={fraction}
+				x={LEFT + fraction * plotW} y={BOTTOM + 20} textAnchor="middle" className="plot-tick">
+				{fmtElapsed(fraction * maxElapsed)}
+			</text>)}
+			<text x={(LEFT + RIGHT) / 2} y={H - 8} textAnchor="middle" className="plot-axis-title">
+				Time from each session's first event
 			</text>
 		</svg>
 	)

@@ -347,7 +347,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 			elapsedMs: start ? event.epochMs - start : 0,
 			order: index + 1,
 			sessionId: s.id,
-			sessionLabel: s.experimentName,
+			sessionLabel: `${s.participantCode || "Participant"} · ${s.id.slice(0, 6)}`,
 		}))
 	})
 	const totalEvents = allEvents.length
@@ -356,8 +356,9 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 		label: TYPE_META[type]?.label ?? type,
 		color: TYPE_META[type]?.color ?? '#64748b',
 		count: allEvents.filter((event) => event.type === type).length,
-	}))
+	})).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
 
+	const interpretation = chartInterpretation(chart, allEvents, segments)
 	const renderChart = (kind: ChartKind) => {
 		if (kind === 'pie') return <Doughnut segments={segments} total={totalEvents} />
 		if (kind === 'line') return <ActivityLine events={allEvents} />
@@ -374,7 +375,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 					<p className="subheading">
 						Captured participant sessions, event-mix and activity
 						charts, and precise single-clock timelines — exportable
-						as Excel.
+						as workbooks, CSV and SVG charts.
 					</p>
 				</div>
 			</div>
@@ -456,7 +457,14 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 					<div className="results-chart-visual">
 						{renderChart(chart)}
 					</div>
-					<div className="results-chart-data">
+					<div className="chart-interpretation" aria-live="polite">
+						<h2>{chartTitles[chart]}</h2>
+						<p>{interpretation.meaning}</p>
+						<ul>{interpretation.facts.map((fact) => <li key={fact}>{fact}</li>)}</ul>
+						<p className="chart-caveat">Counts include system events such as autosave checkpoints. Event frequency describes recorded activity.</p>
+					</div>
+					<details className="results-chart-data">
+						<summary>View event counts and colour key</summary>
 						<table>
 							<caption>
 								Event counts for the selected experiments
@@ -482,7 +490,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 								))}
 							</tbody>
 						</table>
-					</div>
+					</details>
 				</div>
 			)}
 
@@ -773,7 +781,7 @@ function Doughnut({
 							strokeWidth="7"
 							strokeDasharray={`${pct} ${100 - pct}`}
 							strokeDashoffset={offsets[index]}
-						/>
+						><title>{segment.label}: {segment.count} ({Math.round(pct)}%)</title></circle>
 					)
 				})}
 				<text
@@ -798,7 +806,7 @@ function Doughnut({
 					<li key={segment.label}>
 						<i style={{ background: segment.color }}></i>
 						{segment.label}
-						<b>{segment.count}</b>
+						<b>{segment.count} · {(100 * segment.count / Math.max(1, total)).toFixed(1)}%</b>
 					</li>
 				))}
 			</ul>
@@ -806,76 +814,36 @@ function Doughnut({
 	)
 }
 
-/** Dependency-free cumulative-activity line/area chart over wall-clock time. */
-function ActivityLine({ events }: { events: ParticipantEvent[] }) {
-	const sorted = [...events].sort((a, b) => a.epochMs - b.epochMs)
-	const min = sorted[0].epochMs
-	const max = sorted[sorted.length - 1].epochMs
-	const BUCKETS = 24
-	const span = Math.max(1, max - min)
-	const buckets = new Array<number>(BUCKETS).fill(0)
-	sorted.forEach((event) => {
-		const index = Math.min(
-			BUCKETS - 1,
-			Math.floor(((event.epochMs - min) / span) * BUCKETS),
-		)
-		buckets[index] += 1
-	})
-	const cumulative = buckets.map((_, index) =>
-		buckets.slice(0, index + 1).reduce((sum, count) => sum + count, 0),
-	)
-	const peak = Math.max(...cumulative, 1)
-
-	const W = 560
-	const H = 180
-	const PAD = 30
-	const pointX = (i: number) => PAD + (i / (BUCKETS - 1)) * (W - PAD * 2)
-	const pointY = (v: number) => H - PAD - (v / peak) * (H - PAD * 2)
-	const points = cumulative
-		.map((v, i) => `${pointX(i)},${pointY(v)}`)
-		.join(' ')
-	const area = `${PAD},${H - PAD} ${points} ${pointX(BUCKETS - 1)},${H - PAD}`
-	const formatTick = (ms: number) => {
-		const d = new Date(ms)
-		const pad = (n: number) => String(n).padStart(2, '0')
-		return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+/** Cumulative counts aligned to each session's first recorded event. */
+function ActivityLine({ events }: { events: TimelineEvent[] }) {
+	const span = Math.max(1, ...events.map(elapsedOfEvent))
+	const buckets = eventHistogram(events, span, 24)
+	let running = 0
+	const points = [{ elapsed: 0, count: 0 }]
+	for (const bucket of buckets) {
+		running += bucket.count
+		points.push({ elapsed: bucket.end, count: running })
 	}
-
-	return (
-		<svg
-			viewBox={`0 0 ${W} ${H}`}
-			className="chart-line-svg"
-			role="img"
-			aria-label="Activity over time"
-		>
-			{[0.25, 0.5, 0.75, 1].map((fraction) => (
-				<line
-					key={fraction}
-					x1={PAD}
-					x2={W - PAD}
-					y1={pointY(peak * fraction)}
-					y2={pointY(peak * fraction)}
-					className="chart-grid-line"
-				/>
-			))}
-			<polygon points={area} className="chart-area" />
-			<polyline points={points} className="chart-line" />
-			<text x={PAD} y={H - 8} className="line-axis">
-				{formatTick(min)}
-			</text>
-			<text x={W - PAD} y={H - 8} textAnchor="end" className="line-axis">
-				{formatTick(max)}
-			</text>
-			<text
-				x={PAD - 6}
-				y={pointY(peak) + 3}
-				textAnchor="end"
-				className="line-axis"
-			>
-				{peak}
-			</text>
-		</svg>
-	)
+	const W = 900, H = 400, L = 72, R = 870, T = 30, B = 330
+	const yMax = niceCountMax(events.length)
+	const x = (ms: number) => L + ms / span * (R - L)
+	const y = (count: number) => B - count / yMax * (B - T)
+	const coordinates = points.map((point) => `${x(point.elapsed)},${y(point.count)}`).join(' ')
+	return <svg viewBox={`0 0 ${W} ${H}`} className="chart-line-svg" role="img" aria-label="Activity over time">
+		<title>Cumulative event count by session elapsed time</title>
+		{[0, .25, .5, .75, 1].map((fraction) => <g key={fraction}>
+			<line x1={L} x2={R} y1={y(yMax * fraction)} y2={y(yMax * fraction)} className="chart-grid-line" />
+			<text x={L - 12} y={y(yMax * fraction) + 5} textAnchor="end" className="plot-tick">{yMax * fraction}</text>
+			<text x={x(span * fraction)} y={B + 25} textAnchor="middle" className="plot-tick">{fmtElapsed(span * fraction)}</text>
+		</g>)}
+		<polygon points={`${L},${B} ${coordinates} ${R},${B}`} fill="#dceafb" opacity=".65" />
+		<polyline points={coordinates} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinejoin="round" />
+		{points.slice(1).map((point, index) => <circle key={index} cx={x(point.elapsed)} cy={y(point.count)} r="4" fill="#2563eb" stroke="#fff" strokeWidth="1.5">
+			<title>{fmtElapsed(point.elapsed)}: {point.count} cumulative events</title>
+		</circle>)}
+		<text x={L} y="18" className="plot-axis-title">Cumulative events</text>
+		<text x={(L + R) / 2} y={H - 16} textAnchor="middle" className="plot-axis-title">Elapsed time from each session's first event</text>
+	</svg>
 }
 
 function formatClock(epochMs: number): string {
@@ -1492,6 +1460,7 @@ const elapsedOfEvent = (event: TimelineEvent) =>
  *  collide into an unreadable smear; "3h 39m" carries the same information in
  *  a fraction of the width. */
 function fmtElapsed(ms: number): string {
+	if (ms > 0 && ms < 1000) return `${Math.round(ms)}ms`
 	const totalSeconds = Math.round(ms / 1000)
 	if (totalSeconds < 1) return '0s'
 	if (totalSeconds < 60) return `${totalSeconds}s`
@@ -1503,169 +1472,135 @@ function fmtElapsed(ms: number): string {
 	return minutesRest ? `${hours}h ${minutesRest}m` : `${hours}h`
 }
 
+function niceCountMax(count: number) {
+	const step = Math.pow(10, Math.max(0, Math.floor(Math.log10(Math.max(1, count))) - 1))
+	return Math.max(4, Math.ceil(count / (4 * step)) * 4 * step)
+}
+
+function eventHistogram(events: TimelineEvent[], span: number, count = 10) {
+	const bins = Array.from({ length: count }, (_, index) => ({
+		start: index * span / count, end: (index + 1) * span / count, count: 0,
+	}))
+	for (const event of events) {
+		const index = Math.min(count - 1, Math.floor(elapsedOfEvent(event) / span * count))
+		bins[index].count += 1
+	}
+	return bins
+}
+
+function chartInterpretation(
+	chart: ChartKind, events: TimelineEvent[],
+	segments: { label: string; count: number }[],
+) {
+	const total = events.length
+	const span = Math.max(0, ...events.map(elapsedOfEvent))
+	const percent = (count: number) => `${total ? (100 * count / total).toFixed(1) : '0'}%`
+	const top = segments[0]
+	const groups = new Map<string, TimelineEvent[]>()
+	for (const event of events) {
+		const key = event.sessionId ?? 'session'
+		const group = groups.get(key) ?? []
+		group.push(event)
+		groups.set(key, group)
+	}
+	const duration = [...groups.values()].map((items) => Math.max(...items.map(elapsedOfEvent)))
+	const common = `${total} timed events across ${groups.size} sessions with recorded activity.`
+	if (!total) return { meaning: 'Select a study with recorded events to explore its activity.', facts: [] }
+	if (chart === 'bar') return {
+		meaning: 'Each bar shows how often an event type was recorded. Categories are sorted from most to least frequent.',
+		facts: [common, `${top.label} is the largest category with ${top.count} ${top.count === 1 ? 'event' : 'events'} (${percent(top.count)}).`],
+	}
+	if (chart === 'pie') return {
+		meaning: 'Each segment shows an event type’s share of all timed events. Segment colours match the event-count table.',
+		facts: [common, `The three largest categories account for ${percent(segments.slice(0, 3).reduce((sum, item) => sum + item.count, 0))} of events.`],
+	}
+	if (chart === 'line') return {
+		meaning: 'This line accumulates recorded events as elapsed time increases. Sessions share a zero point at their first event. A steep section indicates more events in that interval.',
+		facts: [common, `${events.filter((event) => elapsedOfEvent(event) <= span / 2).length} events occurred within the first half of the longest recorded event span (${fmtElapsed(span / 2)}).`],
+	}
+	if (chart === 'histogram') {
+		const bins = eventHistogram(events, Math.max(1, span))
+		const peak = bins.reduce((best, bin) => bin.count > best.count ? bin : best, bins[0])
+		return {
+			meaning: 'Ten equal time intervals group events by elapsed time from each session’s first event. Bar height is the number of events in an interval, pooled across sessions.',
+			facts: [common, `The earliest peak interval is ${fmtElapsed(peak.start)}–${fmtElapsed(peak.end)} with ${peak.count} events (${percent(peak.count)}).`],
+		}
+	}
+	if (chart === 'scatter') {
+		let gap = 0
+		for (const items of groups.values()) {
+			for (let index = 1; index < items.length; index++)
+				gap = Math.max(gap, elapsedOfEvent(items[index]) - elapsedOfEvent(items[index - 1]))
+		}
+		return {
+			meaning: 'Each dot represents an event. The horizontal axis is session elapsed time, the vertical axis is event order within that session, and colour identifies the event type.',
+			facts: [common, `The longest gap between consecutive recorded events in a session is ${fmtElapsed(gap)}.`],
+		}
+	}
+	return {
+		meaning: 'Each row is a participant session. Dots show event times on a shared elapsed-time axis, making activity clusters and gaps easier to compare.',
+		facts: [common, `Recorded event spans range from ${fmtElapsed(Math.min(...duration))} to ${fmtElapsed(Math.max(...duration))}, including gaps and pauses.`],
+	}
+}
+
 function ResultPlot({
-	chart,
-	events,
-	segments,
+	chart, events, segments,
 }: {
 	chart: string
 	events: TimelineEvent[]
-	segments: { label: string; count: number }[]
+	segments: { label: string; count: number; color: string }[]
 }) {
-	const maxElapsed = Math.max(1, ...events.map(elapsedOfEvent))
-	const maxOrder = Math.max(1, ...events.map((event) => event.order ?? 1))
-
-	const W = 600
-	const H = 280
-	const LEFT = 55
-	const RIGHT = 590
-	const TOP = 22
-	const BOTTOM = 200
-	const plotW = RIGHT - LEFT
-	const plotH = BOTTOM - TOP
-
-	// Histogram bins over the per-session elapsed timeline (0 → last event).
-	const bins = Array.from({ length: 10 }, (_, i) => ({
-		label: fmtElapsed((i * maxElapsed) / 10),
-		count: 0,
-	}))
-	events.forEach((event) => {
-		bins[Math.min(9, Math.floor((elapsedOfEvent(event) / maxElapsed) * 10))]
-			.count++
-	})
-	const data = chart === 'histogram' ? bins : segments
-	const peak = Math.max(1, ...data.map((d) => d.count))
-
-	const title =
-		chart === 'scatter'
-			? 'Event sequence by elapsed time'
-			: chart === 'histogram'
-				? 'Elapsed time to each event'
-				: 'Event count'
-
-	const barX = (i: number) => LEFT + 4 + (i * plotW) / data.length
-	const barWidth = Math.max(2, plotW / data.length - 8)
-	const barTop = (count: number) => BOTTOM - (count / peak) * plotH
-	const fractions = [0.25, 0.5, 0.75, 1]
-	// Rotated 40° with an end anchor so long category names stop colliding
-	// with their neighbours (the root cause of the "garbled" axis text).
-	const tickLabel = (x: number, text: string) => (
-		<text
-			transform={`rotate(-40 ${x} ${BOTTOM + 16})`}
-			x={x}
-			y={BOTTOM + 16}
-			fontSize="9"
-			textAnchor="end"
-			fill="#475569"
-		>
-			{text}
-		</text>
-	)
-
-	return (
-		<svg
-			viewBox={`0 0 ${W} ${H}`}
-			role="img"
-			aria-label={`${chart} chart`}
-			style={{ width: '100%', maxHeight: 320 }}
-		>
-			<text x={LEFT} y="14" fontSize="12" fontWeight="600" fill="#1e293b">
-				{title}
-			</text>
-			{fractions.map((fraction) => (
-				<g key={fraction}>
-					<line
-						x1={LEFT}
-						x2={RIGHT}
-						y1={BOTTOM - fraction * plotH}
-						y2={BOTTOM - fraction * plotH}
-						stroke="#e8eef5"
-					/>
-					<text
-						x={LEFT - 6}
-						y={BOTTOM - fraction * plotH + 3}
-						fontSize="9"
-						textAnchor="end"
-						fill="#64748b"
-					>
-						{chart === 'scatter'
-							? Math.round(maxOrder * fraction)
-							: Math.round(peak * fraction)}
-					</text>
-				</g>
-			))}
-			<line x1={LEFT} x2={RIGHT} y1={BOTTOM} y2={BOTTOM} stroke="#cbd5e1" />
-			<line x1={LEFT} x2={LEFT} y1={TOP} y2={BOTTOM} stroke="#cbd5e1" />
-			{chart === 'scatter' ? (
-				<>
-					{events.map((event, i) => (
-						<circle
-							key={i}
-							cx={LEFT + (elapsedOfEvent(event) / maxElapsed) * plotW}
-							cy={
-								BOTTOM -
-								((event.order ?? 1) / maxOrder) * plotH
-							}
-							r="3"
-							fill="#2563eb"
-						>
-							<title>
-								{event.type} · {fmtElapsed(elapsedOfEvent(event))} ·
-								event {event.order ?? event.seq}
-							</title>
-						</circle>
-					))}
-					{[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
-						<text
-							key={fraction}
-							x={LEFT + fraction * plotW}
-							y={BOTTOM + 16}
-							fontSize="9"
-							textAnchor="middle"
-							fill="#64748b"
-						>
-							{fmtElapsed(fraction * maxElapsed)}
-						</text>
-					))}
-					<text
-						x={(LEFT + RIGHT) / 2}
-						y={BOTTOM + 32}
-						fontSize="9"
-						textAnchor="middle"
-						fill="#64748b"
-					>
-						Elapsed time since each session started
-					</text>
-				</>
-			) : (
-				data.map((d, i) => (
-					<g key={i}>
-						<rect
-							x={barX(i)}
-							y={barTop(d.count)}
-							width={barWidth}
-							height={BOTTOM - barTop(d.count)}
-							fill="#2563eb"
-						>
-							<title>
-								{d.label}: {d.count}
-							</title>
-						</rect>
-						<text
-							x={barX(i) + barWidth / 2}
-							y={barTop(d.count) - 4}
-							fontSize="9"
-							textAnchor="middle"
-							fill="#475569"
-						>
-							{d.count > 0 ? d.count : ''}
-						</text>
-						{tickLabel(barX(i) + barWidth / 2, d.label.slice(0, 12))}
-					</g>
-				))
-			)}
+	const W = 900
+	if (chart === 'bar') {
+		const L = 190, R = 835, T = 34, row = 35
+		const H = Math.max(360, T + segments.length * row + 55)
+		const peak = niceCountMax(Math.max(...segments.map((item) => item.count), 1))
+		const x = (value: number) => L + value / peak * (R - L)
+		return <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="bar chart" className="result-plot">
+			<title>Event counts by category</title>
+			{[0, .25, .5, .75, 1].map((fraction) => <g key={fraction}>
+				<line x1={x(peak * fraction)} x2={x(peak * fraction)} y1={T - 10} y2={H - 42} className="chart-grid-line" />
+				<text x={x(peak * fraction)} y={H - 20} textAnchor="middle" className="plot-tick">{peak * fraction}</text>
+			</g>)}
+			{segments.map((item, index) => <g key={item.label}>
+				<text x={L - 14} y={T + index * row + 18} textAnchor="end" className="plot-tick">{item.label}</text>
+				<rect x={L} y={T + index * row} width={Math.max(1, x(item.count) - L)} height="26" rx="5" fill={item.color}>
+					<title>{item.label}: {item.count}</title>
+				</rect>
+				<text x={x(item.count) + 8} y={T + index * row + 18} className="plot-value">{item.count}</text>
+			</g>)}
 		</svg>
-	)
+	}
+	const H = 400, L = 72, R = 870, T = 30, B = 330
+	const span = Math.max(1, ...events.map(elapsedOfEvent))
+	const bins = eventHistogram(events, span)
+	const yMax = niceCountMax(chart === 'scatter'
+		? Math.max(...events.map((event) => event.order ?? 1))
+		: Math.max(...bins.map((bin) => bin.count)))
+	const x = (ms: number) => L + ms / span * (R - L)
+	const y = (count: number) => B - count / yMax * (B - T)
+	return <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart} chart`} className="result-plot">
+		<title>{chart === 'scatter' ? 'Event order by elapsed time' : 'Event frequency by elapsed time'}</title>
+		{[0, .25, .5, .75, 1].map((fraction) => <g key={fraction}>
+			<line x1={L} x2={R} y1={y(yMax * fraction)} y2={y(yMax * fraction)} className="chart-grid-line" />
+			<text x={L - 12} y={y(yMax * fraction) + 5} textAnchor="end" className="plot-tick">{yMax * fraction}</text>
+			<text x={x(span * fraction)} y={B + 25} textAnchor="middle" className="plot-tick">{fmtElapsed(span * fraction)}</text>
+		</g>)}
+		{chart === 'scatter' ? events.map((event, index) => (
+			<circle key={index} cx={x(elapsedOfEvent(event))} cy={y(event.order ?? 1)} r="4.5"
+				fill={TYPE_META[event.type]?.color ?? '#64748b'} fillOpacity=".7" stroke="#fff" strokeWidth=".7">
+				<title>{event.sessionLabel} · {event.type} · {fmtElapsed(elapsedOfEvent(event))} · event {event.order}</title>
+			</circle>
+		)) : bins.map((bin, index) => <g key={index}>
+			<rect x={x(bin.start) + 3} y={y(bin.count)} width={(R - L) / bins.length - 6}
+				height={B - y(bin.count)} rx="5" fill={bin.count === Math.max(...bins.map((item) => item.count)) ? '#2563eb' : '#93b4e5'}>
+				<title>{fmtElapsed(bin.start)}–{fmtElapsed(bin.end)}: {bin.count} events</title>
+			</rect>
+			{bin.count > 0 && <text x={x((bin.start + bin.end) / 2)} y={y(bin.count) - 8} textAnchor="middle" className="plot-value">{bin.count}</text>}
+		</g>)}
+		<text x={L} y="18" className="plot-axis-title">{chart === 'scatter' ? 'Event order within session' : 'Events per interval'}</text>
+		<text x={(L + R) / 2} y={H - 16} textAnchor="middle" className="plot-axis-title">Elapsed time from each session's first event</text>
+	</svg>
 }
 
 /**
@@ -1696,13 +1631,13 @@ function SessionTimeline({ events }: { events: TimelineEvent[] }) {
 	)
 	const maxElapsed = Math.max(1, ...events.map(elapsedOfEvent))
 
-	const W = 600
-	const LEFT = 124
-	const RIGHT = 590
+	const W = 900
+	const LEFT = 215
+	const RIGHT = 870
 	const TOP = 34
-	const rowH = Math.max(14, Math.min(26, 220 / Math.max(1, sessions.length)))
+	const rowH = 38
 	const BOTTOM = TOP + sessions.length * rowH
-	const H = BOTTOM + 44
+	const H = Math.max(260, BOTTOM + 64)
 	const plotW = RIGHT - LEFT
 	const fractions = [0, 0.25, 0.5, 0.75, 1]
 
@@ -1711,26 +1646,24 @@ function SessionTimeline({ events }: { events: TimelineEvent[] }) {
 			viewBox={`0 0 ${W} ${H}`}
 			role="img"
 			aria-label="timeline chart"
-			style={{ width: '100%', maxHeight: 320 }}
+			className="result-plot timeline-plot"
 		>
-			<text x={LEFT} y="14" fontSize="12" fontWeight="600" fill="#1e293b">
+			<text x={LEFT} y="14" fontSize="14" fontWeight="600" fill="#1e293b">
 				Session timelines
 			</text>
 			{sessions.map((session, row) => {
 				const cy = TOP + row * rowH + rowH / 2
 				return (
 					<g key={session.id}>
+						<rect x="0" y={TOP + row * rowH} width={W} height={rowH} rx="5" fill={row % 2 ? "#fff" : "#f3f7fc"} />
 						<text
 							x={LEFT - 8}
 							y={cy + 3}
-							fontSize="9"
+							fontSize="12"
 							textAnchor="end"
 							fill="#475569"
 						>
-							{`${session.label} · ${session.id.slice(0, 6)}`.slice(
-								0,
-								24,
-							)}
+							{session.label}
 						</text>
 						<line
 							x1={LEFT}
@@ -1776,7 +1709,7 @@ function SessionTimeline({ events }: { events: TimelineEvent[] }) {
 					key={fraction}
 					x={LEFT + fraction * plotW}
 					y={BOTTOM + 16}
-					fontSize="9"
+					fontSize="12"
 					textAnchor="middle"
 					fill="#64748b"
 				>
@@ -1786,7 +1719,7 @@ function SessionTimeline({ events }: { events: TimelineEvent[] }) {
 			<text
 				x={(LEFT + RIGHT) / 2}
 				y={BOTTOM + 32}
-				fontSize="9"
+				fontSize="12"
 				textAnchor="middle"
 				fill="#64748b"
 			>

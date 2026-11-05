@@ -1460,6 +1460,8 @@ describe('researcher results', () => {
 			/>,
 		)
 		await screen.findByRole('img', { name: 'bar chart' })
+		expect(screen.getByText(/is the largest category with 1 event/)).toBeDefined()
+		expect(screen.getByText(/Counts include system events/)).toBeDefined()
 		for (const [value, label] of [
 			['line', 'Activity over time'],
 			['pie', 'Event mix'],
@@ -1471,6 +1473,8 @@ describe('researcher results', () => {
 				target: { value },
 			})
 			expect(screen.getByRole('img', { name: label })).toBeDefined()
+			expect(document.querySelector('.chart-interpretation h2')?.textContent).toBeTruthy()
+			expect(document.querySelectorAll('.chart-interpretation li')).toHaveLength(2)
 		}
 		fireEvent.change(screen.getByLabelText('Results experiment'), {
 			target: { value: 'E1' },

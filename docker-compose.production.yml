@@ -1,0 +1,91 @@
+# Standalone production definition; do not merge with docker-compose.yml.
+name: beyond-production
+
+x-logging: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: "${SITE_ADDRESS:?Set SITE_ADDRESS to the public DNS name}"
+    ports:
+      - "${PUBLIC_BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80"
+      - "${PUBLIC_BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    logging: *bounded-logs
+
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *bounded-logs
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - "${BEYOND_ENV_FILE:-.env.production}"
+    environment:
+      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-beyond}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-beyond}}"
+      JWT_SECRET: "${JWT_SECRET:?Set a strong independent JWT_SECRET}"
+      CORS_ORIGINS: "${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN to the HTTPS website origin}"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - backend_storage:/app/storage
+      - backend_logs:/app/logs
+    logging: *bounded-logs
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-beyond}"
+      POSTGRES_USER: "${POSTGRES_USER:-beyond}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}"
+    healthcheck:
+      test: ["CMD-SHELL", 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atqc "SELECT 1" >/dev/null']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    logging: *bounded-logs
+
+volumes:
+  postgres_data:
+    name: "${POSTGRES_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_postgres_data}"
+  backend_storage:
+    name: "${BACKEND_STORAGE_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_backend_storage}"
+  backend_logs:
+    name: "${BACKEND_LOGS_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_backend_logs}"
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,12 @@
+# Optional override, used AFTER docker-compose.production.yml.
+# RESEARCH_STORAGE_PATH must be an existing directory on the Docker host.
+services:
+  backend:
+    environment:
+      STORAGE_LOCATIONS: '{"research":"/data/research"}'
+    volumes:
+      - type: bind
+        source: "${RESEARCH_STORAGE_PATH:?Set an existing absolute host directory}"
+        target: /data/research
+        bind:
+          create_host_path: false

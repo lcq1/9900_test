@@ -47,6 +47,11 @@ def legacy_schema_baseline(connection: Connection) -> str | None:
         for column in expected.columns:
             if (name, column.name) in {
                 ("experiments", "owner_id"),
+                ("experiments", "storage_notice"),
+                ("researchers", "account_status"),
+                ("researchers", "auth_version"),
+                ("platform_settings", "require_researcher_approval"),
+                ("platform_settings", "default_storage_location"),
                 ("researchers", "storage_location"),
                 ("participant_sessions", "active_client_id"),
                 ("participant_sessions", "lease_expires_at"),

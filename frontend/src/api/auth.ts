@@ -10,6 +10,7 @@ export interface Researcher {
 	name: string
 	email: string
 	role: ResearcherRole
+	accountStatus?: 'active' | 'pending' | 'disabled'
 	createdAt: string
 }
 

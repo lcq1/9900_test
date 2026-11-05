@@ -14,6 +14,7 @@ class Researcher(CamelORMModel):
     name: str
     email: str
     role: Literal["researcher", "administrator"] = "researcher"
+    account_status: Literal["active", "pending", "disabled"] = "active"
     created_at: datetime
 
 
@@ -59,6 +60,7 @@ class Stage(CamelModel):
     signing_method: Literal["handwritten", "name"] = "handwritten"
     consent_clauses: list[str] = []
     allow_extension: bool = False
+    timer_expiry: Literal["manual", "advance"] = "manual"
     extension_minutes: int = Field(default=30, ge=1, le=1440)
     sequential_questions: bool = False
 
@@ -69,6 +71,7 @@ class ExperimentCreate(CamelModel):
     code: Optional[str] = None
     status: str = "Draft"
     full_screen: bool = False
+    storage_notice: str = Field(default="", max_length=8000)
     stages: list[Stage] = []
 
 
@@ -79,6 +82,7 @@ class ExperimentUpdate(CamelModel):
     code: Optional[str] = None
     status: Optional[str] = None
     full_screen: Optional[bool] = None
+    storage_notice: str = Field(default="", max_length=8000)
     stages: Optional[list[Stage]] = None
 
 
@@ -89,6 +93,7 @@ class Experiment(CamelORMModel):
     status: str
     created: str
     full_screen: bool
+    storage_notice: str = ""
     stages: list[Stage] = []
 
 

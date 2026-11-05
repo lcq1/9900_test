@@ -14,8 +14,13 @@ from app.researcher.models import Experiment, Researcher
 
 
 def register_researcher(
-    db: Session, *, name: str, email: str, password: Optional[str]
+    db: Session, *, name: str, email: str, password: Optional[str], administrator: bool = False
 ) -> Researcher:
+    from app.administrator.service import get_settings
+
+    policy = get_settings(db)
+    if not administrator and not policy.allow_self_registration:
+        raise HTTPException(status_code=403, detail="Self-registration is disabled. Contact an administrator.")
     email = require_allowed_email(email)
     if repo.get_researcher_by_email(db, email):
         raise HTTPException(
@@ -24,7 +29,8 @@ def register_researcher(
         )
     password_hash = hash_password(password) if password else ""
     return repo.create_researcher(
-        db, name=name, email=email, password_hash=password_hash
+        db, name=name, email=email, password_hash=password_hash,
+        account_status="pending" if policy.require_researcher_approval and not administrator else "active",
     )
 
 
@@ -35,6 +41,8 @@ def authenticate(db: Session, email: str, password: str) -> Optional[Researcher]
         return None
     if not verify_password(password, researcher.password_hash):
         return None
+    if researcher.account_status != "active":
+        raise HTTPException(status_code=403, detail="This account requires administrator approval or has been disabled.")
     return researcher
 
 
@@ -57,11 +65,12 @@ def create_experiment(
     code: Optional[str] = None,
     status: str = "Draft",
     full_screen: bool = False,
+    storage_notice: str = "",
     stages: Optional[list[Any]] = None,
     id: Optional[str] = None,
 ) -> Experiment:
     if status == "Live":
-        validate_publication(stages or [])
+        validate_publication(stages or [], consent_required(db))
     from secrets import token_hex
 
     code = "EXP-" + token_hex(4).upper()
@@ -77,6 +86,7 @@ def create_experiment(
         code=code,
         status=status,
         full_screen=full_screen,
+        storage_notice=storage_notice,
         stages=stages,
         id=id,
     )
@@ -100,7 +110,7 @@ def update_experiment(db: Session, experiment_id: str, **fields: Any) -> Experim
     if fields.get("status") == "Live" and current.status != "Live" and not fields.get("publish"):
         raise HTTPException(status_code=422, detail="Use Publish to open this experiment for participation")
     if fields.get("publish"):
-        validate_publication(fields.get("stages", current.stages))
+        validate_publication(fields.get("stages", current.stages), consent_required(db))
     if fields.get("publish"):
         fields["status"] = "Live"
     experiment = repo.update_experiment(db, experiment_id, **fields)
@@ -114,9 +124,29 @@ def delete_experiment(db: Session, experiment_id: str) -> None:
         raise HTTPException(status_code=404, detail="Experiment not found")
 
 
-def validate_publication(stages: list[dict]) -> None:
-    if not 2 <= len(stages) <= 20 or stages[0].get("type", "").lower() != "consent":
-        raise HTTPException(status_code=422, detail="Publish requires a consent stage followed by at least one study stage")
+def consent_required(db: Session) -> bool:
+    from app.administrator.models import PlatformSettings
+
+    policy = db.get(PlatformSettings, 1)
+    return policy is None or policy.require_consent_signature
+
+
+def validate_publication(stages: list[dict], require_signature: bool = True) -> None:
+    if not 1 <= len(stages) <= 20:
+        raise HTTPException(status_code=422, detail="Publish requires 1–20 stages.")
+    consent = [index for index, stage in enumerate(stages) if stage.get("type", "").lower() == "consent"]
+    if len(consent) > 1:
+        raise HTTPException(status_code=422, detail="Use at most one consent stage.")
+    before_consent = stages[:consent[0]] if consent else stages
+    for stage in before_consent:
+        features = stage.get("features", {})
+        capture_enabled = stage.get("recordingRequired") or any(
+            features.get(key) for key in ("ai", "screenRecording", "selfie", "copyPaste")
+        )
+        collects_answers = any(component.get("type") not in ("text", "button")
+                               for component in stage.get("components", []))
+        if capture_enabled or (collects_answers and (consent or require_signature)):
+            raise HTTPException(status_code=422, detail="Put the consent stage before questions and recording.")
     ids = [stage.get("id") for stage in stages]
     if len(set(ids)) != len(ids) or not all(ids):
         raise HTTPException(status_code=422, detail="Stage identifiers must be unique")

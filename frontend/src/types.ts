@@ -41,6 +41,7 @@ export type Stage = {
 	consentClauses?: string[]
 	allowExtension?: boolean
 	extensionMinutes?: number
+	timerExpiry?: 'manual' | 'advance'
 	sequentialQuestions?: boolean
 	materials?: { id: string; name: string; reference: string }[]
 }
@@ -52,6 +53,7 @@ export type Experiment = {
 	status: 'Draft' | 'Live' | 'Closed'
 	created: string
 	fullScreen: boolean
+	storageNotice?: string
 	stages: Stage[]
 }
 
@@ -113,9 +115,9 @@ export function createStage(type: string = "single_choice"): Stage {
 		recordingMode: type === 'video_oral_answer' ? 'auto' : 'manual',
 		features: {
 			ai: false,
-			timer: !consent,
+			timer: !consent && type !== 'instruction',
 			clock: true,
-			screenRecording: !consent,
+			screenRecording: !consent && type !== 'instruction',
 			selfie: type === "video_oral_answer",
 			copyPaste: false,
 			navigation: false,
@@ -132,15 +134,18 @@ export function getPublishErrors(experiment: Experiment): string[] {
 	if (experiment.status === "Closed")
 		errors.push("Closed experiments cannot be published again.");
 	if (!experiment.name.trim()) errors.push("Enter an experiment name.");
-	if (experiment.stages.length < 2 || experiment.stages.length > 20)
-		errors.push(
-			"Include a consent stage and at least one question stage (2–20 stages in total).",
-		);
-	if (
-		experiment.stages[0]?.type !== "consent" ||
-		experiment.stages.slice(1).some((s) => s.type === "consent")
-	)
-		errors.push("The first stage must be the only consent stage.");
+	if (experiment.stages.length < 1 || experiment.stages.length > 20)
+		errors.push("Include 1–20 stages.");
+	const consentIndex = experiment.stages.findIndex((stage) => stage.type === 'consent');
+	if (experiment.stages.slice(consentIndex + 1).some((stage) => stage.type === 'consent'))
+		errors.push("Use at most one consent stage.");
+	const beforeConsent = consentIndex < 0 ? experiment.stages : experiment.stages.slice(0, consentIndex);
+	if (beforeConsent.some((stage) =>
+		stage.recordingRequired || stage.features.ai || stage.features.screenRecording ||
+		stage.features.selfie || stage.features.copyPaste ||
+		(consentIndex >= 0 && stage.components.some((component) => !['text', 'button'].includes(component.type))),
+	))
+		errors.push("Place consent before questions and capture features.");
 
 	experiment.stages.forEach((stage, index) => {
 		const prefix = `Stage ${index + 1}`;
@@ -426,7 +431,7 @@ export function createClientStages(consent: Stage): Stage[] {
  // One fully editable text block per stage keeps the researcher editor complete (the consent
  // text and question stem fields bind to it); line breaks and bullets render participant-side
  // through the pre-wrap text style, so nothing is trimmed away or hidden in extra components.
- const welcome = { ...consent, name: 'Read and sign the consent form', signingMethod: 'handwritten' as const, features: { ...consent.features, navigation: false }, components: [component({ type: 'text', label: clientContent.consentText }), ...consent.components.filter(c => c.type !== 'text')] }
+ const welcome = { ...consent, name: 'Read and sign the consent form', signingMethod: consent.signingMethod ?? 'handwritten', features: { ...consent.features, navigation: false }, components: [component({ type: 'text', label: clientContent.consentText }), ...consent.components.filter(c => c.type !== 'text')] }
  const design = make('Design task', 'short_answer', [{ type: 'text', label: clientContent.design }, { type: 'textbox', label: 'Your design', required: true }])
  design.countdownMinutes = 60; design.allowExtension = true; design.features = { ...design.features, timer: true, ai: true, screenRecording: true, copyPaste: true, confirm: true, pauseAbort: true }
  const oral = make('Recorded explanation', 'video_oral_answer', clientContent.oral.map(label => ({ type: 'text', label })))

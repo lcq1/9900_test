@@ -66,21 +66,45 @@ export function StageFeatureEditor({
 					</span>
 				</div>
 				{stage.features.timer && (
-					<div className="stage-extension-settings">
-						<label>
+					<>
+						<label className="feature-row feature-option">
 							<input type="checkbox" checked={stage.allowExtension ?? false}
 								onChange={(event) => onUpdateStage((current) => ({ ...current, allowExtension: event.target.checked }))} />
-							Allow one extension
+							<span className="feature-label">Allow one extension</span>
 						</label>
-						{stage.allowExtension && <label>
-							Extra minutes
+						{stage.allowExtension && <label className="feature-row feature-option feature-option-detail">
+							<span className="feature-label">Extra minutes</span>
 							<input className="minutes-input" type="number" min={1} max={1440} step={1}
 								value={stage.extensionMinutes ?? 30}
 								onChange={(event) => onUpdateStage((current) => ({ ...current, extensionMinutes: Number(event.target.value) }))} />
 						</label>}
-					</div>
+					</>
 				)}
-{stage.type === 'video_oral_answer' && <label><input type="checkbox" checked={stage.sequentialQuestions ?? false} onChange={event => onUpdateStage(current => ({ ...current, sequentialQuestions: event.target.checked, recordingMode: 'manual', countdownMinutes: 10, features: { ...current.features, ai: false, timer: true } }))} /> Show questions one at a time (shared 10 minutes)</label>}
+				{stage.features.timer && <label className="feature-row feature-option feature-option-detail">
+					<span className="feature-label">When time expires</span>
+					<select value={stage.timerExpiry ?? 'manual'} onChange={(event) => {
+						const timerExpiry = event.target.value === 'advance' ? 'advance' : 'manual'
+						onUpdateStage((current) => ({ ...current, timerExpiry }))
+					}}>
+						<option value="manual">Ask to continue</option>
+						<option value="advance">Advance if ready</option>
+					</select>
+				</label>}
+
+				{stage.type === 'video_oral_answer' && (
+					<label className="feature-row feature-option">
+						<input type="checkbox" checked={stage.sequentialQuestions ?? false}
+							onChange={(event) => onUpdateStage((current) => ({
+								...current, sequentialQuestions: event.target.checked,
+								recordingMode: 'manual', countdownMinutes: 10,
+								features: { ...current.features, ai: false, timer: true },
+							}))} />
+						<span className="feature-label">
+							Show questions one at a time
+							<small>Shared 10-minute countdown</small>
+						</span>
+					</label>
+				)}
 				<div className="feature-row">
 					<span className="feature-label">Questionnaire required</span>
 					<button

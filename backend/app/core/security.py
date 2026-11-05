@@ -42,19 +42,20 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, auth_version: int = 0) -> str:
     """Create a signed JWT for ``subject`` (the researcher id)."""
     now = clock.now()
     expire = now + timedelta(minutes=settings.jwt_expire_minutes)
     payload: dict[str, Any] = {
         "sub": subject,
+        "ver": auth_version,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> str | None:
+def _access_claims(token: str) -> dict | None:
     """Decode a JWT and return the ``sub`` claim, or ``None`` if invalid."""
     try:
         payload = jwt.decode(
@@ -62,7 +63,11 @@ def decode_access_token(token: str) -> str | None:
         )
     except jwt.PyJWTError:
         return None
-    return payload.get("sub")
+    return payload
+
+
+def decode_access_token(token: str) -> str | None:
+    return (_access_claims(token) or {}).get("sub")
 
 
 def get_current_researcher(
@@ -70,11 +75,12 @@ def get_current_researcher(
     db: Session = Depends(get_db),
 ) -> Researcher:
     """FastAPI dependency returning the authenticated researcher or 401."""
-    subject = decode_access_token(token)
+    claims = _access_claims(token) or {}
+    subject = claims.get("sub")
     if subject is None:
         raise CREDENTIALS_EXC
     researcher = db.get(Researcher, subject)
-    if researcher is None:
+    if researcher is None or researcher.account_status != "active" or claims.get("ver", 0) != researcher.auth_version:
         raise CREDENTIALS_EXC
     from app.core.config import require_allowed_email
     require_allowed_email(researcher.email)

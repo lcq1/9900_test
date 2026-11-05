@@ -41,7 +41,7 @@ def test_database_uses_postgresql_and_real_migrations(client):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "7c7c7c7c7c7c"
+            == "8d8d8d8d8d8d"
         )
         inspector = inspect(connection)
         columns = {
@@ -155,6 +155,9 @@ def test_upgrade_from_original_head_preserves_existing_experiments(
     study_id = response.json()["id"]
     # Simulate the original 0003 schema in this test's isolated PostgreSQL schema.
     with database.engine.begin() as connection:
+        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        config.attributes["connection"] = connection
+        command.downgrade(config, "7c7c7c7c7c7c")
         connection.exec_driver_sql("DROP TABLE ai_chat_turns, ai_conversations")
         connection.exec_driver_sql("ALTER TABLE researchers DROP COLUMN storage_location")
         connection.exec_driver_sql("ALTER TABLE experiments DROP COLUMN owner_id")
@@ -170,8 +173,6 @@ def test_upgrade_from_original_head_preserves_existing_experiments(
         connection.exec_driver_sql(
             "UPDATE alembic_version SET version_num = '3c3c3c3c3c3c'"
         )
-        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-        config.attributes["connection"] = connection
         command.upgrade(config, "head")
         row = connection.exec_driver_sql(
             "SELECT id, name, owner_id FROM experiments"
@@ -181,7 +182,7 @@ def test_upgrade_from_original_head_preserves_existing_experiments(
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "7c7c7c7c7c7c"
+            == "8d8d8d8d8d8d"
         )
 
 
@@ -197,6 +198,9 @@ def test_upgrade_adopts_unversioned_create_all_database(client, auth_headers):
         json={"name": "Pre-Alembic study", "stages": []},
     ).json()
     with database.engine.begin() as connection:
+        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        config.attributes["connection"] = connection
+        command.downgrade(config, "7c7c7c7c7c7c")
         connection.exec_driver_sql("DROP TABLE ai_chat_turns, ai_conversations")
         connection.exec_driver_sql("ALTER TABLE researchers DROP COLUMN storage_location")
         connection.exec_driver_sql("ALTER TABLE experiments DROP COLUMN owner_id")
@@ -210,8 +214,6 @@ def test_upgrade_adopts_unversioned_create_all_database(client, auth_headers):
             "DROP COLUMN lease_expires_at"
         )
         connection.exec_driver_sql("DROP TABLE alembic_version")
-        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-        config.attributes["connection"] = connection
         command.upgrade(config, "head")
         assert connection.exec_driver_sql("SELECT id, name FROM experiments").one() == (
             study["id"],
@@ -221,7 +223,7 @@ def test_upgrade_adopts_unversioned_create_all_database(client, auth_headers):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "7c7c7c7c7c7c"
+            == "8d8d8d8d8d8d"
         )
         command.upgrade(config, "head")
         assert (

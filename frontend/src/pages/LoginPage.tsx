@@ -68,6 +68,10 @@ export function AuthScreen({
 				return
 			}
 			const session = await auth.signIn(email, password)
+			if (role === 'administrator' && session.researcher.role !== 'administrator') {
+				setError('Use an administrator account to sign in here.')
+				return
+			}
 			setSession(session)
 			onSignIn()
 		} catch (err) {
@@ -149,9 +153,8 @@ export function AuthScreen({
 								? 'auth-tab active'
 								: 'auth-tab'
 						}
-						disabled
-						title="Administrator sign-in is temporarily unavailable"
-						onClick={() => setRole('administrator')}
+						aria-pressed={role === 'administrator'}
+						onClick={() => { setMode('signin'); setError(''); setRole('administrator') }}
 					>
 						<ShieldCheck size={14} /> Administrator
 					</button>

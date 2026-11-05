@@ -365,6 +365,12 @@ export function ParticipantAccessPage({
 								? 'Your responses have been saved. Thank you for your time and participation.'
 								: 'Thank you for taking part. When you are ready, select Start experiment and follow the instructions for each stage.'}
 						</p>
+						{phase === 'welcome' && active.experiment.storageNotice && (
+							<div className="study-storage-notice">
+								<h3>How your study data is stored</h3>
+								<p>{active.experiment.storageNotice}</p>
+							</div>
+						)}
 						{phase === 'welcome' && (
 							<p className="entry-copy">
 								Participant code: {active.participant}

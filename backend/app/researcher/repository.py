@@ -35,7 +35,7 @@ def experiment_history(db, experiment):
 
 def snapshot(experiment):
     return deepcopy({key: getattr(experiment, key) for key in
-                     ("id", "name", "code", "status", "created", "full_screen", "stages", "owner_id")})
+                     ("id", "name", "code", "status", "created", "full_screen", "stages", "owner_id", "storage_notice")})
 
 
 def audit(db, experiment, kind, detail):
@@ -89,9 +89,10 @@ def create_researcher(
     email: str,
     password_hash: str,
     role: str = "researcher",
+    account_status: str = "active",
 ) -> Researcher:
     researcher = Researcher(
-        name=name, email=email, password_hash=password_hash, role=role
+        name=name, email=email, password_hash=password_hash, role=role, account_status=account_status
     )
     db.add(researcher)
     db.commit()
@@ -108,10 +109,15 @@ def list_researchers(db: Session) -> list[Researcher]:
 
 
 def promote_researcher(db: Session, researcher_id: str) -> Optional[Researcher]:
-    researcher = db.get(Researcher, researcher_id)
+    researcher = db.query(Researcher).filter_by(id=researcher_id).with_for_update().first()
     if researcher is None:
         return None
-    researcher.role = "administrator"
+    if researcher.account_status != "active":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=409, detail="Approve this account before promotion.")
+    if researcher.role != "administrator":
+        researcher.role = "administrator"
+        researcher.auth_version += 1
     db.commit()
     db.refresh(researcher)
     return researcher
@@ -125,6 +131,7 @@ def create_experiment(
     code: str,
     status: str = "Draft",
     full_screen: bool = False,
+    storage_notice: str = "",
     stages: Optional[list[Any]] = None,
     id: Optional[str] = None,
 ) -> Experiment:
@@ -135,6 +142,7 @@ def create_experiment(
         code=code,
         status=status,
         full_screen=full_screen,
+        storage_notice=storage_notice,
         stages=stages or [],
     )
     db.add(experiment)
@@ -183,7 +191,7 @@ def update_experiment(
     for key, value in fields.items():
         if value is not None:
             setattr(experiment, key, value)
-    content_changed = any(getattr(experiment, key) != before[key] for key in ("name", "stages", "full_screen"))
+    content_changed = any(getattr(experiment, key) != before[key] for key in ("name", "stages", "full_screen", "storage_notice"))
     if not publish and before["status"] == "Live" and content_changed and experiment.status != "Closed":
         experiment.status = "Draft"
     after = snapshot(experiment)
@@ -192,7 +200,7 @@ def update_experiment(
         latest = versions[-1] if versions else None
         # Only published content creates versions; draft/status changes do not.
         new_version = latest is None or any(
-            after[key] != latest.detail["snapshot"][key] for key in ("name", "stages", "full_screen")
+            after[key] != latest.detail["snapshot"].get(key, "" if key == "storage_notice" else None) for key in ("name", "stages", "full_screen", "storage_notice")
         )
         if new_version:
             audit(db, experiment, "server.published", {"version": max((e.detail["version"] for e in versions), default=0) + 1,

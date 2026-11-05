@@ -24,6 +24,8 @@ from app.participant.schemas import (
 from app.researcher.models import Experiment as ExperimentModel, Researcher
 from app.researcher import repository as versions
 from app.researcher.schemas import Experiment
+from app.researcher.access_codes import check_code
+from app.administrator.service import default_storage_location
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -60,6 +62,7 @@ async def get_study_actor(x_participant_token: str | None = Header(default=None)
         experiment = db.get(ExperimentModel, claims["experiment"])
         if experiment is None or experiment.status != "Live":
             raise HTTPException(status_code=403, detail="Experiment is not open for participation")
+        check_code(db, experiment, claims["participant"])
         return ParticipantAccess(experiment.owner_id, experiment.id, experiment.code, claims["participant"])
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Participant access required")
@@ -113,6 +116,9 @@ def participant_access(payload: ParticipantLogin, db: Session = Depends(get_db))
     if experiment.status != "Live":
         raise HTTPException(status_code=403, detail="Experiment is not open for participation")
     experiment = db.query(ExperimentModel).filter_by(id=experiment.id).populate_existing().with_for_update().one()
+    if experiment.status != "Live":
+        raise HTTPException(status_code=403, detail="Experiment is not open for participation")
+    check_code(db, experiment, participant)
     published = versions.ensure_baseline(db, experiment)
     from types import SimpleNamespace
     visible = SimpleNamespace(**published[-1].detail["snapshot"])
@@ -135,8 +141,11 @@ def start_session(payload: SessionStart, db: Session = Depends(get_db),
     check_session_owner(db, payload.experiment_code, actor)
     experiment = repo.find_experiment_by_code(db, payload.experiment_code)
     experiment = db.query(ExperimentModel).filter_by(id=experiment.id).populate_existing().with_for_update().one()
-    if isinstance(actor, ParticipantAccess) and experiment.status != "Live":
-        raise HTTPException(status_code=403, detail="Experiment is not open for participation")
+    issued = None
+    if isinstance(actor, ParticipantAccess):
+        if experiment.status != "Live":
+            raise HTTPException(status_code=403, detail="Experiment is not open for participation")
+        issued = check_code(db, experiment, payload.participant_code)
     session = db.get(ParticipantSession, str(payload.session_id))
     if session is None:
         session = db.query(ParticipantSession).filter_by(experiment_code=experiment.code,
@@ -155,6 +164,10 @@ def start_session(payload: SessionStart, db: Session = Depends(get_db),
             session.active_client_id = payload.client_id
             session.lease_expires_at = svc.lease_expiry()
     else:
+        if issued and db.query(ParticipantSession).filter_by(
+            experiment_code=experiment.code, participant_code=payload.participant_code,
+        ).first():
+            raise HTTPException(status_code=409, detail="This participant code has already completed the study.")
         session = ParticipantSession(id=str(payload.session_id), experiment_code=experiment.code,
             participant_code=payload.participant_code, started_at=now_iso(),
             active_client_id=payload.client_id,
@@ -486,7 +499,7 @@ async def upload_recording(
     existing = db.query(Recording).filter_by(session_id=session.id, filename=filename).first()
     owner = db.get(Researcher, experiment.owner_id)
     try:
-        path = existing.path if existing else logical_reference(owner.storage_location if owner else None, f"recordings/{session.id}/{filename}")
+        path = existing.path if existing else logical_reference((owner.storage_location if owner else None) or default_storage_location(db), f"recordings/{session.id}/{filename}")
     except ValueError:
         raise HTTPException(status_code=503, detail="Storage location is not configured")
     try:

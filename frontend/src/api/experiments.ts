@@ -11,6 +11,7 @@ export type ExperimentInput = {
 	name: string
 	stages: Experiment['stages']
 	fullScreen?: boolean
+	storageNotice?: string
 }
 
 // Experiment endpoint.
@@ -114,3 +115,11 @@ export const getStorageSettings = () =>
 	http.get<StorageSettings>('/workspace/storage')
 export const saveStorageSettings = (location: string) =>
 	http.patch<StorageSettings>('/workspace/storage', { location })
+
+
+export type ParticipantCode = { code: string; revoked: boolean }
+const participantCodesPath = (id: string) => PATH + '/' + encodeURIComponent(id) + '/participant-codes'
+export const listParticipantCodes = (id: string) => http.get<ParticipantCode[]>(participantCodesPath(id))
+export const issueParticipantCode = (id: string) => http.post<ParticipantCode>(participantCodesPath(id))
+export const revokeParticipantCode = (id: string, code: string) =>
+	http.del<void>(participantCodesPath(id) + '/' + encodeURIComponent(code))

@@ -67,13 +67,12 @@ export function StageBuilder({
 								// Read the drag source and reorder valid indices.
 								event.preventDefault()
 								setDragOverId(null)
-								const from = Number(
-									event.dataTransfer.getData('text/plain'),
-								)
+								const source = event.dataTransfer.getData('text/plain')
+								if (!source.trim()) return
+								const from = Number(source)
 								if (!Number.isInteger(from)) return
 								if (
-									from <= 0 ||
-									index === 0 ||
+									from < 0 ||
 									from >= stages.length
 								)
 									return
@@ -90,11 +89,11 @@ export function StageBuilder({
 							<span
 								className="grip"
 								role="button"
-								tabIndex={index > 0 ? 0 : -1}
+								tabIndex={stages.length > 1 ? 0 : -1}
 								aria-label={`Reorder ${item.name}`}
 								title="Drag to reorder; use Alt + arrow keys with the keyboard"
 								onKeyDown={(event) => {
-									if (!event.altKey || index === 0) return
+									if (!event.altKey) return
 									const target =
 										event.key === 'ArrowUp'
 											? index - 1
@@ -102,7 +101,7 @@ export function StageBuilder({
 												? index + 1
 												: index
 									if (
-										target > 0 &&
+										target >= 0 &&
 										target < stages.length &&
 										target !== index
 									) {
@@ -110,7 +109,7 @@ export function StageBuilder({
 										onReorderStages(index, target)
 									}
 								}}
-								draggable={index > 0}
+								draggable={stages.length > 1}
 								onDragStart={(event) => {
 									// Store the stage index and mark the drag as a move.
 									event.dataTransfer.setData(
@@ -125,7 +124,7 @@ export function StageBuilder({
 							</span>
 							{/* Move and delete controls based on stage position. */}
 							<span className="stage-controls">
-								{index > 0 && stages.length > 1 && (
+								{stages.length > 1 && (
 									<button
 										className="icon-button danger"
 										title="Delete stage"

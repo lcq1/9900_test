@@ -1,9 +1,14 @@
 import { useTransientNotice } from '../participant/TimerController'
 import { useEffect, useState } from 'react'
+import { Modal } from 'antd'
 import type { Experiment } from '../types'
 import { getCurrentResearcher } from '../auth/sessionStore'
 import {
   getSettings,
+  getAdminStorage,
+  createResearcherForAdmin,
+  updateResearcherAccess,
+  downloadAdminResults,
   listResearchersForAdmin,
   updateSettings,
   listAdminExperiments,
@@ -34,6 +39,9 @@ export function AdministratorPage() {
 	const [loading, setLoading] = useState(true)
 	const [error, setError, errorVisible, errorRevision] =
 		useTransientNotice('')
+	const [storage, setStorage] = useState<{ location: string; locations: string[] } | null>(null)
+	const [accountBusy, setAccountBusy] = useState(false)
+	const [settingsBusy, setSettingsBusy] = useState(false)
 	const [downloading, setDownloading] = useState<string | null>(null)
 
 	const downloadSession = async (sessionId: string) => {
@@ -56,15 +64,17 @@ export function AdministratorPage() {
 		let active = true
 		const load = async () => {
 			try {
-				const [people, current, studies] = await Promise.all([
+				const [people, current, studies, storageOptions] = await Promise.all([
 					listResearchersForAdmin(),
 					getSettings(),
 					listAdminExperiments(),
+					getAdminStorage(),
 				])
 				if (!active) return
 				setResearchers(people)
 				setSettings(current)
 				setExperiments(studies)
+				setStorage(storageOptions)
 			} catch {
 				if (active) setError('Could not load administrator data.')
 			} finally {
@@ -79,27 +89,34 @@ export function AdministratorPage() {
 
 	/** Persist a settings patch and reflect the stored result in state. */
 	const patchSettings = async (patch: Partial<PlatformSettings>) => {
-		if (!settings) return
+		if (!settings || settingsBusy) return
+		setSettingsBusy(true)
 		try {
 			const next = await updateSettings(patch)
 			setSettings(next)
+			if (next.defaultStorageLocation) setStorage((current) => current && { ...current, location: next.defaultStorageLocation! })
 			setError('')
 		} catch {
 			setError('Could not save that setting.')
+		} finally {
+			setSettingsBusy(false)
 		}
 	}
 
-	const promote = async (id: string) => {
+	const saveAccount = async (action: () => Promise<Researcher>) => {
+		setAccountBusy(true)
+		setError('')
 		try {
-			const updated = await promoteToAdministrator(id)
-			setResearchers((current) =>
-				current.map((person) =>
-					person.id === updated.id ? updated : person,
-				),
-			)
-			setError('')
-		} catch {
-			setError('Could not update that researcher.')
+			const updated = await action()
+			setResearchers((current) => current.some((person) => person.id === updated.id)
+				? current.map((person) => person.id === updated.id ? updated : person)
+				: [...current, updated])
+			return true
+		} catch (reason) {
+			setError(reason instanceof Error ? reason.message : 'Could not update the account.')
+			return false
+		} finally {
+			setAccountBusy(false)
 		}
 	}
 
@@ -116,6 +133,8 @@ export function AdministratorPage() {
 					backend
 						.map((s) => ({
 							id: s.id,
+							participantCode: s.participantCode,
+							experimentCode: s.experimentCode,
 							count: s.events.length,
 							timestamp: s.events[s.events.length - 1]?.timestamp,
 						}))
@@ -186,6 +205,21 @@ export function AdministratorPage() {
 			</div>
 
 			<h2 className="admin-heading">Researcher accounts</h2>
+			<form className="admin-create-account" onSubmit={async (event) => {
+				event.preventDefault()
+				const form = event.currentTarget
+				const values = new FormData(form)
+				if (await saveAccount(() => createResearcherForAdmin({
+					name: String(values.get('name')).trim(),
+					email: String(values.get('email')).trim(),
+					password: String(values.get('password')),
+				}))) form.reset()
+			}}>
+				<label>Full name<input name="name" required maxLength={255} /></label>
+				<label>Email<input name="email" type="email" required maxLength={255} /></label>
+				<label>Initial password<input name="password" type="password" required autoComplete="new-password" /></label>
+				<button type="submit" className="primary-button" disabled={accountBusy}>Create researcher</button>
+			</form>
 			<div className="experiment-table">
 				<div className="table-head">
 					<span>Researcher</span>
@@ -206,19 +240,30 @@ export function AdministratorPage() {
 							<strong>{person.name}</strong>
 							<small>{person.email}</small>
 						</div>
-						<span className="pill">{person.role}</span>
+						<span className="pill">{person.role === 'administrator' ? 'Administrator' : person.accountStatus ?? 'active'}</span>
 						<span className="muted">
 							{new Date(person.createdAt).toLocaleDateString()}
 						</span>
 						<div className="row-actions">
-							{person.role !== 'administrator' && (
-								<button
-									className="secondary-button"
-									onClick={() => void promote(person.id)}
-								>
-									Promote
-								</button>
-							)}
+							{person.role !== 'administrator' && <>
+								{person.accountStatus === 'active' || !person.accountStatus ? <>
+									<button className="secondary-button" disabled={accountBusy}
+										onClick={() => Modal.confirm({ title: `Disable ${person.name}?`,
+											content: 'This revokes their login sessions and preserves study data.',
+											onOk: () => saveAccount(() => updateResearcherAccess(person.id, 'disabled')) })}>
+										Disable
+									</button>
+									<button className="secondary-button" disabled={accountBusy}
+										onClick={() => Modal.confirm({ title: `Promote ${person.name}?`,
+											content: 'This grants administrator access to all studies and platform settings.',
+											onOk: () => saveAccount(() => promoteToAdministrator(person.id)) })}>
+										Promote
+									</button>
+								</> : <button className="secondary-button" disabled={accountBusy}
+									onClick={() => void saveAccount(() => updateResearcherAccess(person.id, 'active'))}>
+									{person.accountStatus === 'pending' ? 'Approve' : 'Restore access'}
+								</button>}
+							</>}
 						</div>
 					</div>
 				))}
@@ -229,15 +274,27 @@ export function AdministratorPage() {
 				<div className="experiment-table admin-settings">
 					<SettingsToggle
 						label="Allow self-registration"
-						hint="Researchers can create their own accounts."
+						hint="Controls public registration. Administrators can still create accounts."
 						checked={settings.allowSelfRegistration}
 						onChange={(value) =>
 							void patchSettings({ allowSelfRegistration: value })
 						}
 					/>
+					<SettingsToggle label="Require researcher approval"
+						hint="New self-registered accounts wait for an administrator."
+						checked={Boolean(settings.requireResearcherApproval)}
+						onChange={(value) => void patchSettings({ requireResearcherApproval: value })} />
+					{storage && <label className="experiment-row admin-row">
+						<span>Default storage for new files</span>
+						<select value={storage.location} disabled={settingsBusy}
+							onChange={(event) => void patchSettings({ defaultStorageLocation: event.target.value })}>
+							{storage.locations.map((location) => <option key={location}>{location}</option>)}
+						</select>
+					</label>}
+
 					<SettingsToggle
 						label="Require consent signature"
-						hint="Participants must sign before continuing past consent."
+						hint="Require a consent stage before questions in published studies. Recording always requires consent."
 						checked={settings.requireConsentSignature}
 						onChange={(value) =>
 							void patchSettings({
@@ -245,8 +302,9 @@ export function AdministratorPage() {
 							})
 						}
 					/>
+					<p className="admin-policy-note">Retention and session duration are recorded as policy settings. Apply them under your study protocol.</p>
 					<SettingsNumber
-						label="Data retention (days)"
+						label="Retention policy (days)"
 						value={settings.dataRetentionDays}
 						min={1}
 						onChange={(value) =>
@@ -254,7 +312,7 @@ export function AdministratorPage() {
 						}
 					/>
 					<SettingsNumber
-						label="Max session (minutes)"
+						label="Session duration policy (minutes)"
 						value={settings.maxSessionMinutes}
 						min={1}
 						onChange={(value) =>
@@ -282,7 +340,15 @@ export function AdministratorPage() {
 						<span className="muted">
 							{experiment.stages.length}
 						</span>
-						<div className="row-actions"></div>
+						<div className="row-actions">
+							<button className="secondary-button" disabled={downloading !== null} onClick={async () => {
+								setDownloading(experiment.id)
+								setError('')
+								try { await downloadAdminResults(experiment.id) }
+								catch { setError('Could not export this experiment.') }
+								finally { setDownloading(null) }
+							}}>Export study</button>
+						</div>
 					</div>
 				))}
 			</div>
@@ -303,7 +369,8 @@ export function AdministratorPage() {
 					{sessions.map((session) => (
 						<div className="experiment-row" key={session.id}>
 							<div className="experiment-name">
-								<strong>{session.id}</strong>
+								<strong>{session.participantCode}</strong>
+								<small>{session.experimentCode}</small>
 							</div>
 							<span className="muted">{session.count}</span>
 							<span className="muted">
@@ -338,6 +405,8 @@ export function AdministratorPage() {
 }
 
 interface SessionSummary {
+	participantCode: string
+	experimentCode: string
   id: string
   count: number
   timestamp?: string

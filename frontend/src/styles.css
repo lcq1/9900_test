@@ -4188,13 +4188,107 @@ select:focus-visible,
 	font-weight: 500;
 }
 
-.stage-extension-settings {
-	display: grid;
-	gap: 8px;
-	margin-block: 8px;
+.right-section.features .feature-option {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: flex-start;
+	margin: 0;
+	gap: 9px;
+	padding: 9px 14px;
 }
-.stage-extension-settings label {
+.right-section.features .feature-option input[type="checkbox"] {
+	width: 14px;
+	height: 14px;
+	margin: 2px 0 0;
+	flex-shrink: 0;
+}
+.feature-option .feature-label {
+	font-size: 12px;
+	line-height: 1.45;
+}
+.feature-option small {
+	display: block;
+	font-size: 11px;
+	margin-top: 2px;
+}
+.right-section.features .feature-option-detail {
+	align-items: center;
+	padding-left: 37px;
+}
+.feature-option-detail .minutes-input {
+	width: 64px;
+	font-size: 12px;
+}
+
+.right-section.features .feature-option-detail select {
+	width: auto;
+	max-width: 55%;
+	padding: 4px 6px;
+	min-height: 30px;
+	font-size: 12px;
+}
+.study-storage-editor,
+.study-storage-notice {
+	margin-block: 12px;
+	padding: 12px 14px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: #fff;
+	font-size: 13px;
+}
+.study-storage-editor summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+.study-storage-editor label,
+.admin-create-account label {
+	display: grid;
+	gap: 6px;
+}
+.study-storage-editor textarea,
+.admin-create-account input {
+	width: 100%;
+	min-width: 0;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	font: inherit;
+}
+.study-storage-editor label {
+	margin-top: 10px;
+}
+.study-storage-notice p {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.study-access-panel ul {
+	padding: 0;
+	list-style: none;
+}
+.study-access-panel li {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
 	gap: 8px;
+	padding: 8px 0;
+	border-bottom: 1px solid var(--line);
+}
+.admin-create-account {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 10px;
+	margin-block: 10px 16px;
+	font-size: 13px;
+}
+.admin-create-account label {
+	flex: 1 1 150px;
+}
+
+.admin-policy-note {
+	margin: 0;
+	padding: 9px 14px;
+	color: var(--muted);
+	font-size: 12px;
 }

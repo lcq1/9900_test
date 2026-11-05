@@ -4374,3 +4374,103 @@ select:focus-visible,
 		margin-left: auto;
 	}
 }
+
+.editor-grid > .consent-settings-panel {
+	align-self: start;
+}
+.consent-settings-section {
+	display: grid;
+	gap: 10px;
+	padding: 14px;
+	font-size: 13px;
+}
+.consent-settings-section + .consent-settings-section {
+	border-top: 1px solid var(--line);
+}
+.consent-settings-section h3,
+.consent-settings-section p,
+.consent-settings-section ul {
+	margin: 0;
+}
+.consent-settings-section label {
+	display: grid;
+	gap: 6px;
+}
+.consent-settings-section select,
+.consent-settings-section textarea {
+	width: 100%;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 8px 10px;
+	font: inherit;
+}
+.consent-settings-section p,
+.consent-settings-section ul {
+	color: var(--muted);
+}
+.consent-settings-section ul {
+	padding-inline-start: 18px;
+}
+.storage-add-form {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: end;
+	gap: 8px 10px;
+	margin-top: 14px;
+}
+.storage-add-form p {
+	grid-column: 1 / -1;
+	margin: 0;
+}
+.ai-key-controls .settings-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.results-toolbar {
+	grid-template-columns: minmax(100px, .6fr) minmax(0, 1.6fr) minmax(135px, 1fr) auto;
+	gap: 14px;
+	padding: 14px 18px;
+}
+.results-toolbar > button {
+	min-height: 44px;
+}
+.chart-export-field {
+	display: grid;
+	gap: 8px;
+}
+.chart-export-source {
+	position: fixed;
+	inset: 0 auto auto -12000px;
+	width: 1000px;
+}
+select:not([multiple]):not([size]) {
+	box-sizing: border-box;
+	min-height: 44px;
+	appearance: none;
+	padding-inline-end: 30px;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 16 16'%3E%3Cpath stroke='%23566475' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 9px center;
+}
+.settings-field input:not([type="checkbox"]):not([type="radio"]),
+.admin-setting-row input {
+	min-height: 44px;
+}
+.workspace-settings-page .ai-key-controls select,
+.right-section.features .feature-option-detail select,
+.admin-setting-row select {
+	min-height: 44px;
+	padding-inline-end: 30px;
+}
+@media (max-width: 900px) {
+	.results-toolbar {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+@media (max-width: 480px) {
+	.results-toolbar,
+	.storage-add-form {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

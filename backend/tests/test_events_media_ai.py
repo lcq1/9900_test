@@ -1619,3 +1619,22 @@ def test_finish_accepts_fractional_synchronized_event_times(client, auth_headers
     assert response.status_code == 201, response.text
     assert response.json()["finishedAt"] is not None
     assert response.json()["events"][0]["epochMs"] == 1793664000001
+
+
+def test_workspace_locations_are_writable_and_private(client, auth_headers, tmp_path, monkeypatch):
+    from app.core import storage
+    from tests.conftest import register_and_login
+
+    monkeypatch.setattr(storage, "STORAGE_DIR", str(tmp_path))
+    path = "/api/workspace/storage"
+    assert client.post(path + "/locations", headers=auth_headers, json={"location": "../unsafe"}).status_code == 422
+    created = client.post(path + "/locations", headers=auth_headers, json={"location": "Pilot-study"})
+    assert created.status_code == 201
+    [location] = [name for name in created.json()["locations"] if name.startswith("workspace-")]
+    assert created.json()["location"] == "legacy"
+    assert client.patch(path, headers=auth_headers, json={"location": location}).json()["location"] == location
+    reference = storage.logical_reference(location, "recordings/check.webm")
+    assert Path(storage._safe_local_path(reference)).is_relative_to(tmp_path / "workspace-locations")
+    other = {"Authorization": "Bearer " + register_and_login(client, email="storage-other@example.com")}
+    assert location not in client.get(path, headers=other).json()["locations"]
+    assert client.patch(path, headers=other, json={"location": location}).status_code == 422

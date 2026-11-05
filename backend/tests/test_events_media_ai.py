@@ -109,6 +109,30 @@ def test_ai_connection_uses_saved_credentials_without_forwarding_server_key(
     assert captured == [("custom.example", "Bearer custom-test-key")]
 
 
+def test_google_preset_keeps_credentials_on_google(client, auth_headers, ai_transport):
+    from app.researcher.ai_config import GOOGLE_ENDPOINT, GOOGLE_MODEL
+
+    def upstream(request):
+        assert str(request.url) == GOOGLE_ENDPOINT
+        assert request.headers["Authorization"] == "Bearer test-gemini-key"
+        assert json.loads(request.content)["model"] == GOOGLE_MODEL
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ready"}}]})
+
+    ai_transport(upstream)
+    path = "/api/workspace/ai-config"
+    saved = client.patch(path, headers=auth_headers, json={
+        "provider": "google", "apiKey": "test-gemini-key", "stream": False,
+        "apiBase": "https://unused.example/v1/chat/completions", "model": "unused",
+    })
+    assert saved.status_code == 200
+    assert saved.json()["model"] == GOOGLE_MODEL
+    assert saved.json()["apiBase"] == GOOGLE_ENDPOINT
+    assert "test-gemini-key" not in saved.text
+    assert client.post(path + "/test", headers=auth_headers).status_code == 204
+    changed = client.patch(path, headers=auth_headers, json={"provider": "openai_compatible"})
+    assert changed.status_code == 422
+
+
 @pytest.mark.parametrize("streaming", [False, True])
 def test_experiment_ai_parameters_reach_each_provider(client, auth_headers, monkeypatch, ai_transport, streaming):
     from app.core import database

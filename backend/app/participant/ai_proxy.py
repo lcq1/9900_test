@@ -102,6 +102,7 @@ def get_provider() -> ChatProvider:
 
 
 register_provider("openai_compatible", OpenAICompatibleProvider())
+register_provider("google", OpenAICompatibleProvider())
 register_provider("workbuddy", WorkBuddyProvider())
 
 

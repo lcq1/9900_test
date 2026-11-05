@@ -104,7 +104,7 @@ class StorageSettings(CamelModel):
 class ExperimentAIKey(CamelModel):
     use_common: bool | None = None
     api_key: SecretStr | None = None
-    provider: Literal["openai_compatible", "workbuddy"] | None = None
+    provider: Literal["openai_compatible", "google", "workbuddy"] | None = None
     api_base: str | None = Field(default=None, max_length=2048)
     model: str | None = Field(default=None, min_length=1, max_length=255)
     stream: bool | None = None

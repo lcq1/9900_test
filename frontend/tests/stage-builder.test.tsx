@@ -224,7 +224,7 @@ it('saves experiment keys privately and clears inputs when switching experiments
 		fireEvent.change(screen.getByLabelText('API endpoint URL'), { target: { value: 'https://experiment.example/v1/chat/completions' } })
 		fireEvent.change(screen.getByLabelText('Timeout (seconds)'), { target: { value: '120' } })
 		fireEvent.click(screen.getByRole('switch', { name: 'Streaming responses' }))
-		fireEvent.click(screen.getByText('Advanced AI settings'))
+		fireEvent.click(screen.getByText('Advanced settings'))
 		fireEvent.change(screen.getByLabelText('System prompt'), { target: { value: 'Experiment instructions' } })
 		fireEvent.change(screen.getByLabelText('History messages'), { target: { value: '4' } })
 		fireEvent.click(screen.getByRole('button', { name: 'Save AI settings' }))

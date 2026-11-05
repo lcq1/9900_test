@@ -3,6 +3,9 @@
 from __future__ import annotations
 from app.core.config import settings
 
+GOOGLE_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+GOOGLE_MODEL = "gemini-3.5-flash-lite"
+
 AI_PARAMETERS = ('provider', 'api_base', 'model', 'api_key', 'stream', 'timeout_seconds',
                  'temperature', 'system_prompt', 'max_prompt_chars', 'history_messages', 'history_message_chars')
 
@@ -54,8 +57,11 @@ def resolve_common_config(db, researcher_id: str):
 def apply_ai_overrides(overrides: dict):
     """Apply supported AI parameters without copying configuration-source metadata."""
     updates = {'ai_' + key: value for key, value in overrides.items() if key in AI_PARAMETERS}
+    if updates.get('ai_provider', settings.ai_provider) == 'google':
+        updates.update(ai_api_base=GOOGLE_ENDPOINT, ai_model=GOOGLE_MODEL)
+    server_endpoint = GOOGLE_ENDPOINT if settings.ai_provider == 'google' else settings.ai_api_base
     if (
-        updates.get('ai_api_base', settings.ai_api_base) != settings.ai_api_base
+        updates.get('ai_api_base', server_endpoint) != server_endpoint
         or updates.get('ai_provider', settings.ai_provider) != settings.ai_provider
     ):
         updates.setdefault('ai_api_key', None)
@@ -97,7 +103,14 @@ def _save_config_record(db, scope: str, changes: dict | None):
         if record:
             db.delete(record)
     elif record:
-        record.detail = {**(record.detail or {}), **changes}
+        previous = record.detail or {}
+        candidate = {**previous, **changes}
+        if previous.get('api_key') and 'api_key' not in changes:
+            before, after = apply_ai_overrides(previous), apply_ai_overrides(candidate)
+            if (before.ai_provider, before.ai_api_base) != (after.ai_provider, after.ai_api_base):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=422, detail="Enter a new API key when changing provider or endpoint.")
+        record.detail = candidate
         record.timestamp = now_iso()
     else:
         db.add(ParticipantEvent(id=record_id, session_id=record_id, type="server.ai_key",

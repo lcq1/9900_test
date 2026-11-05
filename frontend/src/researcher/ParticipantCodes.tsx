@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Modal } from 'antd'
+import { Plus, ShieldCheck, UsersRound } from 'lucide-react'
 import { issueParticipantCode, listParticipantCodes, revokeParticipantCode, type ParticipantCode } from '../api/experiments'
 
 export function ParticipantCodes({ experimentId, experimentCode }: { experimentId: string; experimentCode: string }) {
@@ -43,21 +44,32 @@ export function ParticipantCodes({ experimentId, experimentCode }: { experimentI
 	}
 
 	return <div className="study-access-panel">
-		<p>Share experiment code <strong>{experimentCode}</strong> and one participant code per person.</p>
-		<p>Issuing the first code restricts new entries to issued codes. Existing unfinished sessions can resume with their original code.</p>
-		<button type="button" className="primary-button" disabled={!codes || busy} onClick={() => void issue()}>Generate participant code</button>
-		{codes?.length === 0 && <p>No participant codes issued yet.</p>}
-		{codes && codes.length > 0 && <ul>
-			{codes.map(({ code, revoked }) => <li key={code}>
-				<code>{code}</code>
-				{revoked ? <span className="muted">Revoked</span> : <button type="button" className="secondary-button"
-					disabled={busy} onClick={() => Modal.confirm({
-						title: 'Revoke this participant code?',
-						content: 'This ends access for this code. Saved responses are preserved.',
-						onOk: () => revoke(code),
-					})}>Revoke</button>}
-			</li>)}
-		</ul>}
-		<p role="status">{message}</p>
-	</div>
+        <p className="access-intro">Use a different participant code for each person.</p>
+        <div className="access-experiment-code"><span>Experiment code</span><strong>{experimentCode}</strong></div>
+        <div className="access-policy-note">
+            <ShieldCheck size={18} aria-hidden="true" />
+            <div><strong>How access works</strong>
+                <p>After you generate the first code, new participants must use one of the issued codes.</p>
+                <p>Existing unfinished sessions can still resume with their original code.</p>
+            </div>
+        </div>
+        <div className="access-code-actions">
+            <h3>Issued codes{codes && <span>{codes.length}</span>}</h3>
+            <button type="button" className="primary-button" disabled={!codes || busy} onClick={() => void issue()}><Plus size={15} aria-hidden="true" />{busy ? 'Please wait…' : 'Generate participant code'}</button>
+        </div>
+        {!codes && !message && <p role="status" className="access-message">Loading participant codes…</p>}
+        {codes?.length === 0 && <div className="access-code-empty"><UsersRound size={23} aria-hidden="true" /><strong>No participant codes issued yet.</strong><p>Generate a code above, then share it with one participant.</p></div>}
+        {codes && codes.length > 0 && <ul className="access-code-list">
+            {codes.map(({ code, revoked }) => <li key={code}>
+                <div className="access-issued-code"><code>{code}</code><span className={revoked ? 'is-revoked' : ''}>{revoked ? 'Revoked' : 'Active'}</span></div>
+                {!revoked && <button type="button" className="secondary-button"
+                    disabled={busy} onClick={() => Modal.confirm({
+                        title: 'Revoke this participant code?',
+                        content: 'This ends access for this code. Saved responses are preserved.',
+                        onOk: () => revoke(code),
+                    })}>Revoke</button>}
+            </li>)}
+        </ul>}
+        {message && <p role="status" className="access-message">{message}</p>}
+    </div>
 }

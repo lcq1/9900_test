@@ -4474,3 +4474,117 @@ select:not([multiple]):not([size]) {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
+
+/* Full-width research charts and their interpretation share one reading flow. */
+.results-page .results-chart-card {
+	display: block;
+	padding: 26px;
+	background: #fff;
+}
+.results-page .results-chart-visual {
+	width: 100%;
+	max-width: none;
+	margin: 0;
+	padding: 4px 0 18px;
+	overflow-x: auto;
+}
+.results-page .results-chart-visual > svg {
+	width: 100%;
+	min-width: 650px;
+	max-height: none;
+	height: auto;
+}
+.result-plot,
+.chart-line-svg {
+	width: 100%;
+	height: auto;
+}
+.plot-tick {
+	fill: #526174;
+	font-family: "DM Sans", sans-serif;
+	font-size: 13px;
+}
+.plot-value {
+	fill: #243750;
+	font-family: "DM Sans", sans-serif;
+	font-size: 13px;
+	font-weight: 600;
+}
+.plot-axis-title {
+	fill: #526174;
+	font-family: "DM Sans", sans-serif;
+	font-size: 13px;
+}
+.results-page .chart-doughnut {
+	flex-wrap: nowrap;
+	min-height: 360px;
+	gap: 40px;
+}
+.results-page .doughnut-svg {
+	width: 320px;
+	height: 320px;
+	flex: 0 0 320px;
+}
+.results-page .chart-legend {
+	max-width: 400px;
+	font-size: 13px;
+}
+.results-page .chart-legend li {
+	padding-block: 7px;
+}
+.chart-interpretation {
+	padding: 18px 20px;
+	border: 1px solid #dce7f4;
+	border-radius: 10px;
+	background: #f5f8fd;
+}
+.chart-interpretation h2 {
+	margin: 0 0 8px;
+	color: #233b58;
+	font-size: 18px;
+}
+.chart-interpretation p,
+.chart-interpretation li {
+	font-size: 14px;
+	line-height: 1.65;
+}
+.chart-interpretation p {
+	margin: 0;
+}
+.chart-interpretation ul {
+	margin: 12px 0;
+	padding-left: 22px;
+}
+.chart-interpretation .chart-caveat {
+	color: #64748b;
+	font-size: 12px;
+}
+.results-page .results-chart-data {
+	max-height: none;
+	margin-top: 16px;
+	overflow: visible;
+}
+.results-chart-data summary {
+	padding: 8px 0;
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 600;
+	color: #304c6e;
+}
+@media (max-width: 760px) {
+	.results-page .results-chart-card {
+		padding: 16px;
+	}
+	.results-page .chart-doughnut {
+		flex-direction: column;
+		gap: 14px;
+	}
+	.results-page .doughnut-svg {
+		width: 260px;
+		height: 260px;
+		flex-basis: 260px;
+	}
+	.chart-interpretation {
+		padding: 14px;
+	}
+}

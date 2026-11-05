@@ -3789,99 +3789,73 @@ select:focus-visible,
 	max-width: 1140px;
 }
 .participant-question-layout {
-	display: flex;
-	gap: 22px;
-	align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    min-width: 0;
 }
 .question-nav-panel {
-	flex: 0 0 236px;
-	align-self: flex-start;
-	position: sticky;
-	top: 18px;
-	background: #fff;
-	border: 1px solid #e6e8f0;
-	border-radius: 16px;
-	padding: 14px 14px 16px;
-	box-shadow: 0 6px 24px #23304a08;
+    width: 100%;
+    min-width: 0;
+    background: #fff;
+    border: 1px solid #e6e8f0;
+    border-radius: 14px;
+    padding: 12px 14px 0;
+    box-shadow: 0 6px 24px #23304a08;
 }
-.question-nav-title {
-	font: 700 11px "Space Grotesk";
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: #8a96a4;
-	margin-bottom: 10px;
-	padding-left: 2px;
-}
+.stage-navigation-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.question-nav-title { display: flex; align-items: center; gap: 12px; font: 700 11px "Space Grotesk"; letter-spacing: 0.06em; text-transform: uppercase; color: #718096; }
+.question-nav-title span { font: 600 12px var(--sans); letter-spacing: 0; color: #5654ff; }
+.stage-navigation-controls { display: flex; align-items: center; gap: 6px; }
+.stage-navigation-controls > span { color: #718096; font-size: 12px; margin-right: 6px; }
+.stage-navigation-controls button { display: grid; place-items: center; width: 30px; height: 28px; padding: 0; border: 1px solid #e2e8f0; border-radius: 6px; background: white; color: #5654ff; }
+.stage-navigation-controls button:disabled { opacity: 0.35; cursor: default; }
 .qnav-list {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #c3c1f3 #f4f4fb;
 }
 .qnav-item {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	width: 100%;
-	text-align: left;
-	border: 1px solid transparent;
-	background: transparent;
-	border-radius: 10px;
-	padding: 9px 10px;
-	font: inherit;
-	color: #939bad;
-	cursor: pointer;
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 8px;
+    max-width: 320px;
+    text-align: left;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    border-radius: 6px 6px 0 0;
+    padding: 12px;
+    font: inherit;
+    color: #7d8799;
+    cursor: pointer;
 }
-.qnav-item:hover:not(:disabled) {
-	background: #f4f7fb;
-	color: #2a3340;
+.qnav-item:hover:not(:disabled) { background: #f4f3ff; color: #4743d8; }
+.qnav-item:focus-visible { outline: 2px solid #5654ff; outline-offset: -3px; }
+.qnav-item:disabled { cursor: default; }
+.qnav-item.current { background: #f4f3ff; border-bottom-color: #5654ff; color: #4743d8; font-weight: 600; }
+.qnav-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #cfd6e0; }
+.qnav-item.done .qnav-dot { background: #6c68d9; }
+.qnav-item.current .qnav-dot { background: #5654ff; }
+.participant-view:not(:has(form.entry-card)) .qnav-item.current:disabled { opacity: 1; }
+.qnav-num { font: 600 12px "Space Grotesk"; min-width: 16px; flex-shrink: 0; }
+.qnav-name { font-size: 13px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.participant-question-content { width: 100%; min-width: 0; }
+.participant-view:not(:has(form.entry-card)) .participant-body.participant-body-wide { max-width: 1500px; }
+@media (min-width: 901px) {
+    .participant-view:not(:has(form.entry-card)) .participant-split { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); }
 }
-.qnav-item:disabled {
-	cursor: default;
-	opacity: 0.92;
-}
-.qnav-item.current {
-	background: #5654ff;
-	border-color: #5654ff;
-	color: #fff;
-}
-.qnav-item.current .qnav-dot {
-	background: #fff;
-}
-.qnav-item.done .qnav-dot {
-	background: var(--green);
-}
-.qnav-dot {
-	flex: 0 0 auto;
-	width: 10px;
-	height: 10px;
-	border-radius: 50%;
-	background: #cfd6e0;
-	border: 1px solid rgba(0, 0, 0, 0.04);
-}
-.qnav-num {
-	font: 700 12px "Space Grotesk";
-	min-width: 16px;
-}
-.qnav-name {
-	font-size: 12.5px;
-	line-height: 1.3;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.participant-question-content {
-	flex: 1 1 auto;
-	min-width: 0;
-}
-@media (max-width: 880px) {
-	.participant-question-layout {
-		flex-direction: column;
-	}
-	.question-nav-panel {
-		position: static;
-		flex-basis: auto;
-		width: 100%;
-	}
+@media (max-width: 600px) {
+    .question-nav-panel { padding: 10px 10px 0; }
+    .stage-navigation-controls > span { display: none; }
+    .qnav-item { padding: 11px 10px; max-width: 260px; }
 }
 
 /* Requirement 1: red highlight on questions that were still unanswered when the

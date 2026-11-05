@@ -112,6 +112,8 @@ Open **Workspace settings → Storage** and select a location.
 6. Use **Pause** if enabled. Confirm that the paused state is visible before leaving the browser.
 7. At the last stage, finish the session and wait for successful submission. Do not close the browser while recording uploads or submission are still pending.
 
+The study stage list is a horizontal navigation bar above the task. Scroll it sideways on a touchpad/touchscreen or use its left/right arrow buttons when it overflows. The current stage is highlighted and brought into view when you move to another stage. These scroll buttons do not change the current stage or bypass consent/required-answer checks.
+
 Use a distinct code for each person. Re-entering the same code resumes an unfinished session. Keep one active tab per session; another tab may be rejected while the original tab holds the session. If a tab has taken over, the old tab cannot keep writing to that session.
 
 **Abort is not a data-erasure action.** The current implementation records the abort and saves an unfinished session that can be resumed. If the protocol requires permanent withdrawal, exclusion or deletion, contact the study owner and apply the agreed procedure separately.

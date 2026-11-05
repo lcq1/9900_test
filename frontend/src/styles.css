@@ -4292,3 +4292,85 @@ select:focus-visible,
 	color: var(--muted);
 	font-size: 12px;
 }
+
+.admin-settings {
+	background: #fff;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+}
+.admin-setting-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 190px);
+	align-items: center;
+	gap: 12px 20px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--line);
+}
+.admin-setting-row:last-child {
+	border-bottom: 0;
+}
+.admin-setting-copy {
+	display: grid;
+	gap: 4px;
+	font-size: 14px;
+	line-height: 1.4;
+}
+.admin-setting-copy small,
+.admin-setting-control {
+	font-size: 13px;
+	color: var(--muted);
+	line-height: 1.4;
+}
+.admin-setting-control {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 10px;
+}
+.admin-setting-row select,
+.admin-setting-row input {
+	width: 100%;
+	min-height: 36px;
+	padding: 5px 8px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: white;
+	font-size: 14px;
+}
+.admin-policy-note {
+	border-bottom: 1px solid var(--line);
+	background: #f7f9fc;
+}
+.participant-view:not(:has(form.entry-card)) .participant-footer {
+	position: static;
+	box-shadow: none;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 0 0;
+	margin-top: 20px;
+}
+.participant-footer-status {
+	font-size: 13px;
+	line-height: 1.4;
+}
+.participant-view:not(:has(form.entry-card)) .participant-footer .primary-button {
+	min-height: 40px;
+	padding: 8px 14px;
+	font-size: 14px;
+	line-height: 1.4;
+}
+.workspace-settings-page .ai-key-controls select {
+	min-height: 38px;
+}
+@media (max-width: 480px) {
+	.admin-setting-row {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 115px);
+		gap: 10px;
+	}
+	.participant-view:not(:has(form.entry-card)) .participant-footer {
+		flex-direction: row;
+	}
+	.participant-view .participant-footer .participant-actions {
+		margin-left: auto;
+	}
+}

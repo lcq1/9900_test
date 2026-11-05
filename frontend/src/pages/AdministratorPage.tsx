@@ -271,7 +271,7 @@ export function AdministratorPage() {
 
 			<h2 className="admin-heading">Platform settings</h2>
 			{settings && (
-				<div className="experiment-table admin-settings">
+				<div className="admin-settings">
 					<SettingsToggle
 						label="Allow self-registration"
 						hint="Controls public registration. Administrators can still create accounts."
@@ -284,11 +284,11 @@ export function AdministratorPage() {
 						hint="New self-registered accounts wait for an administrator."
 						checked={Boolean(settings.requireResearcherApproval)}
 						onChange={(value) => void patchSettings({ requireResearcherApproval: value })} />
-					{storage && <label className="experiment-row admin-row">
-						<span>Default storage for new files</span>
+					{storage && <label className="admin-setting-row">
+						<span className="admin-setting-copy"><strong>Default storage for new files</strong><small>Applies to new uploads and recordings without a workspace override.</small></span>
 						<select value={storage.location} disabled={settingsBusy}
 							onChange={(event) => void patchSettings({ defaultStorageLocation: event.target.value })}>
-							{storage.locations.map((location) => <option key={location}>{location}</option>)}
+							{storage.locations.map((location) => <option key={location} value={location}>{location === 'legacy' ? 'Local server storage' : location}</option>)}
 						</select>
 					</label>}
 
@@ -424,18 +424,18 @@ function SettingsToggle({
 	onChange: (value: boolean) => void
 }) {
 	return (
-		<div className="experiment-row admin-row">
-			<div className="experiment-name">
+		<div className="admin-setting-row">
+			<div className="admin-setting-copy">
 				<strong>{label}</strong>
 				<small>{hint}</small>
 			</div>
-			<span className="muted">{checked ? 'On' : 'Off'}</span>
-			<span className="muted"></span>
-			<div className="row-actions">
+			<div className="admin-setting-control">
+				<span>{checked ? 'On' : 'Off'}</span>
 				<button
 					className={checked ? 'switch on' : 'switch'}
 					onClick={() => onChange(!checked)}
 					aria-label={label}
+					role="switch" aria-checked={checked}
 				>
 					<span></span>
 				</button>
@@ -456,11 +456,9 @@ function SettingsNumber({
 	onChange: (value: number) => void
 }) {
 	return (
-		<div className="experiment-row admin-row">
-			<div className="experiment-name">
-				<strong>{label}</strong>
-			</div>
-			<span className="minutes-wrap admin-number">
+		<label className="admin-setting-row">
+			<span className="admin-setting-copy"><strong>{label}</strong></span>
+			<span className="admin-setting-control">
 				<input
 					className="minutes-input"
 					type="number"
@@ -473,8 +471,6 @@ function SettingsNumber({
 					}
 				/>
 			</span>
-			<span className="muted"></span>
-			<div className="row-actions"></div>
-		</div>
+		</label>
 	)
 }

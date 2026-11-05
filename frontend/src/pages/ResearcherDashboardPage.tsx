@@ -857,6 +857,12 @@ function detailText(detail?: Record<string, unknown>): string {
   return text.length > 96 ? `${text.slice(0, 96)}…` : text
 }
 
+const googleAI = {
+	provider: 'google',
+	model: 'gemini-3.5-flash-lite',
+	apiBase: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+}
+
 function aiSettingsFields(value: ExperimentAIKeyStatus): ExperimentAISettingsInput {
 	return { provider: value.provider, model: value.model, apiBase: value.apiBase ?? '',
 		stream: value.stream ?? true, timeoutSeconds: value.timeoutSeconds ?? 60,
@@ -899,8 +905,8 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 			setConfiguration(aiSettingsFields(value))
 			setApiKey('')
 			setMessage(remove ? 'Common configuration reset to server defaults.' : isCommon ? 'Common AI configuration saved.' : 'AI settings saved for this experiment.')
-		} catch {
-			setMessage('Could not save AI settings. Check the parameters and try again.')
+		} catch (error) {
+			setMessage(error instanceof HttpError ? error.message : 'Could not save AI settings. Check the parameters and try again.')
 		} finally { setSaving(false) }
 	}
 	const updateSource = async (useCommon: boolean) => {
@@ -963,39 +969,51 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 				}}>Edit common configuration</button>
 			</div>}
 			{status && configuration && (isCommon || !status.useCommon) && <form className="ai-key-controls" onSubmit={(event) => { event.preventDefault(); void updateKey(false) }}>
-				<p>{status.hasCustomKey ? 'Custom API key saved' : status.configured ? 'Using server default API key' : 'AI setup incomplete'} · {status.provider} · {status.model}</p>
-				{!status.configured && <p>Set the API key, endpoint URL and model, then save to enable a connection test.</p>}
-				<div className="ai-parameter-grid">
-					<div className="settings-field">
-						<label htmlFor="ai-provider">Provider</label>
-						<select id="ai-provider" value={configuration.provider} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, provider: event.target.value })}>
-							<option value="openai_compatible">OpenAI compatible</option><option value="workbuddy">WorkBuddy</option>
-						</select>
-					</div>
-					<div className="settings-field">
-						<label htmlFor="ai-model">Model</label>
-						<input id="ai-model" required maxLength={255} value={configuration.model} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, model: event.target.value })} />
-					</div>
-				</div>
+				<p className="settings-hint">{status.configured ? 'Saved configuration is ready to test.' : 'Add an API key and save to enable the connection test.'}</p>
 				<div className="settings-field">
-					<label htmlFor="ai-api-base">API endpoint URL</label>
-					<input id="ai-api-base" type="url" required maxLength={2048} value={configuration.apiBase ?? ''} disabled={busy} placeholder="https://your-provider.com/v1/chat/completions" onChange={(event) => setConfiguration({ ...configuration, apiBase: event.target.value })} />
+					<label htmlFor="ai-provider">Provider</label>
+					<select id="ai-provider" value={configuration.provider === 'workbuddy' ? '' : configuration.provider} disabled={busy} required onChange={(event) => {
+						setApiKey('')
+						setMessage('')
+						setConfiguration({ ...configuration, ...(event.target.value === 'google' ? googleAI : {
+							provider: 'openai_compatible', model: 'gpt-4o-mini', apiBase: 'https://api.openai.com/v1/chat/completions',
+						}) })
+					}}>
+						{configuration.provider === 'workbuddy' && <option value="" disabled>Select a supported provider</option>}
+						<option value="openai_compatible">OpenAI / compatible API</option>
+						<option value="google">Google Gemini</option>
+					</select>
 				</div>
+				{configuration.provider === 'google' && <p className="settings-hint">
+					Uses Gemini 3.5 Flash-Lite with Google’s endpoint.
+					{' '}<a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Get a Gemini API key</a>.
+				</p>}
 				<div className="settings-field">
 					<label htmlFor="experiment-ai-key">API key</label>
 					<input id="experiment-ai-key" type="password" autoComplete="new-password" value={apiKey} disabled={busy} maxLength={4096}
-						onChange={(event) => setApiKey(event.target.value)} placeholder={status.hasCustomKey ? 'Enter a replacement key' : 'Enter API key'} />
+						onChange={(event) => setApiKey(event.target.value)} required={configuration.provider !== status.provider || (status.hasCustomKey && configuration.apiBase !== status.apiBase)}
+						placeholder={status.hasCustomKey && configuration.provider === status.provider ? 'Enter a replacement key' : 'Enter API key'} />
 				</div>
-				<p className="settings-hint">Leave the key blank to keep a saved key. The server key applies only to the server’s default provider and endpoint. WorkBuddy requires its wbpk_ application key. Save your changes before testing the connection.</p>
-				<div className="ai-parameter-grid">
-					<label className="switch-label"><span>Streaming responses</span>
-						<button type="button" role="switch" aria-label="Streaming responses" aria-checked={configuration.stream ?? true} className={configuration.stream ? 'switch on' : 'switch'} disabled={busy} onClick={() => setConfiguration({ ...configuration, stream: !configuration.stream })}><span></span></button>
-					</label>
-					<div className="settings-field"><label htmlFor="ai-timeout">Timeout (seconds)</label>
-						<input id="ai-timeout" type="number" required min="0.1" max="600" step="any" value={configuration.timeoutSeconds} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, timeoutSeconds: Number(event.target.value) })} />
+				<p className="settings-hint">Leave this blank to keep a saved key for the same connection.</p>
+				<details className="ai-advanced-settings"><summary>Advanced settings</summary>
+					{configuration.provider === 'openai_compatible' && <div className="ai-parameter-grid">
+						<div className="settings-field">
+							<label htmlFor="ai-model">Model</label>
+							<input id="ai-model" required maxLength={255} value={configuration.model} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, model: event.target.value })} />
+						</div>
+						<div className="settings-field">
+							<label htmlFor="ai-api-base">API endpoint URL</label>
+							<input id="ai-api-base" type="url" required maxLength={2048} value={configuration.apiBase ?? ''} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, apiBase: event.target.value })} />
+						</div>
+					</div>}
+					<div className="ai-parameter-grid">
+						<label className="switch-label"><span>Streaming responses</span>
+							<button type="button" role="switch" aria-label="Streaming responses" aria-checked={configuration.stream ?? true} className={configuration.stream ? 'switch on' : 'switch'} disabled={busy} onClick={() => setConfiguration({ ...configuration, stream: !configuration.stream })}><span></span></button>
+						</label>
+						<div className="settings-field"><label htmlFor="ai-timeout">Timeout (seconds)</label>
+							<input id="ai-timeout" type="number" required min="0.1" max="600" step="any" value={configuration.timeoutSeconds} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, timeoutSeconds: Number(event.target.value) })} />
+						</div>
 					</div>
-				</div>
-				<details className="ai-advanced-settings"><summary>Advanced AI settings</summary>
 					<div className="settings-field"><label htmlFor="ai-temperature">Temperature (optional)</label>
 						<input id="ai-temperature" type="number" min="0" max="2" step="any" placeholder="Provider default" value={configuration.temperature ?? ''} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, temperature: event.target.value === '' ? null : Number(event.target.value) })} />
 					</div>
@@ -1018,7 +1036,8 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 					{isCommon && (status.hasCustomKey || status.hasCustomSettings) && <button type="button" className="secondary-button" disabled={busy} onClick={() => void updateKey(true)}>Use server default</button>}
 				</div>
 			</form>}
-			{status?.configured && <div className="settings-actions">
+			{status?.configured && !apiKey && configuration &&
+				JSON.stringify(configuration) === JSON.stringify(aiSettingsFields(status)) && <div className="settings-actions">
 				<button type="button" className="secondary-button" disabled={busy} onClick={() => void testConnection()}>
 					Test saved connection
 				</button>
@@ -1100,7 +1119,7 @@ export function StorageLocationCard() {
 					{settings ? (
 						settings.locations.map((name) => (
 							<option key={name} value={name}>
-								{name}
+								{name === 'legacy' ? 'Local server storage' : name}
 							</option>
 						))
 					) : (
@@ -1126,7 +1145,7 @@ export function StorageLocationCard() {
 			)}
 			{settings && (
 				<p className="settings-hint">
-					Available locations: {settings.locations.join(', ')}
+					{settings.location === 'legacy' ? 'Files are stored on this server.' : 'New files use the selected storage location.'}
 				</p>
 			)}
 		</section>

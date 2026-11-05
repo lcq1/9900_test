@@ -1364,11 +1364,10 @@ useEffect(() => {
 
 	const footer = (
 		<div className="participant-footer">
-			<span>
-				{stage.features.copyPaste
-					? 'Copy-paste logging on'
-					: 'No copy-paste capture on this stage'}{' '}
-				· {queue.count()} events captured this session
+			<span className="participant-footer-status">
+				{stage.type === 'instruction'
+					? `Stage ${stageIndex + 1} of ${experiment.stages.length}`
+					: `${stage.features.copyPaste ? 'Copy-paste logging on' : 'No copy-paste capture on this stage'} · ${queue.count()} events captured this session`}
 			</span>
 			<div className="participant-actions">{extensionButton}
 				{stage.features.pauseAbort && (

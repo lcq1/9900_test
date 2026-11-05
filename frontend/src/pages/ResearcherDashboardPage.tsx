@@ -1024,14 +1024,6 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 							<input id="ai-api-base" type="url" required maxLength={2048} value={configuration.apiBase ?? ''} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, apiBase: event.target.value })} />
 						</div>
 					</div>}
-					<div className="ai-parameter-grid">
-						<label className="switch-label"><span>Streaming responses</span>
-							<button type="button" role="switch" aria-label="Streaming responses" aria-checked={configuration.stream ?? true} className={configuration.stream ? 'switch on' : 'switch'} disabled={busy} onClick={() => setConfiguration({ ...configuration, stream: !configuration.stream })}><span></span></button>
-						</label>
-						<div className="settings-field"><label htmlFor="ai-timeout">Timeout (seconds)</label>
-							<input id="ai-timeout" type="number" required min="0.1" max="600" step="any" value={configuration.timeoutSeconds} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, timeoutSeconds: Number(event.target.value) })} />
-						</div>
-					</div>
 					<div className="settings-field"><label htmlFor="ai-temperature">Temperature (optional)</label>
 						<input id="ai-temperature" type="number" min="0" max="2" step="any" placeholder="Provider default" value={configuration.temperature ?? ''} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, temperature: event.target.value === '' ? null : Number(event.target.value) })} />
 					</div>
@@ -1047,7 +1039,19 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 							<label htmlFor={'ai-' + key}>{label}</label>
 							<input id={'ai-' + key} type="number" required min={min} max={max} step="1" value={configuration[key]} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, [key]: Number(event.target.value) })} />
 						</div>)}
+                        <div className="settings-field"><label htmlFor="ai-timeout">Timeout (seconds)</label>
+                            <input id="ai-timeout" type="number" required min="0.1" max="600" step="any" value={configuration.timeoutSeconds} disabled={busy} onChange={(event) => setConfiguration({ ...configuration, timeoutSeconds: Number(event.target.value) })} />
+                        </div>
 					</div>
+                    <div className="ai-response-delivery" role="group" aria-labelledby="ai-response-heading">
+                        <div>
+                            <h4 id="ai-response-heading">Response delivery</h4>
+                            <p id="ai-stream-help" className="settings-hint">Streaming shows the reply progressively as the AI generates it, so participants can start reading sooner. Turn it off to wait for one complete reply, or when your provider does not support streaming. It does not change the model’s answer quality.</p>
+                        </div>
+                        <label className="switch-label"><span>Streaming responses</span>
+                            <button type="button" role="switch" aria-label="Streaming responses" aria-describedby="ai-stream-help" aria-checked={configuration.stream ?? true} className={configuration.stream ? 'switch on' : 'switch'} disabled={busy} onClick={() => setConfiguration({ ...configuration, stream: !configuration.stream })}><span></span></button>
+                        </label>
+                    </div>
 				</details>
 				<div className="settings-actions">
 					<button type="submit" className="primary-button" disabled={busy}>{saving ? 'Saving…' : 'Save AI settings'}</button>
@@ -1241,7 +1245,7 @@ export function WorkspaceSettingsPage({
 		const key = localStorage.key(i)
 		if (!key || !key.startsWith('p13-')) continue
 		const value = localStorage.getItem(key) ?? ''
-		storageBytes += key.length + value.length
+		storageBytes += (key.length + value.length) * 2
 		if (key.startsWith('p13-events:')) {
 			// Count participant logs and valid events.
 			sessionCount += 1
@@ -1377,7 +1381,7 @@ export function WorkspaceSettingsPage({
 				<section className="settings-card">
 					<h3>Usage statistics</h3>
 					<p className="card-sub">
-						Live counts from this browser&apos;s workspace storage.
+						Your experiments and this device’s cached activity. Browser cache is not a server backup.
 					</p>
 					<div className="stat-mini">
 						<div>
@@ -1385,19 +1389,36 @@ export function WorkspaceSettingsPage({
 							<strong>{experiments.length}</strong>
 						</div>
 						<div>
-							<span>Captured sessions</span>
+							<span>Cached sessions</span>
 							<strong>{sessionCount}</strong>
 						</div>
 						<div>
-							<span>Captured events</span>
+							<span>Cached events</span>
 							<strong>{eventCount}</strong>
 						</div>
 						<div>
-							<span>Storage used</span>
+							<span>Browser cache (estimate)</span>
 							<strong>{storageKb} KB</strong>
 						</div>
 					</div>
 				</section>
+
+                <section className="settings-card study-preparation-card">
+                    <h3>Study preparation</h3>
+                    <p className="card-sub">A summary of your study configurations. Preview and test each study before inviting participants.</p>
+                    <div className="stat-mini">
+                        <div><span>Published studies</span><strong>{experiments.filter(item => item.status === 'Live').length}</strong></div>
+                        <div><span>Draft studies</span><strong>{experiments.filter(item => item.status === 'Draft').length}</strong></div>
+                        <div><span>AI-enabled studies</span><strong>{experiments.filter(item => item.stages.some(stage => stage.features.ai)).length}</strong></div>
+                        <div><span>Recording-enabled studies</span><strong>{experiments.filter(item => item.stages.some(stage => stage.recordingRequired || stage.features.screenRecording || stage.features.selfie)).length}</strong></div>
+                    </div>
+                    <p className="settings-hint">Enabled features are configuration counts, not a successful connection or recording test.</p>
+                    <div className="settings-actions">
+                        <a className="secondary-button" href="/researcher/dashboard">Review experiments</a>
+                        {experiments.length > 0 && <a className="secondary-button" href="/researcher/preview">Preview a study</a>}
+                        <a className="secondary-button" href="/researcher/results">View results</a>
+                    </div>
+                </section>
 
 				{/* Clear local workspace data after confirmation. */}
 				<section className="settings-card settings-danger-card">

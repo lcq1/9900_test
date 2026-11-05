@@ -74,6 +74,12 @@ The API key authenticates your account. The provider specifies how the site conn
 
 A blank key field can mean a saved key is being retained; it does not prove that no key exists. Changing provider or endpoint requires a matching key. A successful connection test does not guarantee future quota or availability. AI sends the conversation content to the configured external provider; use the data handling arrangement agreed for the study.
 
+### Response delivery and advanced limits
+
+In Advanced settings, **Streaming responses** is in the Response delivery panel. Enabled: the assistant shows text progressively while it is being generated. Disabled: it waits and displays the complete reply. Streaming lets participants start reading earlier; it does not improve answer quality. Turn it off for a provider that only supports complete JSON replies. Save the configuration after changing it. Timeout is beside Characters per history message, below History messages on a wide screen; these controls stack on a narrow screen.
+
+The **Study preparation** card beside Usage statistics shows counts of your published, draft, AI-enabled and recording-enabled studies, with links to review experiments, preview a study and view results. These are configuration counts, not proof that AI or recording was tested. Usage statistics combines your experiment count with this device's cached sessions/events and an approximate browser-cache size; it excludes server recordings and is not a backup.
+
 ## 5. Choose storage
 
 Open **Workspace settings → Storage** and select a location.

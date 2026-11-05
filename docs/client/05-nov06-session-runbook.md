@@ -1,9 +1,8 @@
 # Client item 5 — 6 November session runbook
 
-**Status: skeleton, pending client material.** The platform side of this runbook
-is executable today. The study content — questions, consent wording, media
-requirements, participant numbers — belongs to the client and is listed in
-section 6 as outstanding. Nothing below reproduces client material, and the
+**Status: scenario checklist; client materials are reported as uploaded to Teams but must be verified by the delivery team.** The platform side of this runbook
+is executable today. The client reports that study materials are in Teams/doc and the reference platform is in Teams/example. Questions, consent wording, media
+requirements and participant numbers belong to the client; verify the actual files and the section 6 items before the meeting. Nothing below reproduces client material, and the
 example stage content is a placeholder to be replaced.
 
 Purpose: run one complete researcher-and-participant session end to end, so the
@@ -45,7 +44,7 @@ Notes that matter during the build:
 - "Confirm before changing stage" adds a confirmation dialog on every stage
   change. Use it where an accidental click would lose work, not everywhere.
 - "Pause and abort controls" adds Pause and Abort buttons to the participant
-  footer. Both are recorded as events; Abort finishes the session.
+  footer. Both are recorded as events; Abort saves an unfinished, resumable session and is not a data-erasure operation.
 - Screen recording and camera/microphone capture always need browser
   permission. Automatic recording starts right after permission is granted;
   manual mode shows a start control instead.
@@ -99,11 +98,11 @@ Known behaviour to expect:
 | Session visible in Results | | |
 | Export opened | | |
 
-## 6. Pending client input
+## 6. Material and configuration verification
 
-These items block a faithful 6 November session and are not ours to invent:
+Verify these items against the uploaded Teams materials and the agreed study protocol; do not invent missing client content:
 
-1. The stage list and exact wording for each prompt and question.
+1. Confirm the Teams/doc materials contain the stage list and exact wording for each prompt and question.
 2. Consent text, and whether a handwritten signature or a typed legal name is
    required; the ethics approval reference covering the session.
 3. Whether screen recording, camera and microphone are permitted, and for which
@@ -112,15 +111,13 @@ These items block a faithful 6 November session and are not ours to invent:
    be reused across sessions.
 5. The AI model or endpoint to use, and any prompt or system instruction the
    study requires.
-6. The final storage destination (local directory or OneDrive) and who owns the
-   folder.
+6. The local storage destination and folder owner. The client explicitly requested local storage for the current development/testing phase; OneDrive is not a current-phase blocker.
 7. Whether the session may be recorded for the team's own review.
 
 ## 7. What this runbook does not cover
 
 - Ethics approval: the platform records what it is told to record; it does not
   grant approval and cannot enforce a protocol it was not configured for.
-- OneDrive: the storage location can be selected and validated, but the Graph
-  credentials and the destination folder are deployment configuration.
+- OneDrive is outside this phase. Local storage selection and extra host-directory configuration are documented in [the deployment guide](deployment-and-data-migration.md).
 - Long-term retention and deletion policy: administrator-side, not part of this
   session.

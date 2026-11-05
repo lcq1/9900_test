@@ -3,6 +3,9 @@
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Client Handover and Workflows](#client-handover-and-workflows)
+- [Configurable Hosting](#configurable-hosting)
+- [Data Ownership, Backup, and Migration](#data-ownership-backup-and-migration)
 - [File Tree and Responsibilities](#file-tree-and-responsibilities)
 - [Exported Files](#exported-files)
   - [Downloading and Opening Files](#downloading-and-opening-files)
@@ -42,6 +45,54 @@ curl http://localhost:8000/api/healthz   # {"status":"ok"}
 
 The backend image runs `alembic upgrade head` before serving, so the schema is created on first boot. Stop the stack with `docker compose down`; add `-v` only when you intend to discard stored data. Every supported variable is documented under [Environment Configuration](#environment-configuration); deployment-specific values belong in `.env` and must never be committed.
 
+## Client Handover and Workflows
+
+- [Client user guide](docs/client/user-guide.md): researcher, participant and administrator operations, AI/storage setup, charts, exports and troubleshooting.
+- [Deployment and data migration guide](docs/client/deployment-and-data-migration.md): fresh installation, admin bootstrap, database AND media backup/restore, hosting and future migration.
+- [Client requirements / acceptance status](docs/client/06-delivery-readiness.md): what is implemented, what still needs target-environment acceptance, and what is outside the current phase.
+- [Session runbook](docs/client/05-nov06-session-runbook.md): researcher-to-participant demonstration and material checks.
+
+A fresh installation has no existing developer-side accounts or studies. Register the first permitted researcher, then grant the first administrator role from the operator's terminal:
+
+```bash
+docker compose exec backend python -m app.administrator.bootstrap k.alqattan@unsw.edu.au
+```
+
+Use the real address without the email's Markdown escape (`unsw.edu.au`, not a literal backslash). Bootstrap requires an existing active account with a password and refuses to create another initial administrator once one exists. Sign in again after promotion; later account management uses the administrator dashboard. Account credentials must be delivered separately, never committed to Git.
+
+For the client's requested demonstration, create/save/preview/publish a study, enter as a participant with a unique code, complete consent, questions, AI and permitted recording, finish, then inspect charts, play media and download Excel. Use the material supplied by the client and record target-browser acceptance. The client's email states that ethical approval is under review; the application does not grant that approval.
+
+## Configurable Hosting
+
+The reference approach is a single Docker host running **Caddy HTTPS → built Nginx frontend → FastAPI → PostgreSQL**, with persistent local storage. No particular cloud vendor is required. Docker supports local operation on Windows/macOS/Linux; use a continuously running approved server for public hosting. Rebuild Linux images for the destination architecture and validate the actual browser/OS, particularly recording.
+
+The default `docker-compose.yml` runs a development frontend. The separate **standalone** `docker-compose.production.yml` builds the runtime frontend, publishes only gateway ports, keeps backend/database ports private, adds restart policies/health checks and bounds container logs. Do not merge it with the development file.
+
+```bash
+cp deploy/production.env.example .env.production
+# PowerShell: Copy-Item deploy/production.env.example .env.production
+# Set SITE_ADDRESS, PUBLIC_ORIGIN and independent strong JWT/database secrets.
+docker compose --env-file .env.production -f docker-compose.production.yml config --quiet
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --build --wait
+```
+
+A real domain must resolve to the server and public TCP ports 80/443 must reach Caddy for the usual automatic HTTPS setup. Persistent Caddy volumes retain certificate state. Starting containers alone does not establish public certificate issuance. Camera/microphone/screen capture needs a secure browser context for hosted use. See [Caddy HTTPS](https://caddyserver.com/docs/automatic-https) and the [hosting procedure](docs/client/deployment-and-data-migration.md#7-configurable-single-server-hosting).
+
+Domain, public origin, ports, credentials, database connection, volume names, storage mounts and AI settings are configurable without application-code changes. A separate server/cloud remains a **planned migration**: back up database/files, restore and verify the target, switch DNS, and retain rollback data. This does not provide automatic zero-downtime switching. Recreate services with `up -d` after environment changes; `restart` alone does not apply new environment values. Use the same env-file/Compose flags for subsequent commands. The production default project is `beyond-production`; it deliberately does not attach the development data volumes.
+
+The client currently requests local storage; OneDrive is not a current-phase requirement. Public acceptance still requires a host/domain, approved credentials, client-device workflow testing, automated backups/restore drills, monitoring, request/login rate limits, an account-recovery process and a load test matched to expected recording concurrency. Retention days and platform session-duration values currently record policy; they do not schedule deletion or enforce a separate global timer. These operational tasks are not automatically installed by the Compose file.
+
+## Data Ownership, Backup, and Migration
+
+**Source code and Docker images do not contain the running database or stored recordings.** On a new machine, existing volume names do not copy old data. A complete migration needs a PostgreSQL logical backup plus every referenced storage root; use the [backup/restore guide](docs/client/deployment-and-data-migration.md#4-what-must-be-migrated).
+
+- Database: accounts/password hashes, roles, experiments, publication history, sessions, answers/events and private AI configuration.
+- Storage: uploaded materials and recording bytes, separate from database metadata. A database-only restore can display recordings whose files are missing.
+- Browser: progress not yet synchronised is not included in server backups. Synchronise/finish sessions before copying data.
+- Excel/CSV/SVG: analysis/report outputs, not backups that can restore the website.
+
+Database backups can include saved AI keys; restrict/encrypt transfer and agree credential ownership. Do not commit data dumps, real `.env` files or recordings. Changing JWT_SECRET requires sign-in again; application password hashes remain valid after a full restore. Changing `POSTGRES_PASSWORD` in an env file does not reset an existing PostgreSQL role.
+
 ## File Tree and Responsibilities
 
 Paths are relative to this directory. Generated dependencies, build output, runtime data, Git internals, and document-folder contents are omitted. Python `__init__.py` files mark packages.
@@ -54,7 +105,9 @@ project/
 |-- .env.example                           # Configuration template with placeholders
 |-- .gitignore                             # Source-control exclusions
 |-- .gitlab-ci.yml                         # Continuous integration configuration
-|-- docker-compose.yml                     # Frontend, backend, PostgreSQL, ports, and persistent volumes
+|-- docker-compose.yml                     # Local development stack
+|-- docker-compose.production.yml          # Standalone configurable HTTPS hosting stack
+|-- deploy/                                # Caddyfile, production env template, optional disk mount
 |-- Meeting Minutes/                       # Meeting records
 |-- frontend/
 |   |-- Dockerfile                         # Development and production frontend images
@@ -165,7 +218,10 @@ project/
     |       |-- 0003_administrator_schema.py # Platform administration schema
     |       |-- 0004_overlay_compatibility.py # Compatibility migration
     |       |-- 0005_ai_conversations.py    # AI conversation and turn schema
-    |       `-- 0006_researcher_storage.py  # Per-researcher storage preference
+    |       |-- 0006_researcher_storage.py  # Per-researcher storage preference
+|       |-- 0007_session_client_lease.py # Browser-tab session ownership
+|       |-- 0008_platform_access.py     # Account approval, access codes and storage notice
+|       `-- 0009_token_revocation.py    # Signed-out token revocation
     `-- tests/
         |-- __init__.py                    # Test package marker
         |-- conftest.py                    # Isolated PostgreSQL schemas, API clients, and authentication fixtures
@@ -298,7 +354,7 @@ For a directly started backend, settings are loaded from the project-root `.env`
 
 Docker Compose uses the project `.env` for interpolation and also passes it to the backend through `env_file`. Explicit backend `environment` entries override that file. In particular, the container's database connection uses `DOCKER_DATABASE_URL`, or a generated URL using `POSTGRES_*` and hostname `db`; it does not directly use the host-oriented `DATABASE_URL` value. The backend image does not bind-mount source code in the supplied Compose configuration.
 
-The defaults below describe the checked-in backend/Compose configuration, not the values of a particular deployment.
+The tables below describe backend/development defaults. The production template is `deploy/production.env.example`: `SITE_ADDRESS`, `PUBLIC_ORIGIN`, `PUBLIC_BIND_ADDRESS`, `HTTP_PORT`, `HTTPS_PORT`, `COMPOSE_PROJECT_NAME` and `BEYOND_ENV_FILE` control its hosting environment. Production uses `PUBLIC_ORIGIN` for CORS and does not publish database/backend host ports. Keep both the interpolation env-file and backend `BEYOND_ENV_FILE` aligned.
 
 ### Database and Container Variables
 
@@ -349,7 +405,7 @@ Exact-address matching ignores case and surrounding whitespace. `ALLOWED_DOMAINS
 
 | Variable | Purpose and default behavior |
 | --- | --- |
-| `AI_PROVIDER` | Provider adapter: `openai_compatible` (default) or `workbuddy`. |
+| `AI_PROVIDER` | Current setup choices: `openai_compatible` (default) or `google`. The backend retains a legacy WorkBuddy adapter for older installations; it is not offered for new UI configurations. |
 | `AI_API_KEY` | Server fallback API key; empty/unset means no server key. Workspace settings can override it in the researcher's common configuration or an experiment's independent configuration. |
 | `AI_API_BASE` | Full Chat Completions URL, including its endpoint path. Backend default `https://api.openai.com/v1/chat/completions`; the template uses a placeholder endpoint. |
 | `AI_MODEL` | Provider model identifier; backend default `gpt-4o-mini`. Replace the template model placeholder. |
@@ -363,9 +419,9 @@ Exact-address matching ignores case and surrounding whitespace. `ALLOWED_DOMAINS
 
 Workspace settings > AI API keys supports all AI parameters in the table above. Select Common configuration (all my experiments) to edit the signed-in researcher's shared provider, completion URL, model, API key, streaming, timeout, prompt, and context limits. For a specific experiment, check Use independent configuration to display and edit that experiment's own settings. Leave it unchecked to follow the common configuration and its future updates, with the experiment's configuration fields hidden. Switching sources retains the saved independent settings and key. New experiments use common configuration; previously configured experiments retain independent mode. Common configurations are isolated between researchers.
 
-The main form contains connection settings; Advanced AI settings contains optional prompt and context controls. Independent parameter fields initially copy common values when no independent settings exist; the common key is not copied. A blank key input keeps the existing key or the server default. Unconfigured independent fields inherit server defaults, not subsequent common changes. A blank temperature omits that parameter; a blank system prompt uses the built-in research assistant instructions. In common configuration, Use server default removes the custom common settings and key and reloads `.env` defaults without changing independent experiments. Saving settings does not perform a live provider test. Keys are never returned to the browser, and AI configuration is not included in published experiment snapshots or exports.
+The main form presents the provider/key and preset information; custom endpoint/model controls are relevant to compatible services, while Advanced settings contains optional controls. Independent parameter fields initially copy common values when no independent settings exist; the common key is not copied. A blank key input keeps the existing key or the server default. Unconfigured independent fields inherit server defaults, not subsequent common changes. A blank temperature omits that parameter; a blank system prompt uses the built-in research assistant instructions. In common configuration, Use server default removes the custom common settings and key and reloads `.env` defaults without changing independent experiments. Saving settings does not perform a live provider test. Keys are never returned to the browser, and AI configuration is not included in published experiment snapshots or exports.
 
-For WorkBuddy, use `AI_PROVIDER=workbuddy`, the application's `wbpk_` publishable key, the full WorkBuddy completion URL, and its model identifier. This is the application's public access key, not a model-provider secret.
+For Google, select Google in Workspace settings and enter a Google API key, or set `AI_PROVIDER=google` for server defaults. The current Google adapter applies its endpoint/model preset from `backend/app/researcher/ai_config.py`; custom compatible services use the OpenAI-compatible option. A key authenticates an account/project, while provider, endpoint and model determine how and where requests are sent. Save and test the actual configuration; no free quota or model availability is guaranteed by this repository.
 
 ### Storage Variables
 
@@ -378,7 +434,7 @@ For WorkBuddy, use `AI_PROVIDER=workbuddy`, the application's `wbpk_` publishabl
 | `ONEDRIVE_CLIENT_SECRET` | Optional Microsoft Graph client secret. |
 | `ONEDRIVE_TENANT_ID` | Optional Microsoft Graph tenant ID. |
 
-Storage locations are configured on the server, and each researcher picks one of the configured names in Workspace settings → Storage. The choice is stored per researcher and validated against the server configuration, and the backend probes it for writability before accepting it (422 for an unknown name, 507 when the directory is not writable). Only new files use the new location; previously saved files stay where they are. A directory outside the default storage volume needs its own persistent mount in a container deployment. The Microsoft Graph variables apply to the optional storage helper; they do not automatically replace all local recording/material storage.
+Researchers select a configured location or create a named workspace folder in Workspace settings → Storage. Workspace folders live under the existing server storage root; they do not attach a disk, connect a cloud account or change capacity. Additional server directories are configured by the operator. The choice is stored per researcher and validated against the server configuration, and the backend probes it for writability before accepting it (422 for an unknown name, 507 when the directory is not writable). Only new files use the new location; previously saved files stay where they are. A directory outside the default storage volume needs its own persistent mount in a container deployment. For a second local disk/host directory, see `deploy/storage.compose.example.yml` and the [local storage mount procedure](docs/client/deployment-and-data-migration.md#researcher-selectable-local-storage). Paths entered for Docker are container paths; the operator mounts the real Windows/macOS/Linux host folder. The optional Graph helper is not an accepted OneDrive integration and is not required for the client's current local-storage phase.
 
 ### Frontend Variables
 

@@ -18,15 +18,9 @@ services:
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
 
-  # Production frontend: uncomment this service and disable the development frontend.
-  # frontend-production:
-  #   build:
-  #     context: ./frontend
-  #     target: runtime
-  #   ports:
-  #     - "${FRONTEND_PORT:-8080}:80"
-  #   depends_on:
-  #     backend:
+  # Public hosting uses the separate docker-compose.production.yml.
+
+  backend:
   #       condition: service_healthy
 
   backend:

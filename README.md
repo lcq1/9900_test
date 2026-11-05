@@ -62,6 +62,8 @@ docker compose exec backend python -m app.administrator.bootstrap k.alqattan@uns
 
 Use the real address without the email's Markdown escape (`unsw.edu.au`, not a literal backslash). Bootstrap requires an existing active account with a password and refuses to create another initial administrator once one exists. Sign in again after promotion; later account management uses the administrator dashboard. Account credentials must be delivered separately, never committed to Git.
 
+Click the signed-in avatar/name in the sidebar for **Your account**: server-saved name, read-only account information, password change with current-password verification, workspace shortcuts and sign-out. A password change renews the current session and invalidates earlier account tokens. Registration, sign-in and password-change forms offer an optional password visibility checkbox.
+
 For the client's requested demonstration, create/save/preview/publish a study, enter as a participant with a unique code, complete consent, questions, AI and permitted recording, finish, then inspect charts, play media and download Excel. Use the material supplied by the client and record target-browser acceptance. The client's email states that ethical approval is under review; the application does not grant that approval.
 
 ## Configurable Hosting

@@ -1392,6 +1392,8 @@ nav {
 	}
 	.main-content {
 		margin-left: 205px;
+		width: calc(100% - 205px);
+		max-width: calc(100% - 205px);
 	}
 	.editor-grid {
 		grid-template-columns: 180px minmax(330px, 1fr);
@@ -1416,6 +1418,8 @@ nav {
 	}
 	.main-content {
 		margin-left: 57px;
+		width: calc(100% - 57px);
+		max-width: calc(100% - 57px);
 	}
 	.brand > span:last-child,
 	.workspace-label,
@@ -4705,3 +4709,140 @@ select:not([multiple]):not([size]) {
 		overflow-y: auto;
 	}
 }
+
+/* Account forms use a bounded reading width rather than the workspace canvas. */
+.registration-page {
+	max-width: none;
+	min-height: 100vh;
+	padding: 28px 20px 48px;
+}
+.registration-page > .back-link {
+	display: flex;
+	max-width: 540px;
+	width: 100%;
+	margin: 0 auto 18px;
+	font-size: 14px;
+}
+.register-card,
+.register-done {
+	width: 100%;
+	max-width: 540px;
+	margin: 0 auto;
+	padding: 32px;
+	background: #fff;
+	border: 1px solid var(--border);
+	border-radius: 18px;
+	box-shadow: 0 8px 32px #1f355408;
+}
+.registration-page h1 {
+	font-size: clamp(24px, 2.4vw, 30px);
+	line-height: 1.25;
+	letter-spacing: -0.5px;
+	margin: 10px 0 12px;
+}
+.registration-page .subheading,
+.registration-page p[role="note"],
+.register-done > p {
+	font-size: 14px;
+	line-height: 1.65;
+	margin: 0 0 18px;
+	overflow-wrap: anywhere;
+}
+.registration-page form { display: grid; gap: 16px; }
+.registration-page .entry-label { margin: 0; font-size: 14px; gap: 7px; }
+.registration-page .entry-label input {
+	width: 100%;
+	min-width: 0;
+	min-height: 46px;
+	border-radius: 9px;
+	font: inherit;
+	font-size: 16px;
+	padding: 11px 12px;
+}
+#registration-password-help {
+	font-size: 12px;
+	line-height: 1.5;
+	color: #64748b;
+	margin: -8px 0 0;
+}
+.registration-page .entry-error { margin: 0; font-size: 13px; line-height: 1.5; }
+.registration-page .entry-button { margin: 0; min-height: 46px; font-size: 15px; }
+.register-done { text-align: center; margin-top: 48px; }
+.register-done-icon {
+	display: grid;
+	place-items: center;
+	width: 56px;
+	height: 56px;
+	margin: 0 auto 20px;
+	border-radius: 50%;
+	color: #176048;
+	background: #e9f6ef;
+}
+.register-done .primary-button { min-height: 44px; font-size: 14px; }
+label.password-visibility,
+.auth-panel label.password-visibility {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	font-size: 14px;
+	line-height: 1.5;
+	font-weight: 400;
+	cursor: pointer;
+	margin: 0;
+}
+.password-visibility input[type="checkbox"],
+.auth-panel .password-visibility input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+	flex: 0 0 auto;
+	accent-color: #2563eb;
+}
+button.profile {
+	width: 100%;
+	background: transparent;
+	color: inherit;
+	border: 0;
+	border-top: 1px solid #33415a;
+	text-align: left;
+	cursor: pointer;
+	border-radius: 0 0 8px 8px;
+}
+button.profile:hover { background: #2a3c54; }
+button.profile:focus-visible { outline: 2px solid #8bb8ff; outline-offset: 4px; }
+.profile .avatar { flex: 0 0 auto; }
+.profile > div { min-width: 0; }
+.profile strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-page { max-width: 1160px; padding: 32px; margin: auto; }
+.account-heading h1 { font-size: 28px; line-height: 1.3; margin: 0 0 8px; }
+.account-heading p { color: #64748b; font-size: 14px; margin: 0 0 24px; }
+.account-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.account-card { padding: 24px; min-width: 0; background: white; border: 1px solid var(--border); border-radius: 14px; }
+.account-card h2 { font-size: 20px; line-height: 1.4; margin: 0 0 18px; }
+.account-card form { display: grid; gap: 16px; }
+.account-card label { display: grid; gap: 8px; font-size: 14px; color: #526176; }
+.account-card input:not([type="checkbox"]) { width: 100%; min-width: 0; min-height: 46px; padding: 10px 12px; font-size: 16px; border: 1px solid var(--border); border-radius: 9px; }
+.account-card input[readonly] { background: #f5f7fa; color: #64748b; }
+.account-hint { font-size: 13px; line-height: 1.6; color: #64748b; margin: 0 0 16px; }
+.account-card form .account-hint { margin: -6px 0 0; }
+.account-details { margin: 0; display: grid; gap: 10px; }
+.account-details > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 14px; }
+.account-details dt { color: #64748b; }
+.account-details dd { margin: 0; font-weight: 600; text-transform: capitalize; }
+.account-card .entry-error { font-size: 13px; margin: 0; }
+.account-success { background: #edf9f1; color: #176048; padding: 12px; border-radius: 8px; font-size: 14px; line-height: 1.5; margin: 0; }
+.account-shortcuts { grid-column: 1 / -1; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.account-card button { font-size: 14px; }
+@media (max-width: 900px) { .account-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+	.registration-page { padding: 20px 16px 32px; }
+	.register-card, .register-done { padding: 24px 20px; }
+	.register-done { margin-top: 24px; }
+	.account-page { padding: 24px 16px; }
+	.account-card { padding: 20px; }
+	.account-actions { flex-direction: column; }
+}
+.account-card label.password-visibility { display: flex; align-items: center; gap: 9px; }

@@ -1,4 +1,4 @@
-import { safeKeys, safeRemoveItem, safeSetItem } from './participant/safeStorage'
+import { safeKeys, safeRemoveItem } from './participant/safeStorage'
 import { useTransientNotice } from './participant/TimerController'
 import { ParticipantAccessPage } from './pages/ParticipantPage'
 import {
@@ -20,7 +20,7 @@ import {
 import { Alert, Modal } from "antd";
 import {
 	BarChart3,
-	ChevronDown,
+	ChevronRight,
 	LayoutDashboard,
 	LogOut,
 	Play,
@@ -44,6 +44,7 @@ import {
 } from "./pages/ResearcherDashboardPage";
 import { Editor } from './pages/ExperimentEditorPage'
 import { ParticipantEntry } from './pages/ParticipantPage'
+import { AccountPage } from "./pages/AccountPage";
 import { AdministratorPage } from './pages/AdministratorPage'
 import {
 	createStage,
@@ -123,25 +124,7 @@ function WorkspaceLayout({
 		location = useLocation(),
 		session = useSessionStore((s) => s.session);
 	const me = session?.researcher;
-	const [profileName, setProfileName] = useState(me?.name || "Researcher");
-	useEffect(() => {
-		const update = () => {
-			try {
-				setProfileName(
-					localStorage.getItem("beyond-display-name:" + me?.id) ||
-					JSON.parse(localStorage.getItem("p13-workspace") || "{}")
-						.researcherName ||
-					me?.name ||
-					"Researcher",
-				);
-			} catch {
-				setProfileName(me?.name || "Researcher");
-			}
-		};
-		update();
-		window.addEventListener("beyond-profile-change", update);
-		return () => window.removeEventListener("beyond-profile-change", update);
-	}, [me?.id, me?.name]);
+	const profileName = me?.name || "Researcher";
 	const links = [
 		{
 			path: "/researcher/dashboard",
@@ -212,7 +195,7 @@ function WorkspaceLayout({
 						<Settings2 size={17} />
 						Workspace settings
 					</button>
-					<div className="profile">
+					<button type="button" className="profile" aria-label={`Account settings for ${profileName}`} onClick={() => navigate("/researcher/account")}>
 						<span className="avatar">
 							{profileName.charAt(0).toUpperCase()}
 						</span>
@@ -222,8 +205,8 @@ function WorkspaceLayout({
 								{me?.role === "administrator" ? "Administrator" : "Researcher"}
 							</small>
 						</div>
-						<ChevronDown size={15} />
-					</div>
+						<ChevronRight size={15} />
+					</button>
 				</div>
 			</aside>
 			<main className="main-content">
@@ -282,21 +265,6 @@ function WorkspacePage({ view }: { view: 'preview' | 'results' | 'settings' }) {
 	const [previewParticipantCode] = useState(
 		() => `PREVIEW-${crypto.randomUUID()}`,
 	)
-	const me = useSessionStore((s) => s.session?.researcher)
-	const [workspaceSettings, setWorkspaceSettings] = useState(() => {
-		try {
-			return {
-				researcherName:
-					localStorage.getItem('beyond-display-name:' + me?.id) ||
-					JSON.parse(localStorage.getItem('p13-workspace') || '{}')
-						.researcherName ||
-					me?.name ||
-					'Researcher',
-			}
-		} catch {
-			return { researcherName: me?.name || 'Researcher' }
-		}
-	})
 	return (
 		<WorkspaceLayout
 			title={
@@ -337,19 +305,6 @@ function WorkspacePage({ view }: { view: 'preview' | 'results' | 'settings' }) {
 			) : (
 				<WorkspaceSettingsPage
 					experiments={experiments}
-					settings={workspaceSettings}
-					onChange={(next) => {
-						setWorkspaceSettings(next)
-						safeSetItem(
-							'p13-workspace',
-							JSON.stringify(next),
-						)
-						safeSetItem(
-							'beyond-display-name:' + me?.id,
-							next.researcherName,
-						)
-						window.dispatchEvent(new Event('beyond-profile-change'))
-					}}
 					onClearAll={() => {
 						for (const key of safeKeys()) {
 							if (
@@ -764,6 +719,7 @@ export default function App() {
 					}
 				/>
 			))}
+            <Route path="/researcher/account" element={<Protected><WorkspaceLayout title="Your account"><AccountPage /></WorkspaceLayout></Protected>} />
 			<Route path="/participant" element={<Participant />} />
 			<Route
 				path="/administrator/dashboard"

@@ -29,6 +29,8 @@ from app.researcher.schemas import (
     ExperimentCreate,
     ExperimentUpdate,
     LoginRequest,
+    ProfileUpdate,
+    PasswordChange,
     LoginResponse,
     Researcher as ResearcherSchema,
     ResearcherRegistration,
@@ -86,6 +88,37 @@ def logout(
             return {"status": "ok"}
         revoke_access_token(db, token, researcher)
     return {"status": "ok"}
+
+
+@router.get("/researchers/me", response_model=ResearcherSchema)
+def current_profile(researcher: Researcher = Depends(get_current_researcher)):
+    return researcher
+
+
+@router.patch("/researchers/me", response_model=ResearcherSchema)
+def update_profile(payload: ProfileUpdate, db: Session = Depends(get_db),
+                   researcher: Researcher = Depends(get_current_researcher)):
+    account = db.query(Researcher).filter_by(id=researcher.id).populate_existing().with_for_update().one()
+    account.name = payload.name
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+@router.post("/auth/password", response_model=LoginResponse)
+def change_password(payload: PasswordChange, db: Session = Depends(get_db),
+                    researcher: Researcher = Depends(get_current_researcher)):
+    from app.core.security import verify_password, hash_password
+    account = db.query(Researcher).filter_by(id=researcher.id).populate_existing().with_for_update().one()
+    if not verify_password(payload.current_password, account.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=422, detail="Choose a different new password.")
+    account.password_hash = hash_password(payload.new_password)
+    account.auth_version += 1
+    db.commit()
+    return {"token": create_access_token(account.id, account.auth_version),
+            "researcher": account, "issuedAt": clock.now_iso()}
 
 
 @router.get("/researchers", response_model=list[ResearcherSchema])

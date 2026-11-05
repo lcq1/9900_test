@@ -105,8 +105,6 @@ describe('workspace storage location', () => {
 		render(
 			<WorkspaceSettingsPage
 				experiments={[]}
-				settings={{ researcherName: 'Researcher' }}
-				onChange={() => {}}
 				onClearAll={() => {}}
 			/>,
 		)

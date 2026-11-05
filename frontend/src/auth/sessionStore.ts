@@ -23,6 +23,12 @@ export function setSession(session: Session): void {
 	useSessionStore.setState({ session })
 }
 
+// Update identity only while this account is still the signed-in account.
+export function updateSessionResearcher(researcher: Session['researcher']): void {
+    const current = getSession()
+    if (current?.researcher.id === researcher.id) setSession({ ...current, researcher })
+}
+
 // Read the cached session; return null if missing or invalid.
 export function getSession(): Session | null {
 	return useSessionStore.getState().session

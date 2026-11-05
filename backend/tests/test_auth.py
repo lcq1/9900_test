@@ -371,3 +371,37 @@ def test_simultaneous_registration_returns_conflict(client):
     with ThreadPoolExecutor(max_workers=2) as pool:
         responses = list(pool.map(lambda _: client.post("/api/auth/register", json=body), range(2)))
     assert sorted(response.status_code for response in responses) == [201, 409]
+
+
+def test_personal_profile_is_persisted_and_cannot_change_privileges(client, auth_headers):
+    from tests.conftest import register_and_login
+    mine = client.get("/api/researchers/me", headers=auth_headers)
+    assert mine.status_code == 200
+    assert "passwordHash" not in mine.json()
+    other = {"Authorization": "Bearer " + register_and_login(client, name="Other Researcher", email="profile-other@example.com")}
+    changed = client.patch("/api/researchers/me", headers=auth_headers, json={"name": "  Updated Researcher  "})
+    assert changed.status_code == 200 and changed.json()["name"] == "Updated Researcher"
+    assert client.get("/api/researchers/me", headers=auth_headers).json()["name"] == "Updated Researcher"
+    assert client.get("/api/researchers/me", headers=other).json()["name"] == "Other Researcher"
+    assert client.patch("/api/researchers/me", headers=auth_headers, json={"name": " "}).status_code == 422
+    assert client.patch("/api/researchers/me", headers=auth_headers, json={"name": "Updated", "role": "administrator"}).status_code == 422
+    assert client.patch("/api/researchers/me", headers=auth_headers, json={"name": "Updated", "email": "other@example.com"}).status_code == 422
+    assert client.get("/api/researchers/me").status_code == 401
+
+
+def test_password_change_checks_current_password_and_rotates_sessions(client, auth_headers):
+    credentials = {"email": "researcher@example.com", "password": "password123"}
+    other = {"Authorization": "Bearer " + client.post("/api/auth/login", json=credentials).json()["token"]}
+    endpoint = "/api/auth/password"
+    assert client.post(endpoint, headers=auth_headers, json={"currentPassword": "wrong", "newPassword": "replacement-password"}).status_code == 400
+    assert client.get("/api/researchers/me", headers=auth_headers).status_code == 200
+    for new in ("short", "中" * 25, credentials["password"]):
+        assert client.post(endpoint, headers=auth_headers, json={"currentPassword": credentials["password"], "newPassword": new}).status_code == 422
+    changed = client.post(endpoint, headers=auth_headers, json={"currentPassword": credentials["password"], "newPassword": "replacement-password"})
+    assert changed.status_code == 200
+    renewed = {"Authorization": "Bearer " + changed.json()["token"]}
+    assert client.get("/api/researchers/me", headers=renewed).status_code == 200
+    assert client.get("/api/researchers/me", headers=auth_headers).status_code == 401
+    assert client.get("/api/researchers/me", headers=other).status_code == 401
+    assert client.post("/api/auth/login", json=credentials).status_code == 401
+    assert client.post("/api/auth/login", json={**credentials, "password": "replacement-password"}).status_code == 200

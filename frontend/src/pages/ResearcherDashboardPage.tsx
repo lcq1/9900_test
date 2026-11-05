@@ -1199,13 +1199,9 @@ export function StorageLocationCard() {
 
 export function WorkspaceSettingsPage({
 	experiments,
-	settings,
-	onChange,
 	onClearAll,
 }: {
 	experiments: Experiment[]
-	settings: { researcherName: string }
-	onChange: (next: { researcherName: string }) => void
 	onClearAll: () => void
 }) {
 	// Track backend members and platform settings.
@@ -1284,15 +1280,7 @@ export function WorkspaceSettingsPage({
 					<p className="card-sub">
 						How your name appears across the workspace.
 					</p>
-					<div className="settings-field">
-						<label>Researcher name</label>
-						<input
-							value={settings.researcherName}
-							onChange={(event) =>
-								onChange({ researcherName: event.target.value })
-							}
-						/>
-					</div>
+                    <a className="secondary-button" href="/researcher/account">Manage personal details and password</a>
 					{me && (
 						<div className="member-row" style={{ marginTop: 14 }}>
 							<span className="member-avatar">

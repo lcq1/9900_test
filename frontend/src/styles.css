@@ -1562,6 +1562,59 @@ nav {
 	gap: 12px;
 	flex-wrap: wrap;
 }
+.stage-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    min-height: 38px;
+    margin-bottom: 12px;
+}
+.stage-header-row .participant-meta { min-width: 0; }
+.stage-save-slot {
+    display: flex;
+    justify-content: flex-end;
+    min-width: 150px;
+    min-height: 30px;
+    margin-left: auto;
+    max-width: 100%;
+}
+.stage-save-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 5px 10px;
+    border: 1px solid #deebe5;
+    border-radius: 999px;
+    background: #f4f9f6;
+    color: #47745c;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 18px;
+    letter-spacing: 0;
+    text-align: left;
+}
+.stage-save-status svg { flex-shrink: 0; }
+.stage-save-status.is-saving {
+    color: #526b88;
+    background: #f3f6fb;
+    border-color: #e1e8f1;
+}
+.stage-save-status.is-warning {
+    color: #895c20;
+    background: #fff8ed;
+    border-color: #f0dfbf;
+}
+.stage-save-status.is-saving svg { animation: stage-save-spin 1.2s linear infinite; }
+@keyframes stage-save-spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) {
+    .stage-save-slot { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .stage-save-status.is-saving svg { animation: none; }
+}
 .stage-clock,
 .stage-timer {
 	color: #5a6675;

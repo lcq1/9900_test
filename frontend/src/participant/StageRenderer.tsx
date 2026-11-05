@@ -5,6 +5,9 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckSquare,
+  CircleCheck,
+  CloudOff,
+  LoaderCircle,
   CircleStop,
   MessageCircle,
   MonitorPlay,
@@ -940,8 +943,13 @@ useEffect(() => {
 
 	// The stage body (everything except the AI rail and the footer) is shared by
 	// both the single-column and split layouts.
+	const syncPending = saving || syncStatus === 'Saving progress…'
+	const syncFailed = !saving && syncStatus.includes('Server sync failed')
+	const syncLabel = saving ? 'Saving recording…' : syncFailed ? 'Saved in browser · retrying sync' : syncPending ? 'Saving progress…' : 'Progress saved'
+	const SyncIcon = syncPending ? LoaderCircle : syncFailed ? CloudOff : CircleCheck
 	const stageBody = (
 		<>
+			<div className="stage-header-row">
 			<div className="participant-meta">
 				<span className="section-tag">{stage.type.toUpperCase()}</span>
 				{stage.features.clock && <StageClock />}
@@ -951,6 +959,18 @@ useEffect(() => {
 					</span>
 				)}
 			</div>
+                <div className="stage-save-slot">
+                    {(syncStatus || saving) && <span
+                        className={'stage-save-status' + (syncFailed ? ' is-warning' : syncPending ? ' is-saving' : '')}
+                        role="status" aria-live="polite" aria-atomic="true"
+                        aria-label={saving ? syncLabel : syncStatus}
+                        title={saving ? syncLabel : syncStatus}
+                    >
+                        <SyncIcon size={15} aria-hidden="true" />
+                        <span>{syncLabel}</span>
+                    </span>}
+                </div>
+            </div>
 
 			<h1>{stage.name}</h1>
 			{!isConsent &&
@@ -973,8 +993,6 @@ useEffect(() => {
 						{material.name}
 					</button>
 				))}
-			{saving && <p role="status">Saving recording…</p>}
-{syncStatus && !saving && <p role="status">{syncStatus}</p>}
 			{storageLimited && (
 				<Alert
 					className="participant-storage-notice"

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { http, downloadFile } from '../api/http'
 import { AIChat } from './AIChat'
+import { StageNavigation } from './StageNavigation'
 import { ConsentView } from './ConsentView'
 import { useTimerController, useTransientNotice } from './TimerController'
 import { EventQueue, type ParticipantEvent } from './EventQueue'
@@ -133,7 +134,7 @@ useEffect(() => onStorageDegraded(setStorageLimited), [])
 	const allowFreeOrder = Boolean(experiment.stages[0]?.features.navigation)
 
 	// Whether every required questionnaire question in a stage has been answered.
-	// Used by the left question-number panel to colour each step green/grey in
+	// Used by the horizontal stage navigation to colour each step green/grey in
 	// real time. Consent steps are "done" once the participant has signed.
 	const isStageAnswered = (target: Experiment['stages'][number]) => {
 		if (target.type.toLowerCase() === 'consent') return consentedStageId === target.id
@@ -1485,9 +1486,7 @@ useEffect(() => {
 						</label>
 					)}
 					<div className="participant-question-layout">
-						<aside className="question-nav-panel" aria-label="Question navigation">
-							<div className="question-nav-title">Questions</div>
-							<div className="qnav-list" role="navigation" aria-label="Study progress">
+                        <StageNavigation currentStep={stageIndex + 1} total={experiment.stages.length}>
 								{experiment.stages.map((s, i) => {
 									const answered = isStageAnswered(s)
 									return (
@@ -1495,6 +1494,7 @@ useEffect(() => {
 											type="button"
 											key={s.id}
 											aria-label={s.name}
+                                            title={s.name}
 											aria-current={i === stageIndex ? 'step' : undefined}
 											className={
 												'qnav-item' +
@@ -1517,8 +1517,7 @@ useEffect(() => {
 										</button>
 									)
 								})}
-							</div>
-						</aside>
+                        </StageNavigation>
 						<div className="participant-question-content">
 							<div className="step-eyebrow">
 								Step {stageIndex + 1} · {stage.name}

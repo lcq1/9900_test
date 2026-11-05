@@ -75,6 +75,24 @@ def workspace_settings(
     return settings_service.get_settings(db)
 
 
+@workspace_router.get("/usage")
+def workspace_usage(db: Session = Depends(get_db), researcher: Researcher = Depends(get_current_researcher)):
+    from sqlalchemy import func
+    from app.participant.models import ParticipantSession, ParticipantEvent, Recording
+    from app.core import clock
+    owned_codes = db.query(Experiment.code).filter(Experiment.owner_id == researcher.id)
+    sessions = db.query(ParticipantSession.id).filter(ParticipantSession.experiment_code.in_(owned_codes))
+    total = db.query(func.count(ParticipantSession.id)).filter(ParticipantSession.id.in_(sessions)).scalar()
+    completed = db.query(func.count(ParticipantSession.id)).filter(
+        ParticipantSession.id.in_(sessions), ParticipantSession.finished_at.is_not(None)).scalar()
+    return {"experiments": db.query(func.count(Experiment.id)).filter(Experiment.owner_id == researcher.id).scalar(),
+            "sessions": total, "completedSessions": completed,
+            "events": db.query(func.count(ParticipantEvent.id)).filter(ParticipantEvent.session_id.in_(sessions),
+                ~ParticipantEvent.type.startswith("server.")).scalar(),
+            "recordings": db.query(func.count(Recording.id)).filter(Recording.session_id.in_(sessions)).scalar(),
+            "updatedAt": clock.now_iso()}
+
+
 @workspace_router.get("/members", response_model=list[ResearcherSchema])
 def workspace_members(
     db: Session = Depends(get_db),

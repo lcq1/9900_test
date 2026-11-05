@@ -23,6 +23,7 @@ from app.participant.export_csv import ExportView, export_experiment_csv
 from app.participant.models import ParticipantSession
 from app.participant.recording import append_chunk
 from app.researcher import service as svc
+from app.researcher.templates import StudyTemplate, design_for, fresh_stages
 from app.researcher.models import Researcher
 from app.researcher.schemas import (
     Experiment,
@@ -173,6 +174,39 @@ def create_experiment(
         stages=stages,
         id=payload.id,
     )
+
+
+@router.get("/experiments/{experiment_id}/template")
+def export_template(experiment_id: str, db: Session = Depends(get_db),
+                    researcher: Researcher = Depends(get_current_researcher)):
+    import json
+    experiment = owned_experiment(db, experiment_id, researcher)
+    return Response(content=json.dumps(design_for(experiment).model_dump(by_alias=True), ensure_ascii=False),
+                    media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="{experiment.code}-design.json"'})
+
+
+async def template_size_limit(request: Request):
+    if len(await request.body()) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Study design files must be at most 2 MB.")
+
+
+@router.post("/experiments/import-template", response_model=Experiment, status_code=201,
+             dependencies=[Depends(template_size_limit)])
+def import_template(payload: StudyTemplate, db: Session = Depends(get_db),
+                    researcher: Researcher = Depends(get_current_researcher)):
+    return svc.create_experiment(db, name=payload.name, owner_id=researcher.id, status="Draft",
+        full_screen=payload.full_screen, storage_notice=payload.storage_notice, stages=fresh_stages(payload))
+
+
+@router.post("/experiments/{experiment_id}/duplicate", response_model=Experiment, status_code=201)
+def duplicate_experiment(experiment_id: str, db: Session = Depends(get_db),
+                         researcher: Researcher = Depends(get_current_researcher)):
+    source = owned_experiment(db, experiment_id, researcher)
+    design = design_for(source)
+    return svc.create_experiment(db, name=(design.name[:248] + " (copy)"), owner_id=researcher.id,
+        status="Draft", full_screen=design.full_screen, storage_notice=design.storage_notice,
+        stages=fresh_stages(design))
 
 
 @router.patch("/experiments/{experiment_id}", response_model=Experiment)

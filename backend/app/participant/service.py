@@ -136,6 +136,18 @@ def validate_stage(stage: dict, answers: list, recording: dict):
         raise HTTPException(status_code=422, detail="Required: " + ", ".join(missing))
 
 
+def submitted_stage_ids(db: Session, session_id: str) -> set[str]:
+    """Only validated submissions written by the server unlock subsequent stages."""
+    return {event.detail["stageId"] for event in db.query(ParticipantEvent).filter_by(
+        session_id=str(session_id), type="server.stage_submitted").all()
+        if event.detail and "stageId" in event.detail}
+
+
+def next_stage_index(db: Session, session_id: str, stages: list[dict]) -> int:
+    submitted = submitted_stage_ids(db, session_id)
+    return next((index for index, stage in enumerate(stages) if stage["id"] not in submitted), len(stages))
+
+
 def submit_session(
     db: Session, payload: ParticipantSessionSubmit
 ) -> ParticipantSessionResult:

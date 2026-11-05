@@ -115,7 +115,13 @@ export function ParticipantPreview({
     typeof remaining === 'number' && Number.isFinite(remaining) && remaining >= 0
   safeSetItem('p13-timer:' + initialSessionId + ':' + id, String(frozen ? Date.now() + remaining * 1000 : deadline))
  }
- return saved
+ if (!saved) return saved
+ const stageIndex = initialProgress?.unlockedStageIndex ?? saved.stageIndex
+ const resetStage = stageIndex !== saved.stageIndex
+ return { ...saved, stageIndex,
+  ...(resetStage ? { oralIndex: 0, oralStarted: false, paused: false, remainingSeconds: undefined } : {}),
+  ...(initialProgress?.unlockedStageIndex !== undefined ? { consentedStageId: initialProgress.consentedStageId } : {}),
+ }
 })
 const [conversations] = useState<Record<string, string>>(() => restored?.conversations ?? Object.fromEntries(experiment.stages.map(item => [item.id, crypto.randomUUID()])))
 const checkpointRef = useRef<RuntimeProgress | null>(null)
@@ -124,50 +130,17 @@ const finishingRef = useRef(false)
 const [syncStatus, setSyncStatus] = useState('')
 const [storageLimited, setStorageLimited] = useState(storageDegraded)
 useEffect(() => onStorageDegraded(setStorageLimited), [])
-	const [confirmation, setConfirmation] = useState<{ target?: number } | null>(null)
+	const [confirmation, setConfirmation] = useState<boolean>(false)
 	const extensionUsed = useRef(new Set<string>(Object.keys(restored?.extended ?? {}).filter(id => restored?.extended[id])))
 	const [extended, setExtended] = useState<Record<string, boolean>>(restored?.extended ?? {})
 	const [oralIndex, setOralIndex] = useState(restored?.oralIndex ?? 0)
 	const [oralStarted, setOralStarted] = useState(restored?.oralStarted ?? false)
 	const [stageIndex, setStageIndex] = useState(Math.max(0, Math.min(Number.isInteger(restored?.stageIndex) ? restored!.stageIndex : 0, experiment.stages.length - 1)))
-	const consentStage = experiment.stages.find((item) => item.type.toLowerCase() === 'consent')
-	const allowFreeOrder = Boolean(experiment.stages[0]?.features.navigation)
 
-	// Whether every required questionnaire question in a stage has been answered.
-	// Used by the horizontal stage navigation to colour each step green/grey in
-	// real time. Consent steps are "done" once the participant has signed.
-	const isStageAnswered = (target: Experiment['stages'][number]) => {
-		if (target.type.toLowerCase() === 'consent') return consentedStageId === target.id
-		const required = target.components.filter(
-			(c) =>
-				!['text', 'button'].includes(c.type) &&
-				(target.requiredFeatures?.[
-					c.type === 'signature'
-						? 'signatureBox'
-						: c.type === 'attachment'
-							? 'attachment'
-							: 'questionnaire'
-				] ??
-					c.required),
-		)
-		return required.every((c) => {
-			const value = selections[c.id]
-			const filled = typeof value === 'string' ? value.trim() : value?.length
-			if (!filled) return false
-			if (
-				c.otherOption &&
-				(Array.isArray(value) ? value.includes(c.otherOption) : value === c.otherOption) &&
-				!String(selections[c.id + ':other'] ?? '').trim()
-			)
-				return false
-			return true
-		})
-	}
 	const stageTimes = useRef<Record<string, number>>({})
 	const [consentedStageId, setConsentedStageId] = useState<string | null>(
 		restored?.consentedStageId ?? null,
 	)
-	const canJump = allowFreeOrder && (!consentStage || consentedStageId === consentStage.id)
 	const [paused, setPaused] = useState(restored?.paused ?? false)
 	const [selections, setSelections] = useState<
 		Record<string, string | string[]>
@@ -633,12 +606,8 @@ useEffect(() => {
 	 * `skipConfirm` bypasses the double-confirm dialog — used by the
 	 * time-is-up modal, which is itself an explicit user action.
 	 */
-	const advance = async (skipConfirm: boolean, targetIndex?: number, triggeredBy = 'participant') => {
+	const advance = async (skipConfirm: boolean, triggeredBy = 'participant') => {
 		if (busyRef.current) return
-		const choosingStage = targetIndex !== undefined
-		if (choosingStage && ((consentStage && consentedStageId !== consentStage.id) || stage.type.toLowerCase() === 'consent' ||
-			!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= experiment.stages.length ||
-			targetIndex === stageIndex || experiment.stages[targetIndex].type.toLowerCase() === 'consent')) return
 		if (stage.sequentialQuestions && remaining > 0 && oralIndex < stage.components.filter(c => c.type === 'text').length - 1) { setValidationError('Please answer every explanation question before submitting.'); return }
 		setValidationError('')
 		setValidationAttempt((attempt) => attempt + 1)
@@ -702,19 +671,7 @@ useEffect(() => {
 		const missingRequiredRecording = stage.recordingRequired && !recording.self
 		if (missingRequiredRecording)
 			missingItems.push({ id: 'recording', label: 'Camera and microphone recording' })
-		if (!choosingStage && canJump && stageIndex === experiment.stages.length - 1) {
-			for (const other of experiment.stages) {
-				if (other.id === stage.id || other.type.toLowerCase() === 'consent') continue
-				for (const component of other.components) {
-					if (['text', 'button'].includes(component.type)) continue
-					const feature = component.type === 'signature' ? 'signatureBox' : component.type === 'attachment' ? 'attachment' : 'questionnaire'
-					const value = selections[component.id]
-					if ((other.requiredFeatures?.[feature] ?? component.required) &&
-						!(typeof value === 'string' ? value.trim() : value?.length)) missingItems.push({ id: component.id, label: `${other.name}: ${component.label}` })
-				}
-			}
-		}
-		if ((!choosingStage && missingItems.length) || missingRequiredRecording) {
+		if (missingItems.length || missingRequiredRecording) {
 			const labels = missingItems.map((m) => m.label)
 			setValidationError('Required: ' + labels.join(', '))
 			setMissingIds(missingItems.map((m) => m.id))
@@ -722,11 +679,11 @@ useEffect(() => {
 			setShowMissingModal(true)
 			return
 		}
-		if (!skipConfirm && stage.features.confirm) { setConfirmation({ target: targetIndex }); return }
+		if (!skipConfirm && stage.features.confirm) { setConfirmation(true); return }
 		busyRef.current = true
 		setSaving(true)
 		try {
-			if (!previewOnly && !choosingStage)
+			if (!previewOnly)
 				await submitStage(stage.id, {
 					experimentCode: experiment.code,
 					participantCode,
@@ -748,7 +705,7 @@ useEffect(() => {
 		approvedRef.current = { stageId: stage.id, recording }
 		setSaving(true)
 		try {
-			const following = experiment.stages[targetIndex ?? stageIndex + 1]
+			const following = experiment.stages[stageIndex + 1]
 			await Promise.all(
 				(
 					Object.entries(controllersRef.current) as [
@@ -780,17 +737,17 @@ useEffect(() => {
 		setSaving(false)
 		queue.record(
 			'navigation',
-			{ from: stage.name, to: experiment.stages[targetIndex ?? stageIndex + 1]?.name, triggeredBy, recording },
+			{ from: stage.name, to: experiment.stages[stageIndex + 1]?.name, triggeredBy, recording },
 			stage.id,
 		)
-		if (!choosingStage && stageIndex >= experiment.stages.length - 1) {
+		if (stageIndex >= experiment.stages.length - 1) {
 			await finishSession('finish')
 			busyRef.current = false
 			return
 		}
 		approvedRef.current = null
 		busyRef.current = false
-		const nextIndex = targetIndex ?? stageIndex + 1
+		const nextIndex = stageIndex + 1
 		stageTimes.current[stage.id] = remaining
 		setOralIndex(0)
 		setOralStarted(false)
@@ -801,7 +758,7 @@ useEffect(() => {
 		)
 	}
 
-	const advanceAfterExpiry = useEffectEvent(() => { void advance(true, undefined, 'timer') })
+	const advanceAfterExpiry = useEffectEvent(() => { void advance(true, 'timer') })
 	useEffect(() => {
 		if (timeUpVisible && stage.timerExpiry === 'advance' && !extensionAvailable)
 			advanceAfterExpiry()
@@ -1427,7 +1384,7 @@ useEffect(() => {
 	)
 
 	return (
-		<section className="participant-view"><Modal rootClassName="participant-modal" open={confirmation !== null} centered title="Submit this stage?" okText="Yes, I'm sure" cancelText="No, not sure" onCancel={() => setConfirmation(null)} onOk={() => { const target = confirmation?.target; setConfirmation(null); void advance(true, target) }}><p>Ready to submit? Once submitted, you cannot return to this stage.</p></Modal>
+		<section className="participant-view"><Modal rootClassName="participant-modal" open={confirmation} centered title="Submit this stage?" okText="Yes, I'm sure" cancelText="No, not sure" onCancel={() => setConfirmation(false)} onOk={() => { setConfirmation(false); void advance(true) }}><p>Ready to submit? Once submitted, you cannot return to this stage.</p></Modal>
 			<Modal rootClassName="participant-modal" open={showMissingModal} centered title="Some questions still need answers" onCancel={() => setShowMissingModal(false)} footer={[<button key="ok" className="primary-button" onClick={() => setShowMissingModal(false)}>Got it</button>]}>{missingQuestions.length > 0 && (<><p className="missing-modal-intro">You still have {missingQuestions.length} question{missingQuestions.length === 1 ? '' : 's'} to complete before continuing:</p><ul className="missing-question-list">{missingQuestions.map((q, i) => (<li key={i}>{q}</li>))}</ul></>)}</Modal>
 			<div inert={fullscreenLocked}>
 				<div className="participant-top">
@@ -1475,41 +1432,24 @@ useEffect(() => {
 						/>
 					)}
 					{/* Mockup-style step header: eyebrow label + segmented progress bar */}
-					{canJump && !isConsent && (
-						<label className="participant-stage-picker">
-							Go to stage
-							<select value={stageIndex} disabled={saving || paused || interactionLocked}
-								onChange={(event) => void advance(false, Number(event.target.value))}>
-								{experiment.stages.map((item, index) => item.type.toLowerCase() !== 'consent' &&
-									<option key={item.id} value={index}>{index + 1}. {item.name}</option>)}
-							</select>
-						</label>
-					)}
 					<div className="participant-question-layout">
                         <StageNavigation currentStep={stageIndex + 1} total={experiment.stages.length}>
 								{experiment.stages.map((s, i) => {
-									const answered = isStageAnswered(s)
+									const answered = i < stageIndex
 									return (
 										<button
 											type="button"
 											key={s.id}
 											aria-label={s.name}
-                                            title={s.name}
+                                            title={i > stageIndex ? 'Complete and submit the current stage to continue.' : s.name}
 											aria-current={i === stageIndex ? 'step' : undefined}
 											className={
 												'qnav-item' +
 												(answered ? ' done' : '') +
 												(i === stageIndex ? ' current' : '')
 											}
-											disabled={
-												i === stageIndex ||
-												s.type.toLowerCase() === 'consent' ||
-												isConsent ||
-												saving ||
-												paused ||
-												interactionLocked
-											}
-											onClick={() => void advance(false, i)}
+											disabled
+
 										>
 											<span className="qnav-dot" aria-hidden="true" />
 											<span className="qnav-num">{i + 1}</span>

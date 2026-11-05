@@ -48,32 +48,22 @@ describe('participant runtime', () => {
 		if (vi.isMockFunction(window.scrollTo)) vi.mocked(window.scrollTo).mockRestore()
 	})
 
-	it('allows choosing stage order while preserving answers and checking skipped required questions', async () => {
-		const experiment = study()
-		const first = experiment.stages[0]
-		first.name = 'First task'
-		first.features.navigation = true
-		const second = createStage('short_answer')
-		second.name = 'Second task'
-		second.features.timer = false
-		second.features.screenRecording = false
-		experiment.stages = [first, second]
-		render(<ParticipantPreview experiment={experiment} participantCode="PREVIEW-ORDER" previewOnly onBack={() => {}} />)
-		fireEvent.change(screen.getByRole('combobox', { name: 'Go to stage' }), { target: { value: '1' } })
-		await screen.findByText('Step 2 · Second task')
-		fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'Second answer' } })
-		fireEvent.click(screen.getByRole('button', { name: 'Finish', exact: true }))
-		await screen.findByText(/Required: First task/)
-		fireEvent.change(screen.getByRole('combobox', { name: 'Go to stage' }), { target: { value: '0' } })
-		await screen.findByText('Step 1 · First task')
-		fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'First answer' } })
-		fireEvent.change(screen.getByRole('combobox', { name: 'Go to stage' }), { target: { value: '1' } })
-		await screen.findByText('Step 2 · Second task')
-		expect((screen.getByPlaceholderText('Type your response...') as HTMLTextAreaElement).value).toBe('Second answer')
-		fireEvent.change(screen.getByRole('combobox', { name: 'Go to stage' }), { target: { value: '0' } })
-		await screen.findByText('Step 1 · First task')
-		expect((screen.getByPlaceholderText('Type your response...') as HTMLTextAreaElement).value).toBe('First answer')
-	})
+	it('keeps researcher preview sequential even when the old free-order setting is enabled', async () => {
+        const experiment = study()
+        experiment.stages[0].features.navigation = true
+        const second = createStage('short_answer')
+        second.name = 'Second task'
+        second.features.timer = false
+        second.features.screenRecording = false
+        experiment.stages.push(second)
+        const { container } = render(<ParticipantPreview experiment={experiment} participantCode="PREVIEW-ORDER" previewOnly onBack={() => {}} />)
+        expect(screen.queryByRole('combobox', { name: 'Go to stage' })).toBeNull()
+        expect(container.querySelectorAll<HTMLButtonElement>('.qnav-item')[1].disabled).toBe(true)
+        fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'First answer' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Next stage' }))
+        await screen.findByText('Step 2 · Second task')
+        expect(submitStage).not.toHaveBeenCalled()
+    })
 
 	it('does not expose stage selection before consent or when free order is disabled', () => {
 		const experiment = study()
@@ -84,6 +74,54 @@ describe('participant runtime', () => {
 		rerender(<ParticipantPreview key="consent" experiment={{ ...experiment, stages: [consent, ...experiment.stages] }} participantCode="PREVIEW-ORDER" previewOnly onBack={() => {}} />)
 		expect(screen.queryByRole('combobox', { name: 'Go to stage' })).toBeNull()
 	})
+
+	it('requires validated and confirmed sequential submissions for participants even with free order enabled', async () => {
+        const experiment = study()
+        const first = experiment.stages[0]
+        first.features.navigation = true
+        first.features.confirm = true
+        const second = { ...first, id: 'second', name: 'Second task', components: [{ ...first.components[0], id: 'second-answer' }] }
+        const third = { ...second, id: 'third', name: 'Third task' }
+        experiment.stages = [first, second, third]
+        const { container } = render(<ParticipantPreview initialSessionId="strict-order" experiment={experiment} participantCode="P001" onBack={() => {}} />)
+        const items = () => Array.from(container.querySelectorAll<HTMLButtonElement>('.qnav-item'))
+        expect(screen.queryByRole('combobox', { name: 'Go to stage' })).toBeNull()
+        expect(items().every(item => item.disabled)).toBe(true)
+        fireEvent.click(items()[2])
+        expect(screen.queryByText('Step 3 · Third task')).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Next stage' }))
+        await screen.findByText('Some questions still need answers')
+        expect(submitStage).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
+        fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'Answer' } })
+        expect(items()[0].classList.contains('done')).toBe(false)
+        fireEvent.click(screen.getByRole('button', { name: 'Next stage' }))
+        await screen.findByText('Submit this stage?')
+        expect(submitStage).not.toHaveBeenCalled()
+        vi.mocked(submitStage).mockRejectedValueOnce(new Error('offline'))
+        fireEvent.click(screen.getByRole('button', { name: "Yes, I'm sure" }))
+        await screen.findByText('Stage submission failed. Please check required items and retry.')
+        expect(items()[0].getAttribute('aria-current')).toBe('step')
+        expect(items()[0].classList.contains('done')).toBe(false)
+        fireEvent.click(screen.getByRole('button', { name: 'Next stage' }))
+        fireEvent.click(await screen.findByRole('button', { name: "Yes, I'm sure" }))
+        await screen.findByText('Step 2 · Second task')
+        expect(items()[0].classList.contains('done')).toBe(true)
+        expect(items().every(item => item.disabled)).toBe(true)
+        expect(items()[2].classList.contains('done')).toBe(false)
+    })
+
+	it('uses the server unlock boundary over a newer skipped local checkpoint and preserves draft answers', () => {
+        const experiment = study()
+        experiment.stages.push({ ...experiment.stages[0], id: 'second', name: 'Second task' })
+        const progress = { sessionId: 'resume-order', updatedAt: 1, stageIndex: 0, unlockedStageIndex: 0,
+            answers: {}, consentedStageId: null, attachments: {}, extended: {}, oralIndex: 0, oralStarted: false, deadlines: {} }
+        localStorage.setItem('p13-runtime:resume-order', JSON.stringify({ ...progress, updatedAt: 2, stageIndex: 1,
+            answers: { [experiment.stages[0].components.find(c => c.type === 'textbox')!.id]: 'Preserved draft' } }))
+        render(<ParticipantPreview initialSessionId="resume-order" initialProgress={progress} experiment={experiment} participantCode="P001" onBack={() => {}} />)
+        expect(screen.getByText(`Step 1 · ${experiment.stages[0].name}`)).toBeTruthy()
+        expect((screen.getByPlaceholderText('Type your response...') as HTMLTextAreaElement).value).toBe('Preserved draft')
+    })
 
 	it('renders true/false components as mutually exclusive choices', () => {
 		const experiment = study()
@@ -1612,7 +1650,7 @@ describe('questionnaire question-number panel and validation', () => {
 		return stage
 	}
 
-	it('shows a left panel listing every question and marks answered ones green in real time', () => {
+	it('marks stages complete only after submission, not when answers are filled', () => {
 		const experiment: Experiment = {
 			id: 'q', code: 'Q-1', name: 'Questionnaire study', status: 'Live',
 			created: '', fullScreen: false,
@@ -1626,11 +1664,11 @@ describe('questionnaire question-number panel and validation', () => {
 		expect(items[0].classList.contains('done')).toBe(false)
 		expect(items[1].classList.contains('done')).toBe(false)
 		fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'done' } })
-		expect(items[0].classList.contains('done')).toBe(true)
+		expect(items[0].classList.contains('done')).toBe(false)
 		expect(items[1].classList.contains('done')).toBe(false)
 	})
 
-	it('lets the participant jump between questions from the panel without enabling the navigation feature', async () => {
+	it('keeps future stages locked until the current stage is submitted', async () => {
 		const experiment: Experiment = {
 			id: 'q', code: 'Q-1', name: 'Questionnaire study', status: 'Live',
 			created: '', fullScreen: false,
@@ -1640,8 +1678,11 @@ describe('questionnaire question-number panel and validation', () => {
 			<ParticipantPreview experiment={experiment} participantCode="Q-TEST" previewOnly onBack={() => {}} />,
 		)
 		const items = container.querySelectorAll('.qnav-item')
-		expect(items[1].disabled).toBe(false)
+		expect(items[1].disabled).toBe(true)
 		fireEvent.click(items[1])
+		expect(screen.queryByText('Step 2 · Second question')).toBeNull()
+		fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'Complete answer' } })
+		fireEvent.click(screen.getByRole('button', { name: 'Next stage' }))
 		await screen.findByText('Step 2 · Second question')
 		expect(items[1].classList.contains('current')).toBe(true)
 	})

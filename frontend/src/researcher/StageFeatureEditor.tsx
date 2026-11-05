@@ -24,11 +24,49 @@ const featureLabels = {
 export function StageFeatureEditor({
 	stage,
 	onUpdateStage,
+	onPreview,
 }: {
 	stage: Stage
+	onPreview?: () => void
 	onUpdateStage: (update: (s: Stage) => Stage) => void
 }) {
-	if (stage.type.toLowerCase() === 'consent') return <aside className="right-panel"><label>Signing method<select value={stage.signingMethod ?? 'handwritten'} onChange={event => onUpdateStage(current => ({ ...current, signingMethod: event.target.value as 'handwritten' | 'name' }))}><option value="handwritten">Handwritten signature</option><option value="name">Full legal name</option></select></label>{stage.signingMethod === 'name' && <label>Required consent clauses (one per line)<textarea value={(stage.consentClauses ?? []).join('\n')} onChange={event => onUpdateStage(current => ({ ...current, consentClauses: event.target.value.split('\n') }))} /><span className="field-hint">Each line becomes one clause the participant must accept individually before signing. Write one complete, approved statement per line (for example: I have read and understood the participant information sheet.), and leave no blank lines. At least one clause is required — publishing stays blocked with the message “enter the approved consent clauses” until every line is filled. If you only need a drawn signature, switch back to Handwritten signature and no clauses are required.</span></label>}</aside>
+	if (stage.type.toLowerCase() === 'consent') {
+		const typed = stage.signingMethod === 'name'
+		const clauses = stage.consentClauses ?? []
+		const hasText = stage.components.some((item) => item.type === 'text' && item.label.trim())
+		const hasClauses = clauses.length > 0 && clauses.every((clause) => clause.trim())
+		return <aside className="right-panel consent-settings-panel">
+			<section className="consent-settings-section">
+				<h3>Consent settings</h3>
+				<label>
+					Signing method
+					<select value={stage.signingMethod ?? 'handwritten'} onChange={(event) => {
+						const signingMethod = event.target.value === 'name' ? 'name' : 'handwritten'
+						onUpdateStage((current) => ({ ...current, signingMethod }))
+					}}>
+						<option value="handwritten">Handwritten signature</option>
+						<option value="name">Full legal name</option>
+					</select>
+				</label>
+				<p>{typed ? 'Participants enter their legal name and accept each approved clause.' : 'Participants sign using the signature pad.'}</p>
+				{typed && <label>
+					Required consent clauses (one per line)
+					<textarea rows={4} value={clauses.join('\n')} onChange={(event) => {
+						const consentClauses = event.target.value.split('\n')
+						onUpdateStage((current) => ({ ...current, consentClauses }))
+					}} />
+				</label>}
+			</section>
+			<section className="consent-settings-section">
+				<h3>Readiness</h3>
+				<ul>
+					<li>{hasText ? '✓ Consent text added' : 'Add the consent text'}</li>
+					{typed && <li>{hasClauses ? `✓ ${clauses.length} consent clauses entered` : 'Add approved clauses and remove blank lines'}</li>}
+				</ul>
+				{onPreview && <button type="button" className="secondary-button" onClick={onPreview}>Preview participant flow</button>}
+			</section>
+		</aside>
+	}
 
 	// Update one feature while preserving the others.
 	const toggle = (key: FeatureKey, value: boolean) =>

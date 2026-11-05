@@ -56,6 +56,8 @@ def update_settings(
 ):
     if payload.default_storage_location is not None:
         try:
+            if payload.default_storage_location not in storage.storage_locations():
+                raise ValueError("Unknown platform storage location")
             storage.check_location(payload.default_storage_location)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail="Select a configured storage location.") from exc

@@ -1492,6 +1492,11 @@ describe('researcher results', () => {
 		render(<ResultsPage experiments={[{ id: 'e1', code: 'E1', name: 'Study' }] as Experiment[]} />)
 		expect(await screen.findByText('1m 30s')).toBeDefined()
 		expect(screen.getByText('3 events', { selector: '.session-chip' })).toBeDefined()
+		fireEvent.click(screen.getByRole('button', { name: 'Download chart' }))
+		const picker = await screen.findByLabelText('Chart to download')
+		expect((picker as HTMLSelectElement).value).toBe('bar')
+		fireEvent.change(picker, { target: { value: 'all' } })
+		expect(document.querySelectorAll('[data-export-chart] svg')).toHaveLength(6)
 	})
 
 	it('scopes the charts to one experiment by default', async () => {

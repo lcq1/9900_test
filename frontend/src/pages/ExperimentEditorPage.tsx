@@ -195,6 +195,7 @@ export function Editor({
 					onUpdateStage={onUpdateStage}
 				/>
 				<StageFeatureEditor
+					onPreview={() => navigate(`/researcher/preview?experiment=${encodeURIComponent(experiment.id)}`)}
 					stage={stage}
 					onUpdateStage={onUpdateStage}
 				/>

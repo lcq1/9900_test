@@ -384,8 +384,22 @@ def storage_settings(
 ):
     return {
         "location": researcher.storage_location or default_storage_location(db),
-        "locations": list(storage.storage_locations()),
+        "locations": storage.workspace_storage_locations(researcher.id),
     }
+
+
+@router.post("/workspace/storage/locations", status_code=201)
+def add_storage_location(
+    payload: StorageSettings, db: Session = Depends(get_db),
+    researcher: Researcher = Depends(get_current_researcher),
+):
+    try:
+        storage.create_workspace_location(researcher.id, payload.location or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=507, detail="Could not create a writable storage location.") from exc
+    return storage_settings(researcher, db)
 
 
 @router.patch("/workspace/storage")
@@ -395,7 +409,10 @@ def update_storage_settings(
     researcher: Researcher = Depends(get_current_researcher),
 ):
     try:
-        storage.check_location(payload.location or default_storage_location(db))
+        location = payload.location or default_storage_location(db)
+        if location not in storage.workspace_storage_locations(researcher.id):
+            raise ValueError("Unknown workspace location")
+        storage.check_location(location)
     except ValueError:
         raise HTTPException(status_code=422, detail="Select an allowed storage location")
     except OSError:

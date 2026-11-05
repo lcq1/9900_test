@@ -123,3 +123,6 @@ export const listParticipantCodes = (id: string) => http.get<ParticipantCode[]>(
 export const issueParticipantCode = (id: string) => http.post<ParticipantCode>(participantCodesPath(id))
 export const revokeParticipantCode = (id: string, code: string) =>
 	http.del<void>(participantCodesPath(id) + '/' + encodeURIComponent(code))
+
+export const addStorageLocation = (location: string) =>
+	http.post<StorageSettings>('/workspace/storage/locations', { location })

@@ -1,3 +1,4 @@
+import { Modal } from 'antd'
 import { useTransientNotice } from '../participant/TimerController'
 import { useState, useEffect, useId, useRef } from 'react'
 import type { Experiment } from '../types'
@@ -18,6 +19,7 @@ import {
 	setExperimentAISource,
 	testExperimentAIConnection,
 	getStorageSettings,
+	addStorageLocation,
 	saveStorageSettings,
 	type ExperimentAIKeyStatus,
 	type ExperimentAISettingsInput,
@@ -262,13 +264,25 @@ function normalizeResultEvents(events: ParticipantEvent[]): ParticipantEvent[] {
 			(Number.isFinite(b.epochMs) ? b.epochMs : Infinity))
 }
 
+const chartTitles = {
+	bar: 'Event counts',
+	line: 'Activity over time',
+	pie: 'Event mix',
+	scatter: 'Event order',
+	histogram: 'Elapsed time',
+	timeline: 'Session timelines',
+} as const
+type ChartKind = keyof typeof chartTitles
+const chartKinds = Object.keys(chartTitles) as ChartKind[]
+
 export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 	// `null` means the researcher has not picked a scope yet: charts then default
 	// to the first experiment so the counts never mix sessions from two studies.
 	const [chosenExperiment, setChosenExperiment] = useState<string | null>(null)
 	const experimentCode = chosenExperiment ?? experiments[0]?.code ?? ''
-	const [chart, setChart] = useState('bar')
-	const chartVisual = useRef<HTMLDivElement>(null)
+	const [chart, setChart] = useState<ChartKind>('bar')
+	const [chartExport, setChartExport] = useState<ChartKind | 'all' | null>(null)
+	const exportCharts = useRef<HTMLDivElement>(null)
 	const [openId, setOpenId] = useState<string | null>(null)
 	const [sessions, setSessions] = useState<SessionData[]>([])
 	const [loading, setLoading] = useState(true)
@@ -344,6 +358,13 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 		count: allEvents.filter((event) => event.type === type).length,
 	}))
 
+	const renderChart = (kind: ChartKind) => {
+		if (kind === 'pie') return <Doughnut segments={segments} total={totalEvents} />
+		if (kind === 'line') return <ActivityLine events={allEvents} />
+		if (kind === 'timeline') return <SessionTimeline events={allEvents} />
+		return <ResultPlot chart={kind} events={allEvents} segments={segments} />
+	}
+
 	return (
 		<section className="page dashboard results-page">
 			<div className="page-heading">
@@ -412,16 +433,9 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 					<select
 						aria-label="Chart type"
 						value={chart}
-						onChange={(e) => setChart(e.target.value)}
+						onChange={(e) => setChart(e.target.value as ChartKind)}
 					>
-						{Object.entries({
-							bar: 'Event counts',
-							line: 'Activity over time',
-							pie: 'Event mix',
-							scatter: 'Event order',
-							histogram: 'Elapsed time',
-							timeline: 'Session timelines',
-						}).map(([type, title]) => (
+						{Object.entries(chartTitles).map(([type, title]) => (
 							<option key={type} value={type}>
 								{title}
 							</option>
@@ -429,10 +443,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 					</select>
 				</label>
 				{!loading && !error && totalEvents > 0 && (
-					<button type="button" className="secondary-button" onClick={() => {
-						const svg = chartVisual.current?.querySelector('svg')
-						if (svg) downloadChart(svg, experimentCode || 'all-studies', chart)
-					}}>
+					<button type="button" className="secondary-button" onClick={() => setChartExport(chart)}>
 						<Download size={15} aria-hidden="true" /> Download chart
 					</button>
 				)}
@@ -442,20 +453,8 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 			)}
 			{!loading && !error && totalEvents > 0 && (
 				<div className="chart-card results-chart-card">
-					<div className="results-chart-visual" ref={chartVisual}>
-						{chart === 'pie' ? (
-							<Doughnut segments={segments} total={totalEvents} />
-						) : chart === 'line' ? (
-							<ActivityLine events={allEvents} />
-						) : chart === 'timeline' ? (
-							<SessionTimeline events={allEvents} />
-						) : (
-							<ResultPlot
-								chart={chart}
-								events={allEvents}
-								segments={segments}
-							/>
-						)}
+					<div className="results-chart-visual">
+						{renderChart(chart)}
 					</div>
 					<div className="results-chart-data">
 						<table>
@@ -609,6 +608,27 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 				authoritative capture. Exports are Excel workbooks with
 				versioned answers, AI history and activity.
 			</p>
+			{chartExport && (
+				<Modal open title="Download chart" okText="Download SVG" onCancel={() => setChartExport(null)}
+					onOk={() => {
+						const items = Array.from(exportCharts.current?.querySelectorAll<SVGSVGElement>('[data-export-chart] svg') ?? [])
+						if (items.length) downloadCharts(items, experimentCode || 'all-studies', chartExport)
+						setChartExport(null)
+					}}>
+					<label className="settings-field chart-export-field">
+						Chart to download
+						<select value={chartExport} onChange={(event) => setChartExport(event.target.value as ChartKind | 'all')}>
+							{chartKinds.map((kind) => <option value={kind} key={kind}>{chartTitles[kind]}</option>)}
+							<option value="all">All six charts (one SVG)</option>
+						</select>
+					</label>
+					<div ref={exportCharts} className="chart-export-source" aria-hidden="true">
+						{(chartExport === 'all' ? chartKinds : [chartExport]).map((kind) => (
+							<div key={kind} data-export-chart={kind}>{renderChart(kind)}</div>
+						))}
+					</div>
+				</Modal>
+			)}
 			{exportSession && (
 				<ExportDialog
 					session={exportSession}
@@ -619,7 +639,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 	)
 }
 
-function downloadChart(svg: SVGSVGElement, experimentCode: string, chart: string) {
+function copyChart(svg: SVGSVGElement) {
 	const copy = svg.cloneNode(true) as SVGSVGElement
 	const properties = ['fill', 'stroke', 'stroke-width', 'opacity', 'font-family', 'font-size', 'font-weight']
 	const originalElements = svg.querySelectorAll<SVGElement>('*')
@@ -630,11 +650,40 @@ function downloadChart(svg: SVGSVGElement, experimentCode: string, chart: string
 			if (value) element.style.setProperty(property, value)
 		}
 	})
-	const file = new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' })
+	return copy
+}
+
+function downloadCharts(charts: SVGSVGElement[], experimentCode: string, choice: ChartKind | 'all') {
+	const ns = 'http://www.w3.org/2000/svg'
+	const result = choice === 'all' ? document.createElementNS(ns, 'svg') : copyChart(charts[0])
+	if (choice === 'all') {
+		const width = 1000
+		let offset = 0
+		charts.forEach((source) => {
+			const kind = source.closest('[data-export-chart]')?.getAttribute('data-export-chart') as ChartKind
+			const chart = copyChart(source)
+			const view = source.viewBox.baseVal
+			const height = view.width ? Math.ceil(width * view.height / view.width) : 400
+			const title = document.createElementNS(ns, 'text')
+			title.setAttribute('x', '20')
+			title.setAttribute('y', String(offset + 26))
+			title.setAttribute('font-family', 'sans-serif')
+			title.setAttribute('font-size', '20')
+			title.textContent = chartTitles[kind]
+			chart.setAttribute('y', String(offset + 40))
+			chart.setAttribute('width', String(width))
+			chart.setAttribute('height', String(height))
+			result.append(title, chart)
+			offset += height + 60
+		})
+		result.setAttribute('viewBox', `0 0 ${width} ${offset}`)
+	}
+
+	const file = new Blob([new XMLSerializer().serializeToString(result)], { type: 'image/svg+xml' })
 	const url = URL.createObjectURL(file)
 	const link = document.createElement('a')
 	link.href = url
-	link.download = `${experimentCode}-${chart}.svg`
+	link.download = `${experimentCode}-${choice}.svg`
 	link.click()
 	window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
@@ -922,6 +971,8 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 		} catch { setMessage('Could not change the configuration source. Please retry.') }
 		finally { setSaving(false) }
 	}
+	const canTest = Boolean(status?.configured && !apiKey && configuration &&
+		JSON.stringify(configuration) === JSON.stringify(aiSettingsFields(status)))
 	const testConnection = async () => {
 		if (busy || loading || !status?.configured) return
 		setTesting(true)
@@ -1034,14 +1085,13 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
 				<div className="settings-actions">
 					<button type="submit" className="primary-button" disabled={busy}>{saving ? 'Saving…' : 'Save AI settings'}</button>
 					{isCommon && (status.hasCustomKey || status.hasCustomSettings) && <button type="button" className="secondary-button" disabled={busy} onClick={() => void updateKey(true)}>Use server default</button>}
+					<button type="button" className="secondary-button" disabled={busy || !canTest} onClick={() => void testConnection()}>
+						{testing ? 'Testing…' : 'Test saved connection'}
+					</button>
 				</div>
-			</form>}
-			{status?.configured && !apiKey && configuration &&
-				JSON.stringify(configuration) === JSON.stringify(aiSettingsFields(status)) && <div className="settings-actions">
-				<button type="button" className="secondary-button" disabled={busy} onClick={() => void testConnection()}>
-					Test saved connection
-				</button>
-			</div>}
+			</form>}			{canTest && status?.useCommon && !isCommon && (
+				<button type="button" className="secondary-button" disabled={busy} onClick={() => void testConnection()}>Test saved connection</button>
+			)}
 			<p role="status">{message}</p>
 		</div>
 	</section>
@@ -1054,6 +1104,7 @@ export function ExperimentAIKeySettings({ experiments }: { experiments: Experime
  * instead of being silently accepted.
  */
 export function StorageLocationCard() {
+	const [locationName, setLocationName] = useState('')
 	const [settings, setSettings] = useState<StorageSettings | null>(null)
 	const [loadError, setLoadError] = useState('')
 	const [saving, setSaving] = useState(false)
@@ -1100,6 +1151,21 @@ export function StorageLocationCard() {
 		}
 	}
 
+	const createLocation = async () => {
+		setSaving(true)
+		setFailure('')
+		setMessage('')
+		try {
+			setSettings(await addStorageLocation(locationName.trim()))
+			setLocationName('')
+			setMessage('Location added. Select it above to use it for new files.')
+		} catch (error) {
+			setFailure(error instanceof HttpError ? error.message : 'Could not add the location.')
+		} finally {
+			setSaving(false)
+		}
+	}
+
 	return (
 		<section className="settings-card">
 			<h3>Storage</h3>
@@ -1119,7 +1185,7 @@ export function StorageLocationCard() {
 					{settings ? (
 						settings.locations.map((name) => (
 							<option key={name} value={name}>
-								{name === 'legacy' ? 'Local server storage' : name}
+								{name === 'legacy' ? 'Local server storage' : name.replace(/^workspace-[0-9a-f-]{36}-/, '')}
 							</option>
 						))
 					) : (
@@ -1127,6 +1193,18 @@ export function StorageLocationCard() {
 					)}
 				</select>
 			</div>
+			{settings && <form className="storage-add-form" onSubmit={(event) => {
+				event.preventDefault()
+				void createLocation()
+			}}>
+				<div className="settings-field">
+					<label htmlFor={fieldId + '-name'}>New storage folder</label>
+					<input id={fieldId + '-name'} value={locationName} onChange={(event) => setLocationName(event.target.value)}
+						required maxLength={17} pattern="[A-Za-z0-9](?:[A-Za-z0-9]|-){0,16}" placeholder="e.g. pilot-study" disabled={saving} />
+				</div>
+				<button type="submit" className="secondary-button" disabled={saving}>Add location</button>
+				<p className="settings-hint">Creates a folder for this workspace on the server. Use letters, numbers or hyphens.</p>
+			</form>}
 			{saving && <p className="settings-hint">Checking the location…</p>}
 			{loadError && (
 				<p className="settings-hint" role="alert">
@@ -1145,7 +1223,7 @@ export function StorageLocationCard() {
 			)}
 			{settings && (
 				<p className="settings-hint">
-					{settings.location === 'legacy' ? 'Files are stored on this server.' : 'New files use the selected storage location.'}
+					{settings.location === 'legacy' ? 'Files are stored on this server.' : 'New files use the selected storage folder.'}
 				</p>
 			)}
 		</section>

@@ -2696,23 +2696,49 @@ nav {
 	font-weight: 600;
 	white-space: nowrap;
 }
-.session-recordings {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px 12px;
-	margin-bottom: 14px;
+.session-recordings { margin: 12px 0 20px; }
+.session-recordings-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
 }
-.session-recordings h4,
-.session-recordings p {
-	margin: 0;
+.session-recordings-heading h4 { margin: 0; font-size: 16px; }
+.session-recordings-heading > span { font-size: 12px; color: #718096; }
+.session-recordings > p { font-size: 13px; }
+.recording-file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 390px), 1fr));
+    gap: 12px;
 }
-.session-recordings p {
-	font-size: 13px;
+.recording-file-card {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fbfcfe;
 }
-.session-recordings button {
-	max-width: 100%;
-	overflow-wrap: anywhere;
+.recording-file-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    color: #526b88;
+    background: #edf3fb;
+}
+.recording-file-info { display: grid; gap: 4px; min-width: 0; }
+.recording-file-info strong { font-size: 13px; line-height: 1.4; }
+.recording-filename { font-size: 12px; line-height: 1.5; color: #64748b; overflow-wrap: anywhere; }
+.recording-file-info small { color: #718096; font-size: 11px; }
+.recording-file-card .secondary-button { min-width: 108px; justify-content: center; }
+@media (max-width: 600px) {
+    .recording-file-card { padding: 12px; grid-template-columns: 32px minmax(0, 1fr); }
+    .recording-file-card .secondary-button { grid-column: 2; justify-self: start; }
 }
 .session-body {
 	padding: 6px 20px 18px;
@@ -4902,3 +4928,43 @@ button.profile:focus-visible { outline: 2px solid #8bb8ff; outline-offset: 4px; 
 .study-share-panel label { display: grid; gap: 8px; font-weight: 600; }
 .study-share-panel input { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 400; }
 .study-share-panel .ant-qrcode { justify-self: center; }
+
+/* Researcher-only inspection tools remain outside the participant reading card. */
+.preview-mode-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    padding: 16px 18px;
+    margin-bottom: 20px;
+    border: 1px solid #dde5ef;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+.preview-mode-bar strong { font-size: 14px; color: #334155; }
+.participant-view:not(:has(form.entry-card)) .preview-mode-bar p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #64748b;
+}
+.preview-mode-bar.is-inspecting { background: #f6f4ff; border-color: #ded9ff; }
+.preview-mode-bar.is-inspecting strong { color: #5654cf; }
+.preview-mode-bar button { flex-shrink: 0; }
+.oral-question-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 20px 0;
+    padding: 16px 18px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+.oral-question-summary { display: grid; gap: 5px; }
+.oral-question-summary strong { font-size: 14px; color: #334155; }
+.oral-question-summary span, .oral-question-summary small { font-size: 12px; line-height: 1.5; color: #64748b; }
+.oral-question-controls > button { margin-left: auto; }

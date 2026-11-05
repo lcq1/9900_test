@@ -7,6 +7,8 @@ import {
 	MoreHorizontal,
 	Download,
 	FileText,
+    Video,
+    MonitorPlay,
 	Plus,
 	Search,
 	ShieldCheck,
@@ -773,19 +775,32 @@ function SessionRecordings({ sessionId }: { sessionId: string }) {
 		}
 	}
 
-	return <div className="session-recordings">
-		<h4>Recordings</h4>
-		{error && <p role="alert">{error}</p>}
-		{!recordings && !error && <p role="status">Loading recordings…</p>}
-		{recordings?.length === 0 && <p>No recordings saved for this session.</p>}
-		{recordings?.map((recording) => (
-			<button type="button" className="secondary-button" key={recording.id}
-				disabled={Boolean(busyId)} onClick={() => void download(recording)}>
-				<Download size={14} aria-hidden="true" />
-				{busyId === recording.id ? 'Downloading…' : recording.filename}
-			</button>
-		))}
-	</div>
+	return <section className="session-recordings" aria-label="Session recordings">
+        <div className="session-recordings-heading"><h4>Recordings</h4>
+            {recordings && <span>{recordings.length} file{recordings.length === 1 ? '' : 's'}</span>}
+        </div>
+        {error && <p role="alert">{error}</p>}
+        {!recordings && !error && <p role="status">Loading recordings…</p>}
+        {recordings?.length === 0 && <p>No recordings saved for this session.</p>}
+        <div className="recording-file-grid">
+            {recordings?.map((recording, index) => {
+                const kind = /-screen\.[^.]+$/i.test(recording.filename) ? 'Screen recording' : /-self\.[^.]+$/i.test(recording.filename) ? 'Camera / audio recording' : 'Recording'
+                const Icon = kind === 'Screen recording' ? MonitorPlay : Video
+                const format = recording.filename.split('.').pop()?.toUpperCase()
+                return <article className="recording-file-card" key={recording.id}>
+                    <div className="recording-file-icon"><Icon size={20} aria-hidden="true" /></div>
+                    <div className="recording-file-info"><strong>{kind} {index + 1}</strong>
+                        <span className="recording-filename" title={recording.filename}>{recording.filename}</span>
+                        <small>{format} file</small>
+                    </div>
+                    <button type="button" className="secondary-button" aria-label={`Download ${recording.filename}`}
+                        disabled={Boolean(busyId)} onClick={() => void download(recording)}>
+                        <Download size={15} aria-hidden="true" />{busyId === recording.id ? 'Downloading…' : 'Download'}
+                    </button>
+                </article>
+            })}
+        </div>
+    </section>
 }
 
 /** Filled ring sectors give each event category its own pointer target. */

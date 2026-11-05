@@ -86,6 +86,7 @@ describe('participant runtime', () => {
         const { container } = render(<ParticipantPreview initialSessionId="strict-order" experiment={experiment} participantCode="P001" onBack={() => {}} />)
         const items = () => Array.from(container.querySelectorAll<HTMLButtonElement>('.qnav-item'))
         expect(screen.queryByRole('combobox', { name: 'Go to stage' })).toBeNull()
+        expect(screen.queryByRole('switch', { name: 'Free stage browsing' })).toBeNull()
         expect(items().every(item => item.disabled)).toBe(true)
         fireEvent.click(items()[2])
         expect(screen.queryByText('Step 3 · Third task')).toBeNull()
@@ -121,6 +122,45 @@ describe('participant runtime', () => {
         render(<ParticipantPreview initialSessionId="resume-order" initialProgress={progress} experiment={experiment} participantCode="P001" onBack={() => {}} />)
         expect(screen.getByText(`Step 1 · ${experiment.stages[0].name}`)).toBeTruthy()
         expect((screen.getByPlaceholderText('Type your response...') as HTMLTextAreaElement).value).toBe('Preserved draft')
+    })
+
+	it('lets researchers inspect any stage and oral question without gates, then restores participant experience', async () => {
+        const experiment = study()
+        experiment.stages[0].name = 'Required task'
+        experiment.stages[0].features.confirm = true
+        const consent = createStage('consent'); consent.name = 'Consent review'
+        const oral = createStage('video_oral_answer')
+        oral.name = 'Recorded explanation'; oral.sequentialQuestions = true; oral.recordingRequired = true
+        oral.recordingMode = 'auto'; oral.features.screenRecording = true; oral.features.timer = true
+        oral.components = [{ id: 'oral1', type: 'text', label: 'Explain the first approach' }, { id: 'oral2', type: 'text', label: 'Explain the second approach' }]
+        experiment.stages.push(consent, oral)
+        const { container } = render(<ParticipantPreview experiment={experiment} participantCode="PREVIEW-INSPECT" previewOnly onBack={() => {}} />)
+        fireEvent.change(screen.getByPlaceholderText('Type your response...'), { target: { value: 'My draft' } })
+        const mode = screen.getByRole('switch', { name: 'Free stage browsing' })
+        expect(mode.getAttribute('aria-checked')).toBe('false')
+        fireEvent.click(mode)
+        expect(mode.getAttribute('aria-checked')).toBe('true')
+        fireEvent.click(screen.getByRole('button', { name: 'Consent review', exact: true }))
+        await screen.findByText('Step 2 · Consent review')
+        fireEvent.click(screen.getByRole('button', { name: 'Recorded explanation', exact: true }))
+        await screen.findByText('Explain the first approach')
+        expect(container.querySelector('.capture-panel')).toBeNull()
+        const nextQuestion = screen.getByRole('button', { name: 'Next question', exact: true })
+        expect(nextQuestion.matches(':disabled')).toBe(false)
+        expect(screen.getByText('Explain the first approach').compareDocumentPosition(nextQuestion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        fireEvent.click(nextQuestion)
+        await screen.findByText('Explain the second approach')
+        expect(screen.queryByText('Explain the first approach')).toBeNull()
+        expect(nextQuestion.matches(':disabled')).toBe(true)
+        fireEvent.click(mode)
+        await screen.findByText('Step 1 · Required task')
+        expect((screen.getByPlaceholderText('Type your response...') as HTMLTextAreaElement).value).toBe('My draft')
+        expect(container.querySelectorAll<HTMLButtonElement>('.qnav-item')[2].disabled).toBe(true)
+        fireEvent.click(screen.getByRole('button', { name: 'Next stage', exact: true }))
+        await screen.findByText('Submit this stage?')
+        expect(submitStage).not.toHaveBeenCalled()
+        expect(submitSession).not.toHaveBeenCalled()
+        expect(uploadRecording).not.toHaveBeenCalled()
     })
 
 	it('renders true/false components as mutually exclusive choices', () => {

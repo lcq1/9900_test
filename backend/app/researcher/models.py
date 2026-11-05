@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, String, ForeignKey
+from sqlalchemy import JSON, Boolean, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -27,6 +27,8 @@ class Researcher(Base, TimestampMixin):
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), default="researcher")
+    account_status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
+    auth_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     storage_location: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
@@ -46,4 +48,14 @@ class Experiment(Base):
     created: Mapped[str] = mapped_column(String(32), default=_today)
     full_screen: Mapped[bool] = mapped_column(Boolean, default=False)
     # Full list of Stage objects (nested components + features) stored as JSON.
+    storage_notice: Mapped[str] = mapped_column(Text, default="", server_default="")
     stages: Mapped[list[Any]] = mapped_column(JSON, default=list)
+
+class StudyAccessCode(Base):
+    __tablename__ = "study_access_codes"
+
+    experiment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("experiments.id", ondelete="CASCADE"), primary_key=True,
+    )
+    code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)

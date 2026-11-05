@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core import clock, storage
-from app.core.config import settings
+from app.administrator.service import default_storage_location
 from app.core.database import get_db
 from app.core.models import gen_uuid
 from app.core.security import (
@@ -53,7 +53,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
-    token = create_access_token(researcher.id)
+    token = create_access_token(researcher.id, researcher.auth_version)
     return {
         "token": token,
         "researcher": researcher,
@@ -114,6 +114,7 @@ def create_experiment(
         code=payload.code,
         status=payload.status,
         full_screen=payload.full_screen,
+        storage_notice=payload.storage_notice,
         stages=stages,
         id=payload.id,
     )
@@ -199,6 +200,44 @@ def owned_experiment(db: Session, experiment_id: str, researcher: Researcher):
     if experiment.owner_id != researcher.id:
         raise HTTPException(status_code=404, detail="Experiment not found")
     return experiment
+
+
+@router.get("/experiments/{experiment_id}/participant-codes")
+def list_participant_codes(
+    experiment_id: str, db: Session = Depends(get_db),
+    researcher: Researcher = Depends(get_current_researcher),
+):
+    from app.researcher.models import StudyAccessCode
+
+    experiment = owned_experiment(db, experiment_id, researcher)
+    records = db.query(StudyAccessCode).filter_by(experiment_id=experiment.id).order_by(StudyAccessCode.code)
+    return [{"code": record.code, "revoked": record.revoked} for record in records]
+
+
+@router.post("/experiments/{experiment_id}/participant-codes", status_code=201)
+def create_participant_code(
+    experiment_id: str, db: Session = Depends(get_db),
+    researcher: Researcher = Depends(get_current_researcher),
+):
+    from app.researcher.access_codes import issue_code
+
+    record = issue_code(db, owned_experiment(db, experiment_id, researcher))
+    return {"code": record.code, "revoked": record.revoked}
+
+
+@router.delete("/experiments/{experiment_id}/participant-codes/{code}", status_code=204)
+def revoke_participant_code(
+    experiment_id: str, code: str, db: Session = Depends(get_db),
+    researcher: Researcher = Depends(get_current_researcher),
+):
+    from app.researcher.models import StudyAccessCode
+
+    experiment = owned_experiment(db, experiment_id, researcher)
+    record = db.get(StudyAccessCode, (experiment.id, code))
+    if record is None:
+        raise HTTPException(status_code=404, detail="Participant code not found")
+    record.revoked = True
+    db.commit()
 
 
 def ai_settings_status(configuration, overrides, use_common=False):
@@ -340,9 +379,11 @@ def remove_experiment_ai_key(experiment_id: str, db: Session = Depends(get_db),
 
 
 @router.get("/workspace/storage")
-def storage_settings(researcher: Researcher = Depends(get_current_researcher)):
+def storage_settings(
+    researcher: Researcher = Depends(get_current_researcher), db: Session = Depends(get_db),
+):
     return {
-        "location": researcher.storage_location or settings.storage_default_location,
+        "location": researcher.storage_location or default_storage_location(db),
         "locations": list(storage.storage_locations()),
     }
 
@@ -354,14 +395,14 @@ def update_storage_settings(
     researcher: Researcher = Depends(get_current_researcher),
 ):
     try:
-        storage.check_location(payload.location or settings.storage_default_location)
+        storage.check_location(payload.location or default_storage_location(db))
     except ValueError:
         raise HTTPException(status_code=422, detail="Select an allowed storage location")
     except OSError:
         raise HTTPException(status_code=507, detail="Storage location is not writable or has insufficient space")
     researcher.storage_location = payload.location
     db.commit()
-    return storage_settings(researcher)
+    return storage_settings(researcher, db)
 
 
 @router.post("/experiments/{experiment_id}/stages/{stage_id}/materials")
@@ -398,7 +439,7 @@ async def upload_material(
     if not data:
         raise HTTPException(status_code=422, detail="The material is empty")
     material_id = gen_uuid()
-    reference = storage.logical_reference(researcher.storage_location, f"materials/{researcher.id}/{material_id}")
+    reference = storage.logical_reference(researcher.storage_location or default_storage_location(db), f"materials/{researcher.id}/{material_id}")
     # Named local roots are stable; never expose absolute paths in experiment data.
     try:
         append_chunk(reference, 0, bytes(data))

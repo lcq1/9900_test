@@ -25,7 +25,7 @@ describe('authentication', () => {
 
 	afterEach(cleanup)
 
-	it('disables administrator entry while researcher login still works', async () => {
+	it('offers administrator entry and keeps researcher login working', async () => {
 		const session = {
 			token: 'retained-token',
 			issuedAt: '2026-10-27',
@@ -47,15 +47,10 @@ describe('authentication', () => {
 			name: 'Administrator',
 			exact: true,
 		}) as HTMLButtonElement
-		expect(administrator.disabled).toBe(true)
+		expect(administrator.disabled).toBe(false)
 		fireEvent.click(administrator)
-		expect(
-			screen.queryByRole('button', {
-				name: 'Administrator log in',
-				exact: true,
-			}),
-		).toBeNull()
-		expect(screen.getByLabelText('Experiment code')).toBeDefined()
+		expect(screen.getByRole('button', { name: 'Administrator sign in' })).toBeDefined()
+		expect(screen.queryByLabelText('Experiment code')).toBeNull()
 		fireEvent.click(
 			screen.getByRole('button', { name: 'Researcher', exact: true }),
 		)

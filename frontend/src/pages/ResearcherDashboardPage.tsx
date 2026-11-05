@@ -1,5 +1,5 @@
 import { useTransientNotice } from '../participant/TimerController'
-import { useState, useEffect, useId } from 'react'
+import { useState, useEffect, useId, useRef } from 'react'
 import type { Experiment } from '../types'
 import {
 	ChevronDown,
@@ -256,6 +256,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 	const [chosenExperiment, setChosenExperiment] = useState<string | null>(null)
 	const experimentCode = chosenExperiment ?? experiments[0]?.code ?? ''
 	const [chart, setChart] = useState('bar')
+	const chartVisual = useRef<HTMLDivElement>(null)
 	const [openId, setOpenId] = useState<string | null>(null)
 	const [sessions, setSessions] = useState<SessionData[]>([])
 	const [loading, setLoading] = useState(true)
@@ -415,13 +416,21 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 						))}
 					</select>
 				</label>
+				{!loading && !error && totalEvents > 0 && (
+					<button type="button" className="secondary-button" onClick={() => {
+						const svg = chartVisual.current?.querySelector('svg')
+						if (svg) downloadChart(svg, experimentCode || 'all-studies', chart)
+					}}>
+						<Download size={15} aria-hidden="true" /> Download chart
+					</button>
+				)}
 			</div>
 			{!loading && !error && totalEvents === 0 && (
 				<p>No valid timestamped events for this selection.</p>
 			)}
 			{!loading && !error && totalEvents > 0 && (
 				<div className="chart-card results-chart-card">
-					<div className="results-chart-visual">
+					<div className="results-chart-visual" ref={chartVisual}>
 						{chart === 'pie' ? (
 							<Doughnut segments={segments} total={totalEvents} />
 						) : chart === 'line' ? (
@@ -595,6 +604,26 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 			)}
 		</section>
 	)
+}
+
+function downloadChart(svg: SVGSVGElement, experimentCode: string, chart: string) {
+	const copy = svg.cloneNode(true) as SVGSVGElement
+	const properties = ['fill', 'stroke', 'stroke-width', 'opacity', 'font-family', 'font-size', 'font-weight']
+	const originalElements = svg.querySelectorAll<SVGElement>('*')
+	copy.querySelectorAll<SVGElement>('*').forEach((element, index) => {
+		const computed = getComputedStyle(originalElements[index])
+		for (const property of properties) {
+			const value = computed.getPropertyValue(property)
+			if (value) element.style.setProperty(property, value)
+		}
+	})
+	const file = new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' })
+	const url = URL.createObjectURL(file)
+	const link = document.createElement('a')
+	link.href = url
+	link.download = `${experimentCode}-${chart}.svg`
+	link.click()
+	window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function SessionRecordings({ sessionId }: { sessionId: string }) {

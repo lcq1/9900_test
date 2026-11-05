@@ -76,3 +76,27 @@ def test_resume_unfinished_session_by_experiment_and_participant(client, auth_he
     assert other.status_code == 200
     assert other.json()["sessionId"] != session_id
     assert other.json()["progress"] is None
+
+
+def test_issued_codes_are_scoped_and_revocable(client, auth_headers):
+    created = client.post("/api/experiments", headers=auth_headers, json={
+        "name": "Single-page study", "status": "Live",
+        "storageNotice": "This pilot uses approved study storage.",
+        "stages": [{"id": "welcome", "type": "instruction", "name": "Welcome",
+                    "components": [{"id": "text", "type": "text", "label": "Welcome"}]}],
+    })
+    assert created.status_code == 201
+    experiment = created.json()
+    path = f"/api/experiments/{experiment['id']}/participant-codes"
+    issued = client.post(path, headers=auth_headers)
+    assert issued.status_code == 201
+    code = issued.json()["code"]
+    assert client.get(path, headers=auth_headers).json() == [{"code": code, "revoked": False}]
+    access = "/api/participant/access"
+    assert client.post(access, json={"experimentCode": experiment["code"], "participantCode": "unknown"}).status_code == 403
+    opened = client.post(access, json={"experimentCode": experiment["code"], "participantCode": code})
+    assert opened.status_code == 200
+    assert opened.json()["experiment"]["storageNotice"] == "This pilot uses approved study storage."
+    assert client.delete(path + "/" + code, headers=auth_headers).status_code == 204
+    assert client.post(access, json={"experimentCode": experiment["code"], "participantCode": code}).status_code == 403
+    assert client.get("/api/ai/config", headers={"X-Participant-Token": opened.json()["token"]}).status_code == 403

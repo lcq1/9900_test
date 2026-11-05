@@ -737,3 +737,30 @@ def test_excel_emoji_chunks_preserve_all_text():
     loaded = load_workbook(io.BytesIO(output.getvalue()))
     assert "".join(c.value for c in loaded.active[2]) == content
     assert all(len(c.value.encode("utf-16-le")) <= 60000 for c in loaded.active[2])
+
+
+def test_administrator_approves_and_disables_accounts(client, admin_headers):
+    assert client.patch("/api/admin/settings", headers=admin_headers,
+                        json={"requireResearcherApproval": True}).status_code == 200
+    credentials = {"email": "pending@example.com", "password": "Test password 123"}
+    new = client.post("/api/auth/register", json={"name": "Pending researcher", **credentials})
+    assert new.status_code == 201
+    assert new.json()["accountStatus"] == "pending"
+    assert client.post("/api/auth/login", json=credentials).status_code == 403
+    path = "/api/admin/researchers/" + new.json()["id"]
+    assert client.patch(path, headers=admin_headers, json={"status": "active"}).status_code == 200
+    logged_in = client.post("/api/auth/login", json=credentials)
+    assert logged_in.status_code == 200
+    headers = {"Authorization": "Bearer " + logged_in.json()["token"]}
+    assert client.patch(path, headers=headers, json={"status": "disabled"}).status_code == 403
+    assert client.patch(path, headers=admin_headers, json={"status": "disabled"}).status_code == 200
+    assert client.get("/api/experiments", headers=headers).status_code == 401
+    assert client.patch(path, headers=admin_headers, json={"status": "active"}).status_code == 200
+    assert client.get("/api/experiments", headers=headers).status_code == 401
+
+    assert client.patch("/api/admin/settings", headers=admin_headers,
+                        json={"allowSelfRegistration": False}).status_code == 200
+    another = {"name": "Invited", **credentials, "email": "invited@example.com"}
+    assert client.post("/api/auth/register", json=another).status_code == 403
+    created = client.post("/api/admin/researchers", headers=admin_headers, json=another)
+    assert created.status_code == 201 and created.json()["accountStatus"] == "active"

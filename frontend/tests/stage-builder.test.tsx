@@ -383,10 +383,10 @@ describe("publish validation", () => {
   it("accepts consent plus a valid question", () => {
     expect(getPublishErrors(experiment())).toEqual([]);
   });
-  it("rejects consent-only studies and closed experiments", () => {
+  it("accepts a single stage and rejects closed experiments", () => {
     const draft = experiment();
     draft.stages.pop();
-    expect(getPublishErrors(draft).join(" ")).toContain("2–20");
+    expect(getPublishErrors(draft)).toEqual([]);
     draft.status = "Closed";
     expect(getPublishErrors(draft)).toContain(
       "Closed experiments cannot be published again.",
@@ -398,7 +398,7 @@ describe("publish validation", () => {
     draft.stages[0].components[1].options = ["A", " "];
     draft.stages[1].countdownMinutes = 0;
     const errors = getPublishErrors(draft).join(" ");
-    expect(errors).toContain("only consent stage");
+    expect(errors).toContain("Place consent before questions and capture features.");
     expect(errors).toContain("non-empty options");
     expect(errors).toContain("positive whole number");
   });
@@ -515,7 +515,7 @@ describe('editor publishing', () => {
 		).toBe(true)
 	})
 	it('shows validation errors without making a save request', async () => {
-		api.experiments[0].stages.pop()
+		api.experiments[0].stages[0].name = ''
 		openEditor()
 		fireEvent.click(
 			screen.getByRole('button', { name: 'Publish', exact: true }),

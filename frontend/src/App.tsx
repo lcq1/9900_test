@@ -509,14 +509,15 @@ function ExperimentDraft({ remote }: { remote: Experiment }) {
 		setSelected(next.id)
 	}
 	const removeStage = (id: string) => {
-		if (draft.stages[0]?.id === id) return
-		change((e) => ({ ...e, stages: e.stages.filter((s) => s.id !== id) }))
-		if (selected === id) setSelected(draft.stages[0].id)
+		if (draft.stages.length <= 1) return
+		const remaining = draft.stages.filter((s) => s.id !== id)
+		change((e) => ({ ...e, stages: remaining }))
+		if (selected === id) setSelected(remaining[0].id)
 	}
 	const reorder = (from: number, to: number) => {
 		if (
-			from <= 0 ||
-			to <= 0 ||
+			from < 0 ||
+			to < 0 ||
 			from >= draft.stages.length ||
 			to >= draft.stages.length
 		)

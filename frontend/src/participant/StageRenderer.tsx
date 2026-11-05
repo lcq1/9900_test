@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Alert, Modal } from 'antd'
 import type { Experiment } from '../types'
 import {
@@ -124,6 +124,7 @@ useEffect(() => onStorageDegraded(setStorageLimited), [])
 	const [oralIndex, setOralIndex] = useState(restored?.oralIndex ?? 0)
 	const [oralStarted, setOralStarted] = useState(restored?.oralStarted ?? false)
 	const [stageIndex, setStageIndex] = useState(Math.min(restored?.stageIndex ?? 0, experiment.stages.length - 1))
+	const consentStage = experiment.stages.find((item) => item.type.toLowerCase() === 'consent')
 	const allowFreeOrder = Boolean(experiment.stages[0]?.features.navigation)
 
 	// Whether every required questionnaire question in a stage has been answered.
@@ -160,6 +161,7 @@ useEffect(() => onStorageDegraded(setStorageLimited), [])
 	const [consentedStageId, setConsentedStageId] = useState<string | null>(
 		restored?.consentedStageId ?? null,
 	)
+	const canJump = allowFreeOrder && (!consentStage || consentedStageId === consentStage.id)
 	const [paused, setPaused] = useState(false)
 	const [selections, setSelections] = useState<
 		Record<string, string | string[]>
@@ -452,7 +454,8 @@ useEffect(() => {
 	// its own timer can show the overlay again. Validation failures are copied
 	// into the dialog because the inline Alert is covered by the overlay.
 	const extensionMinutes = stage.extensionMinutes ?? 30
-	const extensionButton = stage.features.timer && stage.allowExtension && !extended[stage.id] && (
+	const extensionAvailable = Boolean(stage.features.timer && stage.allowExtension && !extended[stage.id])
+	const extensionButton = extensionAvailable && (
 		<button className="secondary-button" disabled={saving || paused || interactionLocked}
 			onClick={() => Modal.confirm({
 				rootClassName: 'participant-modal',
@@ -624,10 +627,10 @@ useEffect(() => {
 	 * `skipConfirm` bypasses the double-confirm dialog — used by the
 	 * time-is-up modal, which is itself an explicit user action.
 	 */
-	const advance = async (skipConfirm: boolean, targetIndex?: number) => {
+	const advance = async (skipConfirm: boolean, targetIndex?: number, triggeredBy = 'participant') => {
 		if (busyRef.current) return
 		const choosingStage = targetIndex !== undefined
-		if (choosingStage && (stage.type.toLowerCase() === 'consent' ||
+		if (choosingStage && ((consentStage && consentedStageId !== consentStage.id) || stage.type.toLowerCase() === 'consent' ||
 			!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= experiment.stages.length ||
 			targetIndex === stageIndex || experiment.stages[targetIndex].type.toLowerCase() === 'consent')) return
 		if (stage.sequentialQuestions && remaining > 0 && oralIndex < stage.components.filter(c => c.type === 'text').length - 1) { setValidationError('Please answer every explanation question before submitting.'); return }
@@ -693,7 +696,7 @@ useEffect(() => {
 		const missingRequiredRecording = stage.recordingRequired && !recording.self
 		if (missingRequiredRecording)
 			missingItems.push({ id: 'recording', label: 'Camera and microphone recording' })
-		if (!choosingStage && allowFreeOrder && stageIndex === experiment.stages.length - 1) {
+		if (!choosingStage && canJump && stageIndex === experiment.stages.length - 1) {
 			for (const other of experiment.stages) {
 				if (other.id === stage.id || other.type.toLowerCase() === 'consent') continue
 				for (const component of other.components) {
@@ -771,7 +774,7 @@ useEffect(() => {
 		setSaving(false)
 		queue.record(
 			'navigation',
-			{ from: stage.name, to: experiment.stages[targetIndex ?? stageIndex + 1]?.name, triggeredBy: 'participant', recording },
+			{ from: stage.name, to: experiment.stages[targetIndex ?? stageIndex + 1]?.name, triggeredBy, recording },
 			stage.id,
 		)
 		if (!choosingStage && stageIndex >= experiment.stages.length - 1) {
@@ -791,6 +794,12 @@ useEffect(() => {
 			stageTimes.current[experiment.stages[nextIndex].id] ?? Math.max(1, experiment.stages[nextIndex].countdownMinutes) * 60,
 		)
 	}
+
+	const advanceAfterExpiry = useEffectEvent(() => { void advance(true, undefined, 'timer') })
+	useEffect(() => {
+		if (timeUpVisible && stage.timerExpiry === 'advance' && !extensionAvailable)
+			advanceAfterExpiry()
+	}, [timeUpVisible, stage.id, stage.timerExpiry, extensionAvailable])
 
 	const startRecording = async (kind: RecordingKind) => {
 		if (startingRef.current[kind] || paused || busyRef.current || (stage.sequentialQuestions && remaining === 0)) return
@@ -1461,7 +1470,7 @@ useEffect(() => {
 						/>
 					)}
 					{/* Mockup-style step header: eyebrow label + segmented progress bar */}
-					{allowFreeOrder && !isConsent && (
+					{canJump && !isConsent && (
 						<label className="participant-stage-picker">
 							Go to stage
 							<select value={stageIndex} disabled={saving || paused || interactionLocked}

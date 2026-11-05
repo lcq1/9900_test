@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createClientStages, type Stage, type Experiment } from '../types'
+import { createClientStages, createStage, type Stage, type Experiment } from '../types'
 import { Modal } from 'antd'
 import { ArrowLeft, ArrowRight, Play, Trash2 } from 'lucide-react'
 import { StageBuilder } from '../researcher/StageBuilder'
 import { StageContentEditor } from '../researcher/StageContentEditor'
+import { ParticipantCodes } from '../researcher/ParticipantCodes'
 import { StageFeatureEditor } from '../researcher/StageFeatureEditor'
 
 // Experiment editor with stage, content, and feature panels.
@@ -43,6 +45,7 @@ export function Editor({
 	dirty: boolean
 }) {
 	const navigate = useNavigate()
+	const [showCodes, setShowCodes] = useState(false)
 	return (
 		<section className="editor">
 			{/* Dashboard, delete, preview, and publish actions. */}
@@ -51,6 +54,7 @@ export function Editor({
 					<ArrowLeft size={16} /> All experiments
 				</button>
 				<div className="editor-actions">
+					<button type="button" className="secondary-button" onClick={() => setShowCodes(true)}>Participant codes</button>
 					<button
 						className="secondary-button"
 						onClick={() => onDelete(experiment.id)}
@@ -162,9 +166,22 @@ export function Editor({
 				</label>
 				</div>
 			</div>
+			{showCodes && <Modal open title="Participant codes" footer={null} onCancel={() => setShowCodes(false)}>
+				<ParticipantCodes key={experiment.id} experimentId={experiment.id} experimentCode={experiment.code} />
+			</Modal>}
+			<details className="study-storage-editor">
+				<summary>Participant data and storage notice</summary>
+				<label>
+					Explain where study data is stored, who can access it and how it is protected.
+					<textarea rows={4} maxLength={8000} value={experiment.storageNotice ?? ''}
+						onChange={(event) => onUpdateExperiment((current) => ({ ...current, storageNotice: event.target.value }))} />
+				</label>
+				<p>Participants see this notice before starting the published experiment.</p>
+			</details>
+
 			{/* Stage list, content editor, and feature settings. */}
 			<div className="editor-grid">
-				<div><button type="button" className="secondary-button" onClick={() => Modal.confirm({ title: 'Load Client study flow?', content: 'This replaces the stages in this draft with the client example study flow, including the full consent form text. The signature input and approved consent clauses are kept. Supply the approved clauses before publishing.', onOk: () => { const stages = createClientStages(experiment.stages[0]); onUpdateExperiment(current => ({ ...current, stages })); onSelectStage(stages[0].id) } })}>Load Client study flow</button><StageBuilder
+				<div><button type="button" className="secondary-button" onClick={() => Modal.confirm({ title: 'Load Client study flow?', content: 'This replaces the stages in this draft with the client example study flow, including the full consent form text. The signature input and approved consent clauses are kept. Supply the approved clauses before publishing.', onOk: () => { const stages = createClientStages(experiment.stages.find((item) => item.type === 'consent') ?? createStage('consent')); onUpdateExperiment(current => ({ ...current, stages })); onSelectStage(stages[0].id) } })}>Load Client study flow</button><StageBuilder
 					experiment={experiment}
 					selectedStageId={stage.id}
 					onSelectStage={onSelectStage}

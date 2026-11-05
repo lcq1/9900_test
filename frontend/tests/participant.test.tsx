@@ -1477,6 +1477,23 @@ describe('researcher results', () => {
 		})
 		await waitFor(() => expect(listSessions).toHaveBeenLastCalledWith('E1'))
 	})
+	it('uses ISO timestamps for recording events that have a zero epoch', async () => {
+		const { ResultsPage } = await import('../src/pages/ResearcherDashboardPage')
+		const start = Date.parse('2026-11-04T01:27:32.000Z')
+		vi.mocked(listSessions).mockResolvedValue([{
+			id: 'session', experimentCode: 'E1', participantCode: 'P07',
+			startedAt: new Date(start).toISOString(), finishedAt: null, answers: [],
+			events: [
+				{ seq: 0, type: 'recording_media', timestamp: new Date(start + 70000).toISOString(), epochMs: 0, perfMs: 0 },
+				{ seq: 1, type: 'stage_view', timestamp: new Date(start).toISOString(), epochMs: start, perfMs: 0 },
+				{ seq: 2, type: 'recording_stop', timestamp: new Date(start + 90000).toISOString(), epochMs: start + 90000, perfMs: 0 },
+			],
+		}])
+		render(<ResultsPage experiments={[{ id: 'e1', code: 'E1', name: 'Study' }] as Experiment[]} />)
+		expect(await screen.findByText('1m 30s')).toBeDefined()
+		expect(screen.getByText('3 events', { selector: '.session-chip' })).toBeDefined()
+	})
+
 	it('scopes the charts to one experiment by default', async () => {
 		const { ResultsPage } = await import('../src/pages/ResearcherDashboardPage')
 		vi.mocked(listSessions).mockResolvedValue([])

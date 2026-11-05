@@ -65,6 +65,8 @@ export async function submitSession(
 	})
 }
 
+export const deleteParticipantSession = (id: string) => http.del<{ deleted: boolean }>(PATH + '/' + encodeURIComponent(id))
+
 export type CsvView = 'answers' | 'activity'
 
 /** Download saved answers or activity from the study server. */

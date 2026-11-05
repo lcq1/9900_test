@@ -26,6 +26,14 @@ def test_unsupported_database_urls_are_rejected(url):
         Settings(_env_file=None, database_url=url)
 
 
+def current_migration_head():
+    from pathlib import Path
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    return ScriptDirectory.from_config(config).get_current_head()
+
+
 def test_database_uses_postgresql_and_real_migrations(client):
     from app.core import database
     from sqlalchemy import inspect
@@ -41,9 +49,11 @@ def test_database_uses_postgresql_and_real_migrations(client):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "9e9e9e9e9e9e"
+            == current_migration_head()
         )
         inspector = inspect(connection)
+        policy_columns = {column["name"]: column for column in inspector.get_columns("platform_settings")}
+        assert policy_columns["allow_researcher_session_deletion"]["nullable"] is False
         columns = {
             column["name"]: column for column in inspector.get_columns("experiments")
         }
@@ -182,7 +192,7 @@ def test_upgrade_from_original_head_preserves_existing_experiments(
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "9e9e9e9e9e9e"
+            == current_migration_head()
         )
 
 
@@ -223,7 +233,7 @@ def test_upgrade_adopts_unversioned_create_all_database(client, auth_headers):
             connection.exec_driver_sql(
                 "SELECT version_num FROM alembic_version"
             ).scalar_one()
-            == "9e9e9e9e9e9e"
+            == current_migration_head()
         )
         command.upgrade(config, "head")
         assert (

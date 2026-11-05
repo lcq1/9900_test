@@ -24,6 +24,7 @@ workspace_router = APIRouter(prefix="/workspace", tags=["workspace"])
 
 
 class PlatformSettings(CamelORMModel):
+    allow_researcher_session_deletion: bool
     allow_self_registration: bool
     require_consent_signature: bool
     data_retention_days: int
@@ -33,6 +34,7 @@ class PlatformSettings(CamelORMModel):
 
 
 class PlatformSettingsUpdate(CamelORMModel):
+    allow_researcher_session_deletion: bool | None = None
     allow_self_registration: bool | None = None
     require_consent_signature: bool | None = None
     data_retention_days: int | None = Field(default=None, ge=1)

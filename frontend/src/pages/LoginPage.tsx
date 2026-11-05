@@ -91,19 +91,7 @@ export function AuthScreen({
 			<div className="auth-panel">
 				<div className="brand auth-brand">
 					<span className="brand-mark" aria-hidden="true">
-						<svg
-							viewBox="0 0 24 24"
-							width="16"
-							height="16"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2.4"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						>
-							<path d="M5 19 19 5" />
-							<path d="M9 5h10v10" />
-						</svg>
+						<img src="/favicon.svg" width="27" height="27" alt="" />
 					</span>
 					<span className="brand-word">Beyond</span>
 				</div>

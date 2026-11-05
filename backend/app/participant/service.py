@@ -307,3 +307,60 @@ def _build_result(
             for e in orm_events
         ],
     )
+
+
+def require_session_deletion(db: Session, researcher) -> None:
+    from app.administrator.service import get_settings
+    if researcher.role != "administrator" and not get_settings(db).allow_researcher_session_deletion:
+        raise HTTPException(status_code=403, detail="Only administrators may delete participant records unless permission is delegated")
+
+
+async def delete_session_record(db: Session, session: ParticipantSession, actor) -> None:
+    """Stage local files before the transaction; restore them if deletion fails."""
+    from pathlib import Path
+    from uuid import uuid4
+    import logging
+    from app.core.storage import _safe_local_path
+    from app.participant.models import Consent, Recording, AIConversation
+    from app.researcher import repository as versions
+
+    files = db.query(Recording).filter_by(session_id=session.id).all()
+    moved = []
+    def restore_files():
+        for original, staged in reversed(moved):
+            if staged.exists():
+                staged.replace(original)
+    try:
+        for recording in files:
+            original = Path(_safe_local_path(recording.path))
+            if not original.exists():
+                continue
+            staged = original.with_name(original.name + ".deleting-" + uuid4().hex)
+            original.replace(staged)
+            moved.append((original, staged))
+    except (OSError, ValueError):
+        restore_files()
+        raise HTTPException(status_code=503, detail="Recording storage is unavailable; the participant record was not deleted") from None
+    try:
+        links = db.query(ParticipantEvent).filter_by(session_id=session.id, type="server.ai").all()
+        conversations = {event.detail["conversation_id"] for event in links if event.detail and event.detail.get("conversation_id")}
+        if conversations:
+            shared = db.query(ParticipantEvent).filter(ParticipantEvent.type == "server.ai", ParticipantEvent.session_id != session.id,
+                ParticipantEvent.detail["conversation_id"].as_string().in_(conversations)).all()
+            conversations -= {event.detail["conversation_id"] for event in shared}
+            db.query(AIConversation).filter(AIConversation.id.in_(conversations)).delete(synchronize_session=False)
+        for model in (Answer, Consent, Recording, ParticipantEvent):
+            db.query(model).filter_by(session_id=session.id).delete(synchronize_session=False)
+        experiment = repo.find_experiment_by_code(db, session.experiment_code)
+        versions.audit(db, experiment, "server.session_deleted", {"session_id": session.id, "actor_id": actor.id})
+        db.delete(session)
+        db.commit()
+    except Exception:
+        db.rollback()
+        restore_files()
+        raise
+    for _, staged in moved:
+        try:
+            staged.unlink(missing_ok=True)
+        except OSError:
+            logging.getLogger(__name__).exception("Could not remove a staged recording after session deletion")

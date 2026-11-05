@@ -1,6 +1,6 @@
 # Beyond — Deployment and Data Migration Guide
 
-Prepared 5 November 2026 for a technical operator. Workflow baseline: application commit `7157320`, merged through MR !82. Record the exact accepted revision of the deployment configuration at handover. Database migration head: `9e9e9e9e9e9e`.
+Prepared 5 November 2026 for a technical operator. Workflow baseline: application commit `7157320`, merged through MR !82. Record the exact accepted revision of the deployment configuration at handover. Database migration head: `a0a0a0a0a0a0` (adds administrator-controlled participant-record deletion; delegation to researchers is off by default).
 
 The development data inventory below is a historical snapshot, not a guarantee of current counts. The production stack is separately defined in `docker-compose.production.yml`. Local isolated deployment checks do not establish that a public domain, certificate issuance or client-data migration has been completed. Perform a client-data restore rehearsal before accepting the final data package.
 
@@ -155,7 +155,7 @@ Ensure restored files are readable/writable by the backend user. Preserve config
 
 ### Restoration acceptance
 
-1. Check the API health endpoint and schema version `9e9e9e9e9e9e`.
+1. Check the API health endpoint and schema version `a0a0a0a0a0a0`.
 2. Compare source/target row counts using the export-time manifest, not permanently hard-coded numbers.
 3. Sign in with the client's existing account. The inspected source includes active administrator accounts for `k.alqattan@unsw.edu.au` and `hennessy@ad.unsw.edu.au`. Confirm which accounts the client should retain; do not delete accounts without reviewing data ownership.
 4. Open every migrated experiment, inspect a completed session, download Excel and play existing recordings.

@@ -10,6 +10,7 @@ from app.core.config import settings as deployment_settings
 
 DEFAULTS: dict[str, Any] = {
     "allow_self_registration": True,
+    "allow_researcher_session_deletion": False,
     "require_consent_signature": True,
     "data_retention_days": 365,
     "max_session_minutes": 60,

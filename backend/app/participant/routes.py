@@ -322,6 +322,19 @@ def submit_session(
     return svc.submit_session(db, payload)
 
 
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str, db: Session = Depends(get_db),
+                         researcher: Researcher = Depends(get_current_researcher)):
+    from app.participant.models import ParticipantSession
+    session = db.query(ParticipantSession).filter_by(id=session_id).with_for_update().first()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    check_session_owner(db, session.experiment_code, researcher)
+    svc.require_session_deletion(db, researcher)
+    await svc.delete_session_record(db, session, researcher)
+    return {"deleted": True}
+
+
 @router.get("/sessions/{session_id}/csv")
 def export_session_csv(
     session_id: str,
@@ -641,6 +654,7 @@ async def delete_recording(session_id: str, recording_id: str, db: Session = Dep
     from app.participant.models import Recording
     session = svc.get_session_result(db, session_id)
     check_session_owner(db, session.experiment_code, researcher)
+    svc.require_session_deletion(db, researcher)
     recording = db.query(Recording).filter_by(id=recording_id, session_id=session_id).first()
     if recording is None:
         raise HTTPException(status_code=404, detail="Recording not found")

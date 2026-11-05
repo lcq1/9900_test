@@ -494,9 +494,11 @@ useEffect(() => {
 		window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
 	}, [stage.id])
 
-	// Record every stage transition (including the first render).
+	const visitStarted = useRef(false)
+	// Record every stage transition, explicitly identifying a resumed browser visit.
 	useEffect(() => {
-		queue.record('stage_view', { stageName: stage.name }, stage.id)
+		queue.record('stage_view', { stageName: stage.name, ...(!visitStarted.current ? { visitStarted: true } : {}) }, stage.id)
+        visitStarted.current = true
 	}, [queue, stage.id, stage.name])
 
 	// Record a milestone once the countdown for this stage elapses.
@@ -1194,7 +1196,7 @@ useEffect(() => {
 									</div>
 								)}
 
-								{component.otherOption && (Array.isArray(selected) ? selected.includes(component.otherOption) : selected === component.otherOption) && <label>Please specify<input aria-label={component.label + ' (please specify)'} value={String(selections[component.id + ':other'] ?? '')} onChange={event => setText(component.id + ':other', event.target.value)} onBlur={() => commitText(component.id + ':other')} /></label>}
+								{component.otherOption && (Array.isArray(selected) ? selected.includes(component.otherOption) : selected === component.otherOption) && <label className="ms-other-response"><span>Please specify <small>Required</small></span><input placeholder="Enter your other response" aria-label={component.label + ' (please specify)'} value={String(selections[component.id + ':other'] ?? '')} onChange={event => setText(component.id + ':other', event.target.value)} onBlur={() => commitText(component.id + ':other')} /></label>}
 {component.type === 'signature' && (
 									<div className="signature-box">
 										<PenLine size={18} />

@@ -1,3 +1,4 @@
+import { DeleteSessionDialog } from '../researcher/DeleteSessionDialog'
 import { useTransientNotice } from '../participant/TimerController'
 import { useEffect, useState } from 'react'
 import { Modal } from 'antd'
@@ -36,6 +37,7 @@ export function AdministratorPage() {
 	const [researchers, setResearchers] = useState<Researcher[]>([])
 	const [settings, setSettings] = useState<PlatformSettings | null>(null)
 	const [sessions, setSessions] = useState<SessionSummary[]>([])
+    const [deletingSession, setDeletingSession] = useState<SessionSummary | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError, errorVisible, errorRevision] =
 		useTransientNotice('')
@@ -152,6 +154,7 @@ export function AdministratorPage() {
 
 	return (
 		<section className="page dashboard">
+            <DeleteSessionDialog session={deletingSession} onCancel={() => setDeletingSession(null)} onDeleted={id => { setSessions(items => items.filter(item => item.id !== id)); setDeletingSession(null) }} />
 			<div className="page-heading">
 				<div>
 					<p className="eyebrow">ADMINISTRATION</p>
@@ -280,6 +283,10 @@ export function AdministratorPage() {
 							void patchSettings({ allowSelfRegistration: value })
 						}
 					/>
+                    <SettingsToggle label="Allow researchers to delete participant records"
+                        hint="Off by default. When enabled, researchers may permanently delete sessions and recordings belonging to their own experiments. Administrators always retain access."
+                        checked={Boolean(settings.allowResearcherSessionDeletion)}
+                        onChange={value => void patchSettings({ allowResearcherSessionDeletion: value })} />
 					<SettingsToggle label="Require researcher approval"
 						hint="New self-registered accounts wait for an administrator."
 						checked={Boolean(settings.requireResearcherApproval)}
@@ -395,6 +402,7 @@ export function AdministratorPage() {
 										? 'Downloading…'
 										: 'Download Excel'}
 								</button>
+                                <button type="button" className="danger-button" onClick={() => setDeletingSession(session)}>Delete record</button>
 							</div>
 						</div>
 					))}

@@ -1475,6 +1475,12 @@ describe('researcher results', () => {
 			expect(screen.getByRole('img', { name: label })).toBeDefined()
 			expect(document.querySelector('.chart-interpretation h2')?.textContent).toBeTruthy()
 			expect(document.querySelectorAll('.chart-interpretation li')).toHaveLength(2)
+			if (value === 'pie') {
+				const sector = screen.getByRole('img', { name: 'Event mix' }).querySelector('path')!
+				fireEvent.mouseEnter(sector)
+				expect(screen.getByRole('tooltip').textContent).toContain('Answer')
+				expect(screen.getByRole('tooltip').textContent).toContain('100.0%')
+			}
 		}
 		fireEvent.change(screen.getByLabelText('Results experiment'), {
 			target: { value: 'E1' },

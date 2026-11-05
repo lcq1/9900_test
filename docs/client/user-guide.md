@@ -136,6 +136,9 @@ Open **Visualization results**, choose the experiment and chart type, and inspec
 Recorded event counts include system events. More events do not establish better task performance or stronger engagement. Recorded event spans include gaps and are not a measure of continuous active work.
 
 - Open **View timeline** for an individual session and inspect its events and available recordings.
+- **Recorded time** sums recorded visit spans, excluding explicit pauses and the intervals after Abort or between identified browser visits. It includes reading time while the study remains open and is not a measure of engagement. For resumed sessions, the visit count and total wall-clock span are shown separately. Charts retain the original elapsed timestamps, including gaps.
+- **Delete record** permanently removes only the selected session, its answers, consent, event history, recordings and session-linked AI history. Check the participant and experiment in the confirmation dialog before deleting. Other sessions and the experiment design remain available.
+- Administrators can delete sessions from **Administration** or **Visualization results**. Under **Administration → Platform settings**, **Allow researchers to delete participant records** is off by default. Enable it when researchers should be able to delete their own experiments’ sessions; switching it off revokes that access at the server. Researchers cannot delete another researcher’s sessions.
 - **Download chart** opens a choice of an individual chart or all charts. Downloaded SVG files are figures, not database backups.
 - Use the experiment export action to download Excel. The workbook has study information and sheets by publication version; legacy data can have an unknown-version sheet.
 - On the current results screen, the session-card Excel/export action downloads the experiment workbook, which can contain other sessions in that experiment. Review the workbook before sharing it.

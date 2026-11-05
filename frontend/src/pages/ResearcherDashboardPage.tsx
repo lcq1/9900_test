@@ -1,4 +1,6 @@
 import { Modal, Dropdown } from 'antd'
+import { DeleteSessionDialog } from '../researcher/DeleteSessionDialog'
+import { eventEpoch, sessionTiming, formatSessionDuration } from '../researcher/sessionTiming'
 import { useTransientNotice } from '../participant/TimerController'
 import { useState, useEffect, useId, useRef, lazy, Suspense } from 'react'
 import type { Experiment } from '../types'
@@ -309,12 +311,7 @@ interface SessionData {
 
 function normalizeResultEvents(events: ParticipantEvent[]): ParticipantEvent[] {
 	return events
-		.map((event) => {
-			if (Number.isFinite(event.epochMs) && event.epochMs > 0) return event
-			// Some server-generated events carry ISO time but leave epochMs at zero.
-			const parsed = Date.parse(event.timestamp)
-			return { ...event, epochMs: parsed > 0 ? parsed : Number.NaN }
-		})
+		.map((event) => ({ ...event, epochMs: eventEpoch(event) }))
 		.sort((a, b) => (Number.isFinite(a.epochMs) ? a.epochMs : Infinity) -
 			(Number.isFinite(b.epochMs) ? b.epochMs : Infinity))
 }
@@ -344,6 +341,16 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 	const [error, setError, errorVisible, errorRevision] =
 		useTransientNotice('')
 	const [exportSession, setExportSession] = useState<SessionData | null>(null)
+    const [deletingSession, setDeletingSession] = useState<SessionData | null>(null)
+    const [canDeleteSession, setCanDeleteSession] = useState(getCurrentResearcher()?.role === 'administrator')
+    useEffect(() => {
+        let active = true
+        void getWorkspaceSettings().then(policy => {
+            if (active) setCanDeleteSession(getCurrentResearcher()?.role === 'administrator' || Boolean(policy.allowResearcherSessionDeletion))
+        }).catch(() => undefined)
+        return () => { active = false }
+    }, [])
+
 
 	// Read captured sessions from the backend. The participant runtime submits
 	// here on finish/abort, so the server is the authoritative source.
@@ -423,6 +430,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 
 	return (
 		<section className="page dashboard results-page">
+            <DeleteSessionDialog session={deletingSession} onCancel={() => setDeletingSession(null)} onDeleted={id => { setSessions(items => items.filter(item => item.id !== id)); setOpenId(null); setDeletingSession(null) }} />
 			<div className="page-heading">
 				<div>
 					<p className="eyebrow">RESULTS</p>
@@ -573,11 +581,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 			) : (
 				<div className="results-list">
 					{visibleSessions.map((session) => {
-						const timedEvents = session.events.filter((event) => Number.isFinite(event.epochMs))
-						const first = timedEvents[0]
-						const last = timedEvents[timedEvents.length - 1]
-						const durationMs =
-							first && last ? last.epochMs - first.epochMs : 0
+						const timing = sessionTiming(session.events)
 						const open = openId === session.id
 						return (
 							<div className="session-card" key={session.id}>
@@ -587,13 +591,14 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 											{session.experimentName}
 										</strong>
 										<small>Participant {session.participantCode}</small>
+                                        {timing.visits > 1 && <span className="session-timing-note">{timing.visits} visits · Total span {formatSessionDuration(timing.spanMs)}</span>}
 									</div>
 									<div className="session-chips">
 										<span className="session-chip">
 											{session.events.length} events
 										</span>
-										<span className="session-chip" title="Time between the first and last recorded events">
-											{formatDuration(durationMs)}
+										<span className="session-chip" title={`Recorded visit time, excluding explicit pauses and exited intervals. Total span: ${formatSessionDuration(timing.spanMs)}; excluded: ${formatSessionDuration(timing.excludedMs)}.`}>
+											{formatSessionDuration(timing.recordedMs)} recorded
 										</span>
 										<button
 											className="secondary-button"
@@ -613,6 +618,7 @@ export function ResultsPage({ experiments }: { experiments: Experiment[] }) {
 										>
 											Export session
 										</button>
+                                        {canDeleteSession && <button type="button" className="danger-button" onClick={() => setDeletingSession(session)}><Trash2 size={14} aria-hidden="true" /> Delete record</button>}
 									</div>
 								</div>
 								{open && (
@@ -913,15 +919,6 @@ function formatClock(epochMs: number): string {
   return `${hh}:${mm}:${ss}.${ms}`
 }
 
-function formatDuration(ms: number): string {
-  if (!ms || ms < 0) return '—'
-  const seconds = Math.round(ms / 100) / 10
-  if (seconds < 60) return `${seconds}s`
-  const rounded = Math.round(ms / 1000)
-  const minutes = Math.floor(rounded / 60)
-  const remainder = rounded % 60
-  return `${minutes}m ${remainder}s`
-}
 
 function detailText(detail?: Record<string, unknown>): string {
   if (!detail) return '—'

@@ -1578,7 +1578,7 @@ describe('researcher results', () => {
 			],
 		}])
 		render(<ResultsPage experiments={[{ id: 'e1', code: 'E1', name: 'Study' }] as Experiment[]} />)
-		expect(await screen.findByText('1m 30s')).toBeDefined()
+		expect(await screen.findByText('1m 30s recorded')).toBeDefined()
 		expect(screen.getByText('3 events', { selector: '.session-chip' })).toBeDefined()
 		fireEvent.click(screen.getByRole('button', { name: 'Download chart' }))
 		const picker = await screen.findByLabelText('Chart to download')

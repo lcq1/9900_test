@@ -12,6 +12,7 @@ class PlatformSettings(Base):
     __tablename__ = "platform_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    allow_researcher_session_deletion: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_self_registration: Mapped[bool] = mapped_column(Boolean, default=True)
     require_consent_signature: Mapped[bool] = mapped_column(Boolean, default=True)
     data_retention_days: Mapped[int] = mapped_column(Integer, default=365)

@@ -6,6 +6,7 @@ import type { ParticipantSessionResult } from './participant'
 
 // Registration, consent, retention, and session policies.
 export interface PlatformSettings {
+    allowResearcherSessionDeletion?: boolean
 	allowSelfRegistration: boolean
 	requireConsentSignature: boolean
 	dataRetentionDays: number

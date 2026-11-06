@@ -2048,6 +2048,38 @@ nav {
 	align-items: center;
 }
 
+.admin-session-table .table-head,
+.admin-session-table .experiment-row {
+	grid-template-columns: minmax(150px, 1.4fr) minmax(60px, .45fr) minmax(160px, 1fr) 280px;
+}
+.admin-session-table .experiment-row {
+	padding-block: 14px;
+}
+.admin-session-actions-heading {
+	text-align: right;
+}
+.admin-session-actions {
+	gap: 12px;
+	flex-wrap: nowrap;
+}
+.admin-session-actions > button {
+	flex: 1;
+	min-height: 40px;
+	padding: 0 12px;
+	white-space: nowrap;
+}
+@media (max-width: 1100px) {
+	.admin-session-table .experiment-row {
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 12px;
+	}
+	.admin-session-table .table-head { display: none; }
+	.admin-session-actions { grid-column: 1 / -1; justify-self: end; width: 280px; max-width: 100%; }
+}
+@media (max-width: 540px) {
+	.admin-session-actions { justify-self: stretch; width: 100%; gap: 10px; }
+}
+
 /* ---- MS-Forms-style participant stage content (UI polish fix #5) ---- */
 .participant-text {
 	color: #586474;

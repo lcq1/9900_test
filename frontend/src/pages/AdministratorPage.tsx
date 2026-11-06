@@ -366,12 +366,12 @@ export function AdministratorPage() {
 					No participant events captured yet.
 				</p>
 			) : (
-				<div className="experiment-table">
+				<div className="experiment-table admin-session-table">
 					<div className="table-head">
 						<span>Session</span>
 						<span>Events</span>
 						<span>Last activity</span>
-						<span></span>
+						<span className="admin-session-actions-heading">Actions</span>
 					</div>
 					{sessions.map((session) => (
 						<div className="experiment-row" key={session.id}>
@@ -387,10 +387,7 @@ export function AdministratorPage() {
 										).toLocaleString()
 									: '—'}
 							</span>
-							<div
-								className="row-actions"
-								style={{ flexWrap: 'wrap' }}
-							>
+							<div className="row-actions admin-session-actions">
 								<button
 									className="secondary-button"
 									disabled={downloading !== null}

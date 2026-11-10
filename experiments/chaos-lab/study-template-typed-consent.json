@@ -1,0 +1,1061 @@
+{
+  "format": "beyond-study-template",
+  "version": 1,
+  "name": "The Bureau of Extremely Questionable Inventions - 20-Stage Chaos Lab (Typed Consent Variant)",
+  "fullScreen": true,
+  "storageNotice": "Demo data includes responses, signatures, AI messages, interaction events, uploads, and recordings where enabled and permitted. Storage destination, access, retention and deletion arrangements must be confirmed with the study operator before participation. Use fictional content and a clean demo tab.",
+  "stages": [
+    {
+      "id": "chaos-stage-01",
+      "name": "01 - Consent Before Nonsense",
+      "type": "consent",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-1",
+          "type": "text",
+          "label": "Welcome to The Bureau of Extremely Questionable Inventions. This is a fictional usability demonstration, not a scored assessment. Expect 20 stages and approximately 45-60 minutes. Participation is voluntary: you may pause or stop. We collect your answers, signatures, AI conversations, navigation/timing events, uploaded files, and copy/paste activity in designated text tasks. Selected stages request screen sharing and camera/microphone recording; browser permission is required. Share only a clean demo tab and use fictional information. Do not upload private files. AI messages are sent to the configured AI provider and may be incorrect. Ask the study operator about storage, retention, access, and deletion before signing. Signing confirms that you understand and agree to this demo; declining means you should exit.",
+          "required": false
+        }
+      ],
+      "features": {
+        "ai": false,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": false,
+        "confirm": false,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 0,
+      "requiredFeatures": {
+        "signatureBox": true
+      },
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "name",
+      "consentClauses": [
+        "I have read the demo information and understand participation is voluntary.",
+        "I understand the described collection of answers, AI messages, interaction events, uploads and permitted recordings.",
+        "I have had the opportunity to ask the operator about data storage, access, retention and deletion.",
+        "I agree to participate and understand I may stop."
+      ],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-02",
+      "name": "02 - Employee Orientation for a Potato",
+      "type": "instruction",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-3",
+          "type": "text",
+          "label": "You are the newly appointed Chief Potato Officer. Your mission: rescue a fictional office from spectacularly bad inventions. Open AI chat and ask: \"Give me a ridiculous job title and one useful design principle.\" You may challenge every AI suggestion. Use Pause once, then resume. Your answers are saved as you move through the study.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-2",
+          "type": "button",
+          "label": "I accept this deeply suspicious promotion",
+          "required": false
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-03",
+      "name": "03 - Elect the Office Overlord",
+      "type": "single_choice",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-5",
+          "type": "text",
+          "label": "Ask the AI to compare two candidates. Pick one; choosing Other requires an explanation.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-4",
+          "type": "choice",
+          "label": "Who should chair the emergency meeting?",
+          "required": true,
+          "options": [
+            "A pigeon with a spreadsheet",
+            "A toaster with leadership training",
+            "A potato wearing a tie",
+            "Other candidate"
+          ],
+          "otherOption": "Other candidate"
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-04",
+      "name": "04 - Survival Kit for Monday",
+      "type": "multiple_choice",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-7",
+          "type": "text",
+          "label": "The meeting could have been an email. Select your survival equipment and ask AI to identify one missing item.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-6",
+          "type": "checkbox",
+          "label": "Pack every item you would bring.",
+          "required": true,
+          "options": [
+            "A tiny whiteboard",
+            "Emergency biscuits",
+            "A rubber duck consultant",
+            "Noise-cancelling earmuffs",
+            "Other survival tool"
+          ],
+          "otherOption": "Other survival tool"
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-05",
+      "name": "05 - Confidently Wrong Toaster",
+      "type": "true_false",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-10",
+          "type": "text",
+          "label": "The toaster claims: \"If an AI sounds confident, its answer must be correct.\" Consult the assistant, then judge the claim.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-8",
+          "type": "true_false",
+          "label": "The toaster is correct.",
+          "required": true,
+          "options": [
+            "True",
+            "False"
+          ]
+        },
+        {
+          "id": "chaos-component-9",
+          "type": "textbox",
+          "label": "Explain your verdict in one sentence.",
+          "required": true
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-06",
+      "name": "06 - Corporate Mad Libs",
+      "type": "fill_blank",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-14",
+          "type": "text",
+          "label": "Complete the absurd memo. Ask AI for three options, copy one into a field, then edit it. Copy/paste activity is logged in this stage.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-11",
+          "type": "textbox",
+          "label": "Our new productivity strategy is powered by ____.",
+          "required": true
+        },
+        {
+          "id": "chaos-component-12",
+          "type": "textbox",
+          "label": "The board has banned ____ because it was too effective.",
+          "required": true
+        },
+        {
+          "id": "chaos-component-13",
+          "type": "textbox",
+          "label": "Our official slogan is: ____!",
+          "required": true
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": true,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": true,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": true,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-07",
+      "name": "07 - Apology from the Office Printer",
+      "type": "short_answer",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-16",
+          "type": "text",
+          "label": "Write a 60-100 word apology from a printer that ate the quarterly report. Include one excuse, one concrete fix, and one suspiciously sincere compliment. Ask AI for feedback, then revise.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-15",
+          "type": "textbox",
+          "label": "Dear humans, about your report...",
+          "required": true
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": true,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": true,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": true,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-08",
+      "name": "08 - The Vibe Audit",
+      "type": "single_choice",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-19",
+          "type": "text",
+          "label": "The board wants measurable nonsense. Choose a mood, then rate confidence. Ask the AI why a confidence rating is not proof.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-17",
+          "type": "choice",
+          "label": "Current office weather",
+          "required": true,
+          "options": [
+            "Sunny with scattered deadlines",
+            "Foggy with a chance of meetings",
+            "A localized biscuit tornado"
+          ]
+        },
+        {
+          "id": "chaos-component-18",
+          "type": "rating",
+          "label": "How confident are you in your potato leadership?",
+          "required": true,
+          "options": [
+            "1 - Mashed",
+            "2 - Wobbly",
+            "3 - Baked",
+            "4 - Crispy",
+            "5 - Supreme Spud"
+          ]
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-09",
+      "name": "09 - Evidence of a Better Bad Idea",
+      "type": "short_answer",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-22",
+          "type": "text",
+          "label": "Design a desk gadget that stops unnecessary meetings. Download the supplied meeting-rescue-brief.txt from the materials panel if the operator attached it. Create a small text file describing your gadget and upload it. Ask AI for one failure mode.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-20",
+          "type": "textbox",
+          "label": "Name the gadget and describe how it works.",
+          "required": true
+        },
+        {
+          "id": "chaos-component-21",
+          "type": "attachment",
+          "label": "Upload your fictional gadget proposal (.txt).",
+          "required": true
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": true,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": true
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {
+        "questionnaire": true,
+        "attachment": true
+      },
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-10",
+      "name": "10 - The Rubber Duck Witness",
+      "type": "short_answer",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-24",
+          "type": "text",
+          "label": "Share a clean demo tab using screen recording, then start recording manually. Narrate or type how you would improve a terrible meeting agenda. Open AI chat and request a three-step rescue. Stop recording when finished. Do not share unrelated windows.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-23",
+          "type": "textbox",
+          "label": "What did you change, and why?",
+          "required": true
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": true,
+        "clock": true,
+        "screenRecording": true,
+        "selfie": false,
+        "copyPaste": true,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": true,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-11",
+      "name": "11 - Campaign Speech for a Toaster",
+      "type": "video_oral_answer",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-25",
+          "type": "text",
+          "label": "Allow camera and microphone. Recording starts after permission. Deliver a 30-60 second campaign speech for a toaster running for office. Include a slogan, a realistic promise, and an absurd promise. Ask AI for an outline before speaking; do not claim the assistant can see or hear you.",
+          "required": false
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": true,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": true,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": true,
+      "recordingMode": "auto",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": true,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-12",
+      "name": "12 - The Three Question Press Conference",
+      "type": "video_oral_answer",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-28",
+          "type": "text",
+          "label": "Question 1: Introduce your toaster candidate and its single greatest weakness.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-26",
+          "type": "text",
+          "label": "Question 2: A journalist asks why the toaster spent the budget on glitter. Respond with one admission and one repair plan.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-27",
+          "type": "text",
+          "label": "Question 3: Explain how you would measure whether the toaster improved office life. End with a dramatic slogan.",
+          "required": false
+        }
+      ],
+      "features": {
+        "ai": false,
+        "timer": true,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": true,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 10,
+      "requiredFeatures": {},
+      "recordingRequired": true,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": true
+    },
+    {
+      "id": "chaos-stage-13",
+      "name": "13 - One Minute Biscuit Meditation",
+      "type": "instruction",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-29",
+          "type": "text",
+          "label": "A short intermission: invent a biscuit with a completely unnecessary superpower. Ask AI for a name. Let the one-minute timer expire to exercise automatic advance. There are no required answers on this stage.",
+          "required": false
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": true,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": false,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 1,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "advance",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-14",
+      "name": "14 - The Terms and Conditions Goblin",
+      "type": "short_answer",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-32",
+          "type": "text",
+          "label": "Draft a one-sentence promise to challenge confident nonsense. Ask AI to make it funnier without changing its meaning. Sign using a fictional demo name; this is a task acknowledgement, not a second consent form.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-30",
+          "type": "textbox",
+          "label": "My solemn promise to the Bureau:",
+          "required": true
+        },
+        {
+          "id": "chaos-component-31",
+          "type": "signature",
+          "label": "Type your fictional Bureau signature.",
+          "required": true
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": true,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": true,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {
+        "questionnaire": true,
+        "signatureBox": true
+      },
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-15",
+      "name": "15 - Budget Committee of Raccoons",
+      "type": "multiple_choice",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-35",
+          "type": "text",
+          "label": "You have 10 imaginary coins. Biscuits cost 2, a prototype costs 5, research costs 3, and glitter costs 8. Select a feasible bundle. Ask AI to check the arithmetic; explain any trade-off.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-33",
+          "type": "checkbox",
+          "label": "Choose your purchases",
+          "required": true,
+          "options": [
+            "Biscuits - 2",
+            "Prototype - 5",
+            "Research - 3",
+            "Glitter - 8"
+          ]
+        },
+        {
+          "id": "chaos-component-34",
+          "type": "textbox",
+          "label": "Show your total and explain your decision.",
+          "required": true
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": true,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": true,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-16",
+      "name": "16 - The Invisible Umbrella Claim",
+      "type": "true_false",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-38",
+          "type": "text",
+          "label": "An inventor says: \"Our invisible umbrella kept three people dry indoors, so it definitely works in rain.\" Ask the AI for a better test.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-36",
+          "type": "true_false",
+          "label": "The evidence establishes that the umbrella works in rain.",
+          "required": true,
+          "options": [
+            "True",
+            "False"
+          ]
+        },
+        {
+          "id": "chaos-component-37",
+          "type": "textbox",
+          "label": "Describe one fair test and one measurable outcome.",
+          "required": true
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-17",
+      "name": "17 - Emergency Slogan Repair",
+      "type": "fill_blank",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-42",
+          "type": "text",
+          "label": "The Bureau has accidentally advertised \"We optimize your confusion.\" Ask AI for alternatives, paste one, and replace at least two words. Use Add time once if you want to exercise timer extension.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-39",
+          "type": "textbox",
+          "label": "Original AI suggestion:",
+          "required": true
+        },
+        {
+          "id": "chaos-component-40",
+          "type": "textbox",
+          "label": "My improved slogan:",
+          "required": true
+        },
+        {
+          "id": "chaos-component-41",
+          "type": "textbox",
+          "label": "The two words I changed and why:",
+          "required": true
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": true,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": true,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 2,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": true,
+      "timerExpiry": "manual",
+      "extensionMinutes": 1,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-18",
+      "name": "18 - The Grand Product Pitch",
+      "type": "short_answer",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-46",
+          "type": "text",
+          "label": "Combine your best ideas into a 100-word pitch for the Meeting Evaporator 3000. Include a user, a problem, a feature, a risk, and a test. You may record a clean demo tab and optionally upload a sketch. Ask AI to act as a skeptical investor.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-43",
+          "type": "textbox",
+          "label": "Your magnificent but testable pitch:",
+          "required": true
+        },
+        {
+          "id": "chaos-component-44",
+          "type": "attachment",
+          "label": "Optional fictional sketch or pitch file",
+          "required": false
+        },
+        {
+          "id": "chaos-component-45",
+          "type": "rating",
+          "label": "How useful was the AI critique?",
+          "required": true,
+          "options": [
+            "1 - Decorative",
+            "2 - Slightly useful",
+            "3 - Useful",
+            "4 - Very useful",
+            "5 - Saved the potato"
+          ]
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": true,
+        "clock": true,
+        "screenRecording": true,
+        "selfie": false,
+        "copyPaste": true,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": true
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {
+        "attachment": false
+      },
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": true,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-19",
+      "name": "19 - Final Boardroom Showdown",
+      "type": "single_choice",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-50",
+          "type": "text",
+          "label": "Choose what to launch. Ask AI to argue against your favorite option before deciding. You may navigate back to review prior answers.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-47",
+          "type": "choice",
+          "label": "Which invention gets the imaginary funding?",
+          "required": true,
+          "options": [
+            "Meeting Evaporator 3000",
+            "Honest Office Printer",
+            "Democratically Elected Toaster",
+            "None - more testing first"
+          ]
+        },
+        {
+          "id": "chaos-component-48",
+          "type": "textbox",
+          "label": "What evidence would change your mind?",
+          "required": true
+        },
+        {
+          "id": "chaos-component-49",
+          "type": "rating",
+          "label": "How much did AI influence this decision?",
+          "required": true,
+          "options": [
+            "1 - None",
+            "2 - A little",
+            "3 - Some",
+            "4 - A lot",
+            "5 - Potato autopilot"
+          ]
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": false,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {},
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    },
+    {
+      "id": "chaos-stage-20",
+      "name": "20 - Exit Interview with the Potato",
+      "type": "short_answer",
+      "duration": 0,
+      "components": [
+        {
+          "id": "chaos-component-56",
+          "type": "text",
+          "label": "The Bureau thanks you. All characters and scenarios were fictional. Tell us what worked and what confused you. Ask AI to give your invention a ceremonial title. Submit to finish; contact the operator about your demo data. No real potatoes were promoted.",
+          "required": false
+        },
+        {
+          "id": "chaos-component-51",
+          "type": "textbox",
+          "label": "Which feature helped you most, and why?",
+          "required": true
+        },
+        {
+          "id": "chaos-component-52",
+          "type": "textbox",
+          "label": "Describe one bug or confusing moment, or write \"None observed\".",
+          "required": true
+        },
+        {
+          "id": "chaos-component-53",
+          "type": "checkbox",
+          "label": "Which features did you actually try?",
+          "required": true,
+          "options": [
+            "AI chat",
+            "Timer / extension",
+            "Pause / resume",
+            "Back navigation",
+            "Screen recording",
+            "Camera / microphone",
+            "Attachment upload",
+            "Signature",
+            "Copy / paste"
+          ]
+        },
+        {
+          "id": "chaos-component-54",
+          "type": "rating",
+          "label": "Overall experience",
+          "required": true,
+          "options": [
+            "1 - Bureaucratic nightmare",
+            "2 - A little soggy",
+            "3 - Acceptable potato",
+            "4 - Delightfully odd",
+            "5 - Would promote another potato"
+          ]
+        },
+        {
+          "id": "chaos-component-55",
+          "type": "button",
+          "label": "Submit my application for Supreme Spud",
+          "required": false
+        }
+      ],
+      "features": {
+        "ai": true,
+        "timer": false,
+        "clock": true,
+        "screenRecording": false,
+        "selfie": false,
+        "copyPaste": true,
+        "navigation": true,
+        "confirm": true,
+        "pauseAbort": true,
+        "signatureBox": false,
+        "attachment": false
+      },
+      "countdownMinutes": 3,
+      "requiredFeatures": {
+        "questionnaire": true
+      },
+      "recordingRequired": false,
+      "recordingMode": "manual",
+      "signingMethod": "handwritten",
+      "consentClauses": [],
+      "allowExtension": false,
+      "timerExpiry": "manual",
+      "extensionMinutes": 2,
+      "sequentialQuestions": false
+    }
+  ]
+}

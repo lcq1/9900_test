@@ -1,0 +1,22 @@
+# Coverage map
+
+- **01 - Consent Before Nonsense** (consent): clock, pauseAbort; components: text.
+- **02 - Employee Orientation for a Potato** (instruction): ai, clock, navigation, confirm, pauseAbort; components: text, button.
+- **03 - Elect the Office Overlord** (single_choice): ai, clock, navigation, confirm, pauseAbort; components: text, choice.
+- **04 - Survival Kit for Monday** (multiple_choice): ai, clock, navigation, confirm, pauseAbort; components: text, checkbox.
+- **05 - Confidently Wrong Toaster** (true_false): ai, clock, navigation, confirm, pauseAbort; components: text, true_false, textbox.
+- **06 - Corporate Mad Libs** (fill_blank): ai, timer, clock, copyPaste, navigation, confirm, pauseAbort; components: text, textbox, textbox, textbox.
+- **07 - Apology from the Office Printer** (short_answer): ai, timer, clock, copyPaste, navigation, confirm, pauseAbort; components: text, textbox.
+- **08 - The Vibe Audit** (single_choice): ai, clock, navigation, confirm, pauseAbort; components: text, choice, rating.
+- **09 - Evidence of a Better Bad Idea** (short_answer): ai, clock, copyPaste, navigation, confirm, pauseAbort, attachment; components: text, textbox, attachment.
+- **10 - The Rubber Duck Witness** (short_answer): ai, timer, clock, screenRecording, copyPaste, navigation, confirm, pauseAbort; components: text, textbox.
+- **11 - Campaign Speech for a Toaster** (video_oral_answer): ai, timer, clock, selfie, navigation, confirm, pauseAbort; components: text.
+- **12 - The Three Question Press Conference** (video_oral_answer): timer, clock, selfie, navigation, confirm, pauseAbort; components: text, text, text.
+- **13 - One Minute Biscuit Meditation** (instruction): ai, timer, clock, navigation, pauseAbort; components: text.
+- **14 - The Terms and Conditions Goblin** (short_answer): ai, clock, copyPaste, navigation, confirm, pauseAbort, signatureBox; components: text, textbox, signature.
+- **15 - Budget Committee of Raccoons** (multiple_choice): ai, timer, clock, navigation, confirm, pauseAbort; components: text, checkbox, textbox.
+- **16 - The Invisible Umbrella Claim** (true_false): ai, clock, navigation, confirm, pauseAbort; components: text, true_false, textbox.
+- **17 - Emergency Slogan Repair** (fill_blank): ai, timer, clock, copyPaste, navigation, confirm, pauseAbort; components: text, textbox, textbox, textbox.
+- **18 - The Grand Product Pitch** (short_answer): ai, timer, clock, screenRecording, copyPaste, navigation, confirm, pauseAbort, attachment; components: text, textbox, attachment, rating.
+- **19 - Final Boardroom Showdown** (single_choice): ai, clock, navigation, confirm, pauseAbort; components: text, choice, textbox, rating.
+- **20 - Exit Interview with the Potato** (short_answer): ai, clock, copyPaste, navigation, confirm, pauseAbort; components: text, textbox, textbox, checkbox, rating, button.

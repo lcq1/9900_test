@@ -1,0 +1,7 @@
+MEETING RESCUE BRIEF
+Fictional office: 12 people, six unnecessary meetings per week.
+Budget: 10 imaginary coins.
+Goal: reduce meeting time without losing necessary decisions.
+Constraints: accessible to quiet colleagues, no surveillance, easy to reverse.
+Deliverable: a gadget name, a three-step workflow, one failure mode, and one measurable test.
+Bonus: explain why adding glitter does not count as user research.
